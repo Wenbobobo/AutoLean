@@ -1,0 +1,26 @@
+{
+  "schema_version": "autolean.project-dag.v1",
+  "name": "twenty-node-integration-fixture",
+  "nodes": [
+    {"id": "base.nat", "file": "Base.lean", "depends_on": []},
+    {"id": "base.add", "file": "Base.lean", "depends_on": ["base.nat"]},
+    {"id": "base.mul", "file": "Base.lean", "depends_on": ["base.nat"]},
+    {"id": "base.order", "file": "Base.lean", "depends_on": ["base.nat"]},
+    {"id": "algebra.semiring", "file": "Algebra.lean", "depends_on": ["base.add", "base.mul"]},
+    {"id": "algebra.pow", "file": "Algebra.lean", "depends_on": ["algebra.semiring"]},
+    {"id": "algebra.sum", "file": "Algebra.lean", "depends_on": ["base.add"]},
+    {"id": "algebra.monotone", "file": "Algebra.lean", "depends_on": ["base.order", "base.add"]},
+    {"id": "structure.hom", "file": "Structure.lean", "depends_on": ["algebra.semiring"]},
+    {"id": "structure.iso", "file": "Structure.lean", "depends_on": ["structure.hom"]},
+    {"id": "structure.product", "file": "Structure.lean", "depends_on": ["structure.hom", "algebra.sum"]},
+    {"id": "structure.quotient", "file": "Structure.lean", "depends_on": ["structure.hom"]},
+    {"id": "lemma.pow_add", "file": "Lemmas.lean", "depends_on": ["algebra.pow", "algebra.semiring"]},
+    {"id": "lemma.sum_map", "file": "Lemmas.lean", "depends_on": ["algebra.sum", "structure.hom"]},
+    {"id": "lemma.iso_comp", "file": "Lemmas.lean", "depends_on": ["structure.iso"]},
+    {"id": "lemma.product_map", "file": "Lemmas.lean", "depends_on": ["structure.product", "lemma.sum_map"]},
+    {"id": "target.local", "file": "Target.lean", "depends_on": ["lemma.pow_add", "lemma.iso_comp"]},
+    {"id": "target.global", "file": "Target.lean", "depends_on": ["lemma.product_map", "structure.quotient"]},
+    {"id": "target.bridge", "file": "Target.lean", "depends_on": ["target.local", "target.global"]},
+    {"id": "target.capstone", "file": "Target.lean", "depends_on": ["target.bridge", "algebra.monotone"]}
+  ]
+}

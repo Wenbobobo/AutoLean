@@ -1,0 +1,97 @@
+{
+  "source_excerpt": "For every type alpha, assume alpha is nonempty and finite and assume a condition called Noetherian. Then those assumptions hold and, for every natural x, there is a natural y with x strictly less than y and x less than or equal to y.",
+  "normalized_statement": "For every type alpha, assuming Nonempty alpha, Finite alpha, and Noetherian, the conclusion preserves those assumptions and for every natural x there exists a natural y such that x < y and x <= y; these assumptions have a concrete joint witness.",
+  "lean_statement": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y",
+  "reverse_rendering": "For every type alpha, assuming Nonempty alpha, Finite alpha, and Noetherian, the result retains those facts and says that every natural x has a larger natural y.",
+  "obligations": [
+    {
+      "obligation_id": "quantifier-order",
+      "kind": "quantifier_order",
+      "description": "The universal x binder precedes the existential y binder.",
+      "normalized_fragment": "for every natural x there exists a natural y",
+      "lean_fragment": "forall x : Nat, exists y : Nat"
+    },
+    {
+      "obligation_id": "nonempty",
+      "kind": "assumption",
+      "description": "The nonempty condition is explicit.",
+      "normalized_fragment": "Nonempty alpha",
+      "lean_fragment": "(hNonempty : Nonempty alpha)"
+    },
+    {
+      "obligation_id": "finite",
+      "kind": "assumption",
+      "description": "The finite condition is explicit.",
+      "normalized_fragment": "Finite alpha",
+      "lean_fragment": "(hFinite : Finite alpha)"
+    },
+    {
+      "obligation_id": "noetherian",
+      "kind": "assumption",
+      "description": "The named Noetherian condition is explicit.",
+      "normalized_fragment": "and Noetherian",
+      "lean_fragment": "(hNoetherian : Noetherian)"
+    },
+    {
+      "obligation_id": "strict-and-nonstrict",
+      "kind": "conclusion",
+      "description": "Both the strict and non-strict relations occur in the conclusion.",
+      "normalized_fragment": "x < y and x <= y",
+      "lean_fragment": "x < y /\\ x <= y"
+    },
+    {
+      "obligation_id": "non-vacuity",
+      "kind": "non_vacuity",
+      "description": "The premise set must have a concrete joint witness.",
+      "normalized_fragment": "assumptions have a concrete joint witness",
+      "lean_fragment": "Nonempty alpha /\\ Finite alpha /\\ Noetherian"
+    }
+  ],
+  "mutations": [
+    {
+      "kind": "drop_assumption",
+      "target_path": "/formal/hNoetherian",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y"
+    },
+    {
+      "kind": "swap_quantifiers",
+      "target_path": "/mathematics/quantifier_order",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ exists y : Nat, forall x : Nat, x < y /\\ x <= y"
+    },
+    {
+      "kind": "weaken_relation",
+      "target_path": "/formal/conclusion/strict_relation",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x <= y /\\ x <= y"
+    },
+    {
+      "kind": "remove_side_condition",
+      "target_path": "/formal/conclusion/strict_conjunct",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x <= y"
+    },
+    {
+      "kind": "drop_nonempty",
+      "target_path": "/mathematics/assumptions/nonempty",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y"
+    },
+    {
+      "kind": "drop_finite",
+      "target_path": "/mathematics/assumptions/finite",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y"
+    },
+    {
+      "kind": "drop_noetherian",
+      "target_path": "/mathematics/assumptions/noetherian",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) : Nonempty alpha /\\ Finite alpha /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y"
+    },
+    {
+      "kind": "reverse_parameters",
+      "target_path": "/formal/conclusion/relation_arguments",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, y < x /\\ y <= x"
+    },
+    {
+      "kind": "vacuity",
+      "target_path": "/mathematics/assumptions",
+      "mutated_statement_source": "theorem bounded_witness (alpha : Type) (hFalse : False) (hNonempty : Nonempty alpha) (hFinite : Finite alpha) (Noetherian : Prop) (hNoetherian : Noetherian) : Nonempty alpha /\\ Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, x < y /\\ x <= y"
+    }
+  ]
+}

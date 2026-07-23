@@ -1,0 +1,17 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autolean-builder"
+version = "0.1.0"
+description = "Statement-fidelity workflow and frozen bundle bridge for AutoLean"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "autolean-contracts>=0.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/autolean_builder"]

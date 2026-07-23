@@ -1,0 +1,19 @@
+[build-system]
+requires = ["hatchling>=1.27,<2"]
+build-backend = "hatchling.build"
+
+[project]
+name = "autolean-benchmarks"
+version = "0.1.0"
+description = "Pinned answer-free benchmark adapters for AutoLean"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = [
+  "autolean-builder>=0.1.0",
+  "autolean-contracts>=0.1.0",
+  "autolean-control-plane>=0.1.0",
+  "autolean-prover>=0.1.0",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["."]

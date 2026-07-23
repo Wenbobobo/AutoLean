@@ -1,0 +1,4 @@
+interface:
+  display_name: "Retrieve Builder Experience"
+  short_description: "Build replayable statement-conversion context"
+  default_prompt: "Use $retrieve-builder-experience to assemble a rights-safe Builder experience ContextPack for this statement-conversion task."

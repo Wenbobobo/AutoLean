@@ -1,0 +1,252 @@
+from __future__ import annotations
+
+from collections.abc import Iterable, Mapping
+from dataclasses import dataclass, field
+from enum import StrEnum
+from pathlib import Path
+from typing import TYPE_CHECKING, Protocol, runtime_checkable
+
+from autolean_contracts import (
+    DigestV1,
+    EndpointClassV1,
+    HashKindV1,
+    digest_model,
+)
+from autolean_contracts.hashing import require_digest_kind
+
+from autolean_prover.errors import CapabilityError, ConfigurationError
+from autolean_prover.providers.policy import validate_reasoning_effort
+
+if TYPE_CHECKING:
+    from autolean_prover.context import ContextPack
+
+
+class Capability(StrEnum):
+    TEXT_GENERATION = "text_generation"
+    USAGE_ACCOUNTING = "usage_accounting"
+    REASONING_EFFORT = "reasoning_effort"
+    TOOL_CALLING = "tool_calling"
+    STREAMING = "streaming"
+    LOCAL_EXECUTION = "local_execution"
+    CUSTOM_ENDPOINT = "custom_endpoint"
+
+
+@dataclass(frozen=True, slots=True)
+class ProviderCapabilities:
+    values: frozenset[Capability]
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.values, frozenset) or not all(
+            isinstance(value, Capability) for value in self.values
+        ):
+            raise ConfigurationError(
+                "provider capabilities must be a frozenset of Capability values"
+            )
+
+    @classmethod
+    def of(cls, *values: Capability) -> ProviderCapabilities:
+        return cls(frozenset(values))
+
+    def require(self, required: Iterable[Capability], *, provider_id: str) -> None:
+        missing = frozenset(required) - self.values
+        if missing:
+            names = ", ".join(sorted(value.value for value in missing))
+            raise CapabilityError(f"provider {provider_id!r} lacks required capabilities: {names}")
+
+
+@dataclass(frozen=True, slots=True)
+class ToolSpec:
+    name: str
+    description: str
+    parameters: Mapping[str, object]
+    strict: bool = True
+
+    def __post_init__(self) -> None:
+        if not self.name or not self.name.replace("_", "").isalnum():
+            raise ConfigurationError(f"invalid tool name: {self.name!r}")
+
+
+@dataclass(frozen=True, slots=True)
+class ToolCall:
+    call_id: str
+    name: str
+    arguments_json: str
+
+
+@dataclass(frozen=True, slots=True)
+class TokenUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+    cached_input_tokens: int = 0
+
+    def __post_init__(self) -> None:
+        values = (self.input_tokens, self.output_tokens, self.cached_input_tokens)
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values
+        ):
+            raise ConfigurationError("token usage must contain non-negative integer values")
+        if self.cached_input_tokens > self.input_tokens:
+            raise ConfigurationError("cached_input_tokens cannot exceed input_tokens")
+
+
+@dataclass(frozen=True, slots=True)
+class ModelRequest:
+    prompt: str
+    system_prompt: str | None = None
+    max_input_tokens: int = 4096
+    max_output_tokens: int = 4096
+    reasoning_effort: str | None = None
+    tools: tuple[ToolSpec, ...] = ()
+    required_capabilities: frozenset[Capability] = field(default_factory=frozenset)
+    working_directory: Path | None = None
+    context_pack_hash: DigestV1 | None = None
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.prompt, str) or not self.prompt.strip():
+            raise ConfigurationError("model prompt cannot be empty")
+        if self.system_prompt is not None and not isinstance(self.system_prompt, str):
+            raise ConfigurationError("system_prompt must be a string or None")
+        for label, value in (
+            ("max_input_tokens", self.max_input_tokens),
+            ("max_output_tokens", self.max_output_tokens),
+        ):
+            if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
+                raise ConfigurationError(f"{label} must be positive")
+        validate_reasoning_effort(self.reasoning_effort, label="reasoning_effort")
+        if not isinstance(self.required_capabilities, frozenset) or not all(
+            isinstance(value, Capability) for value in self.required_capabilities
+        ):
+            raise ConfigurationError(
+                "required_capabilities must be a frozenset of Capability values"
+            )
+        if not isinstance(self.tools, tuple) or not all(
+            isinstance(tool, ToolSpec) for tool in self.tools
+        ):
+            raise ConfigurationError("tools must be a tuple of ToolSpec values")
+        if self.working_directory is not None and (
+            not isinstance(self.working_directory, Path) or not self.working_directory.is_absolute()
+        ):
+            raise ConfigurationError("working_directory must be an absolute path")
+        if self.context_pack_hash is not None:
+            try:
+                require_digest_kind(
+                    self.context_pack_hash,
+                    HashKindV1.PROMPT,
+                    "context_pack_hash",
+                )
+            except ValueError as error:
+                raise ConfigurationError(str(error)) from error
+
+    @classmethod
+    def from_context_pack(
+        cls,
+        context_pack: ContextPack,
+        *,
+        system_prompt: str | None = None,
+        max_input_tokens: int = 4096,
+        max_output_tokens: int = 4096,
+        reasoning_effort: str | None = None,
+        tools: tuple[ToolSpec, ...] = (),
+        required_capabilities: frozenset[Capability] = frozenset(),
+        working_directory: Path | None = None,
+    ) -> ModelRequest:
+        """Create an egress request whose prompt is exactly a frozen ContextPack projection."""
+
+        from autolean_prover.context import ContextPack as RuntimeContextPack
+
+        if not isinstance(context_pack, RuntimeContextPack):
+            raise ConfigurationError("context_pack must be a ContextPack")
+        return cls(
+            prompt=context_pack.render(),
+            system_prompt=system_prompt,
+            max_input_tokens=max_input_tokens,
+            max_output_tokens=max_output_tokens,
+            reasoning_effort=reasoning_effort,
+            tools=tools,
+            required_capabilities=required_capabilities,
+            working_directory=working_directory,
+            context_pack_hash=context_pack.content_hash(),
+        )
+
+    def outbound_request_hash(self) -> DigestV1:
+        """Hash all outbound model inputs without storing their raw text in an authorization."""
+
+        try:
+            return digest_model(
+                HashKindV1.PROMPT,
+                {
+                    "schema_version": "autolean.model-request.v1",
+                    "prompt": self.prompt,
+                    "system_prompt": self.system_prompt,
+                    "max_input_tokens": self.max_input_tokens,
+                    "max_output_tokens": self.max_output_tokens,
+                    "reasoning_effort": self.reasoning_effort,
+                    "tools": [
+                        {
+                            "name": tool.name,
+                            "description": tool.description,
+                            "parameters": dict(tool.parameters),
+                            "strict": tool.strict,
+                        }
+                        for tool in self.tools
+                    ],
+                    "required_capabilities": sorted(
+                        capability.value for capability in self.required_capabilities
+                    ),
+                    "working_directory": (
+                        None if self.working_directory is None else str(self.working_directory)
+                    ),
+                    "context_pack_hash": (
+                        None
+                        if self.context_pack_hash is None
+                        else self.context_pack_hash.model_dump(mode="json")
+                    ),
+                },
+            )
+        except (TypeError, ValueError) as error:
+            raise ConfigurationError("model request cannot be canonically hashed") from error
+
+    def inferred_capabilities(self) -> frozenset[Capability]:
+        required = set(self.required_capabilities)
+        required.add(Capability.TEXT_GENERATION)
+        if self.reasoning_effort is not None:
+            required.add(Capability.REASONING_EFFORT)
+        if self.tools:
+            required.add(Capability.TOOL_CALLING)
+        if self.working_directory is not None:
+            required.add(Capability.LOCAL_EXECUTION)
+        return frozenset(required)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelResponse:
+    provider_id: str
+    model_id: str
+    text: str
+    response_id: str | None = None
+    tool_calls: tuple[ToolCall, ...] = ()
+    usage: TokenUsage = field(default_factory=TokenUsage)
+
+
+@runtime_checkable
+class ModelProvider(Protocol):
+    @property
+    def provider_id(self) -> str: ...
+
+    @property
+    def model_id(self) -> str: ...
+
+    @property
+    def endpoint_class(self) -> EndpointClassV1: ...
+
+    @property
+    def configuration_hash(self) -> DigestV1: ...
+
+    @property
+    def capabilities(self) -> ProviderCapabilities: ...
+
+    def generate(self, request: ModelRequest) -> ModelResponse: ...
+
+
+def require_request_capabilities(provider: ModelProvider, request: ModelRequest) -> None:
+    provider.capabilities.require(request.inferred_capabilities(), provider_id=provider.provider_id)

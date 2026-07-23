@@ -1,0 +1,83 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  python:
+    name: Python and policy (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pinned uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.11.29"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Synchronize locked workspace
+        run: uv sync --locked --all-packages --all-groups
+
+      - name: Run offline Python and repository gates
+        run: uv run --frozen python scripts/ci.py
+
+  dashboard-ui:
+    name: Dashboard UI (${{ matrix.os }})
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-24.04
+          - windows-2022
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Install pinned pnpm
+        uses: pnpm/action-setup@f40ffcd9367d9f12939873eb1018b921a783ffaa # v4
+        with:
+          version: 11.9.0
+          run_install: false
+
+      - name: Install pinned Node.js
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22.14.0
+          cache: pnpm
+          cache-dependency-path: Dashboard/ui/pnpm-lock.yaml
+
+      - name: Install locked UI dependencies
+        run: pnpm --dir Dashboard/ui install --frozen-lockfile
+
+      - name: Test Dashboard UI
+        run: pnpm --dir Dashboard/ui test
+
+      - name: Build Dashboard UI
+        run: pnpm --dir Dashboard/ui build

@@ -1,0 +1,71 @@
+[project]
+name = "autolean-workspace"
+version = "0.1.0"
+description = "Builder-Prover infrastructure for trustworthy Lean formalization"
+readme = "README.md"
+requires-python = ">=3.12"
+license = { text = "Apache-2.0" }
+dependencies = []
+
+[tool.uv]
+package = false
+
+[tool.uv.workspace]
+members = [
+  "packages/contracts",
+  "packages/control_plane",
+  "Builder",
+  "Prover",
+  "Dashboard/api",
+  "benchmarks",
+]
+
+[tool.uv.sources]
+autolean-builder = { workspace = true }
+autolean-contracts = { workspace = true }
+autolean-control-plane = { workspace = true }
+autolean-prover = { workspace = true }
+
+[dependency-groups]
+dev = [
+  "httpx>=0.28,<1",
+  "hypothesis>=6.136,<7",
+  "mypy>=1.17,<2",
+  "pytest>=8.4,<9",
+  "pytest-cov>=6.2,<7",
+  "ruff>=0.12,<1",
+  "zstandard>=0.23,<1",
+]
+
+[tool.pytest.ini_options]
+addopts = "-ra --strict-config --strict-markers"
+pythonpath = ["."]
+testpaths = [
+  "packages/contracts/tests",
+  "packages/control_plane/tests",
+  "Builder/tests",
+  "Prover/tests",
+  "Dashboard/api/tests",
+  "benchmarks/tests",
+  "scripts/tests",
+]
+markers = [
+  "integration: requires subprocesses or a local HTTP server",
+  "lean: requires a pinned Lean toolchain",
+  "network: requires explicit network access",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py312"
+exclude = [".agents", "benchmarks/vendor"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B", "SIM", "RUF"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+warn_unreachable = true
+explicit_package_bases = true
+exclude = [".agents", "benchmarks/vendor"]

@@ -1,0 +1,57 @@
+# Benchmarks
+
+The default benchmark code is offline and answer-free. `fate.lock.json` pins FATE v4.28.0,
+its three submodules, Lean, and mathlib. `fate.py` produces deterministic, separately reported
+M/H/X splits. It never downloads tasks, starts a model, or opens a solution store.
+
+FATE is a single-theorem benchmark. `project_dag/graph.json` is a separate 20-node fixture for
+dependency-frontier, file-lease, API-propagation, and integration tests. A high FATE score does
+not substitute for passing the project fixture.
+
+`project_integration.py` binds that fixed graph to public control-plane registration, lease, and
+append-only event APIs with synthetic test-only signatures. It records the cross-file topology as
+formal-graph metadata and derives execution status from events; it does not put scheduling edges
+in mathematical or execution graphs. It starts no Lean process, OCI worker, or model, so passing
+the fixture is scheduling/control-plane evidence only, not compilation or proof evidence.
+
+`benchmarks.reporting` is the answer-free reporting contract. It accepts only terminal,
+verifier-bound attempt metadata and emits deterministic M/H/X-separated `pass@1`, `pass@4`,
+`success@budget`, elapsed-time, token, and cost totals. It deliberately does not start a model or
+Lean process; an OCI worker and the control-plane verification evidence remain prerequisites for
+any recorded result.
+
+`benchmarks.role_benchmark` adds a separate role-aware experiment contract for Prover, statement
+formalizer, fidelity reviewer, cheating supervisor, and task allocator evaluations. It freezes
+model/prompt/tool/retrieval/budget/code/environment identities, performs stable case sampling,
+persists repeated answer-free results in append-only SQLite WAL tables, and reports paired
+repeatability/ablation/confounding diagnostics. The checked-in CLI is fake-only and makes no
+external call. See the [role benchmark protocol](../docs/role-benchmark-protocol.md).
+
+`tests/test_builder_prover_closed_loop.py` is the one-node offline evidence-closure fixture. It
+persists canonical statement-fidelity evidence, freezes and bridges the reviewed revision, records
+revision-bound failure feedback, requires a fresh Builder review for the next revision, and runs a
+fake proof through independent synthetic acceptance. It executes neither Lean nor OCI; see the
+[evidence boundary](../docs/builder-prover-evidence-closure.md).
+
+The public FATE metadata does not provide a per-problem bibliographic source. Treat natural
+language redistribution rights as unresolved even though the repositories are MIT licensed.
+
+## Strict Source Adapter
+
+`benchmarks.fate_adapter` does not use FATE-Eval.  An operator supplies a checkout containing the
+fixed Git commits in `fate.lock.json`, then uses `uv run python scripts/build_fate_manifest.py
+--checkout ... --output ...` to produce a content-addressed source manifest.  Lean task source is
+read from the locked Git blobs, not the mutable working tree, so Windows line-ending conversion,
+`assume-unchanged`, and working-tree edits cannot redefine a benchmark statement.  The separately
+generated FATE metadata and Lake manifest are accepted only when their pinned SHA-256 values match.
+
+The manifest records every original file's SHA-256, target declaration identity, and the byte
+hashes on both sides of its single `sorry` token.  Its reported `manifest_sha256` must be stored in
+the task bundle; `FateAdapter.from_manifest_file` requires that expected canonical hash before it
+accepts a manifest.  It is the only authority for a FATE proof task.
+
+`FateAdapter.materialize_proof` accepts a tactic body for that token, not an arbitrary Lean
+file.  It rejects changed theorem declarations, `True` replacements, imports, namespaces,
+axioms, `sorry`/`admit`, source drift, proof-slot ambiguity, and source-path traversal before
+Lean is invoked.  Candidate files are written only outside the pinned checkout with exclusive,
+non-link-following creation; Lean compilation belongs in the separate OCI execution harness.

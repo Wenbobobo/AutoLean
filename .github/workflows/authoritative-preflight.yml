@@ -1,0 +1,69 @@
+name: Authoritative readiness preflight
+
+on:
+  workflow_dispatch:
+    inputs:
+      fetch_fate:
+        description: Fetch and validate the pinned public FATE source checkout
+        required: true
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+env:
+  UV_NO_PROGRESS: "1"
+
+jobs:
+  readiness-only:
+    name: Readiness only - no Lean proof or model execution
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - name: Check out AutoLean
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - name: Optionally check out pinned FATE source
+        if: ${{ inputs.fetch_fate }}
+        uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: frenzymath/FATE
+          ref: bb646ecb9b68942ebf4bac31ccf4218a58ef9771
+          path: benchmarks/vendor/FATE
+          submodules: recursive
+          persist-credentials: false
+
+      - name: Install pinned uv and Python
+        uses: astral-sh/setup-uv@d0d8abe699bfb85fec6de9f7adb5ae17292296ff # v6
+        with:
+          version: "0.11.29"
+          python-version: "3.12"
+          enable-cache: true
+          cache-dependency-glob: uv.lock
+
+      - name: Synchronize locked workspace
+        run: uv sync --locked --all-packages --all-groups
+
+      - name: Check readiness without FATE
+        if: ${{ !inputs.fetch_fate }}
+        run: uv run --frozen python scripts/authoritative_preflight.py
+
+      - name: Check readiness and pinned FATE source
+        if: ${{ inputs.fetch_fate }}
+        run: >-
+          uv run --frozen python scripts/authoritative_preflight.py
+          --fate-checkout benchmarks/vendor/FATE
+
+      - name: Record the evidence boundary
+        if: ${{ always() }}
+        shell: bash
+        run: |
+          {
+            echo "## Evidence boundary"
+            echo
+            echo "This workflow performs a readiness preflight only."
+            echo "It does not run Lean proof verification, a digest-pinned OCI worker,"
+            echo "a signing gateway, a model endpoint, or an Open Problem workload."
+            echo "A green result must not be reported as authoritative verification."
+          } >> "$GITHUB_STEP_SUMMARY"

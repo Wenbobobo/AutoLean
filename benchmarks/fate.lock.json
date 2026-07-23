@@ -1,0 +1,32 @@
+{
+  "schema_version": "autolean.fate-lock.v1",
+  "suite": "FATE",
+  "license": "MIT",
+  "repository": "https://github.com/frenzymath/FATE",
+  "revision": "bb646ecb9b68942ebf4bac31ccf4218a58ef9771",
+  "lean_version": "v4.28.0",
+  "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+  "tiers": {
+    "M": {
+      "count": 150,
+      "repository": "https://github.com/frenzymath/FATE-M",
+      "revision": "4eb33c8ccd0ff058b461cd763cc406509129743f",
+      "metadata_json_sha256": "6edf623256539cf955f939fbe40098ad0c6bd17a86060d8cded51c57de62e11e",
+      "lake_manifest_sha256": "8403899ad037e733385ed21746c79c772b918a1ce4a6d291fddadb8899ee9e24"
+    },
+    "H": {
+      "count": 100,
+      "repository": "https://github.com/frenzymath/FATE-H",
+      "revision": "17967b3118082adfba7c5a5fc03b5f4a53717b59",
+      "metadata_json_sha256": "7f130106dbb9e574bd4f4d87aba8065a66f74c69a8c6b468b3986865654b2a2f",
+      "lake_manifest_sha256": "e6cec32cb305c7cb9e4de6ef7e0c1c1411b23bb92183d5b2c8759b38b62e54c5"
+    },
+    "X": {
+      "count": 100,
+      "repository": "https://github.com/frenzymath/FATE-X",
+      "revision": "a6fb49ee85fd05bb8ce9fc66e1c66797b5a0592d",
+      "metadata_json_sha256": "a322932a23a534fbbb5129f927a3d4359bd10c70841fd2ab6e40c294b394ce3b",
+      "lake_manifest_sha256": "3e26eab2f55368e8a32d6315d022078c1f3136b48f67eff04a993d412ea61005"
+    }
+  }
+}
