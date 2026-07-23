@@ -40,6 +40,11 @@ Contribution rules and the exact offline CI boundary are documented in
 model, or claims Lean/OCI authority.
 
 The executed Phase 1 evidence and remaining gates are tracked in
-[`docs/phase-1-progress.md`](docs/phase-1-progress.md). The first Builder discovery proposal is
-the rights-gated
+[`docs/phase-1-progress.md`](docs/phase-1-progress.md), with the current parallel route in
+[`docs/phase-1-parallel-execution.md`](docs/phase-1-parallel-execution.md). The first Builder
+discovery proposal is the rights-gated
 [`docs/domain-pilot-selection.md`](docs/domain-pilot-selection.md).
+
+The software in this repository is licensed under
+the [Apache License 2.0](LICENSE). Source documents and benchmark data retain their own rights and
+are never relicensed merely because their manifests or provenance records appear here.

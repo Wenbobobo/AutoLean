@@ -2,6 +2,7 @@
 name = "autolean-dashboard"
 version = "0.1.0"
 description = "Read-only AutoLean projection API"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.12"
 dependencies = [
   "fastapi>=0.116,<1",

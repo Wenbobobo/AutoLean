@@ -33,8 +33,10 @@ runner reports success.
     recovery evidence.
 12. [HF incident containment](hf-incident-containment.md) records the recovery boundary
    without including recovered data, archive names, prompts, sessions, or credentials.
-13. [Phase 1 acceptance](phase-1-acceptance.md) defines the 12-week route, while the
-    [current progress ledger](phase-1-progress.md) records executed evidence and unrun gates.
+13. [Phase 1 acceptance](phase-1-acceptance.md) defines the 12-week gates, the
+    [parallel execution plan](phase-1-parallel-execution.md) defines work packages and critical
+    paths, and the [current progress ledger](phase-1-progress.md) records executed evidence and
+    unrun gates.
 14. [Builder domain pilot](domain-pilot-selection.md) records the proposed Riemannian-connections
     discovery graph, alternatives, rights boundary, and expert gates.
 15. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
@@ -43,7 +45,9 @@ runner reports success.
     that block a release candidate.
 17. [Continuous integration](ci.md) defines the offline Windows/Linux gate and separates its
     manual readiness preflight from authoritative Lean/OCI evidence.
-18. [Open questions](open-questions.md) records decisions that require an operator,
+18. [Public repository release](public-release.md) defines the tracked-tree, license, and
+    restricted-payload checks required before changing GitHub visibility.
+19. [Open questions](open-questions.md) records decisions that require an operator,
    mathematical reviewer, or project owner.
 
 The source audits that informed these decisions live in [audits/](audits/):

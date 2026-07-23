@@ -10,6 +10,7 @@ Before opening a pull request, run:
 
 ```powershell
 uv run python scripts/dev.py bootstrap
+uv run python scripts/dev.py public-ready
 uv run python scripts/dev.py ci
 pnpm --dir Dashboard/ui install --frozen-lockfile
 pnpm --dir Dashboard/ui test
@@ -28,3 +29,6 @@ Passing ordinary CI is not evidence of theorem correctness, statement fidelity,
 authoritative execution, or release readiness. See
 [`docs/ci.md`](docs/ci.md) and
 [`docs/operations-release.md`](docs/operations-release.md).
+
+Report security-boundary failures through the private process in
+[`SECURITY.md`](SECURITY.md), not through a public issue.

@@ -6,6 +6,7 @@ build-backend = "hatchling.build"
 name = "autolean-contracts"
 version = "0.1.0"
 description = "Versioned, provider-neutral contracts for AutoLean Builder and Prover"
+license = { text = "Apache-2.0" }
 requires-python = ">=3.12,<3.13"
 dependencies = [
   "pydantic>=2.11,<3",

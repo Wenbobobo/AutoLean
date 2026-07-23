@@ -29,6 +29,7 @@ def main() -> None:
     run(("pytest", "-q"))
     run((sys.executable, "-m", "scripts.secret_scan"))
     run((sys.executable, "-m", "scripts.provider_policy_guard"))
+    run((sys.executable, "-m", "scripts.public_readiness"))
     run((sys.executable, "scripts/release_evidence.py", "check"))
     run((sys.executable, "-m", "scripts.generate_sbom", "check"))
 

@@ -24,6 +24,7 @@ def main() -> None:
             "ci",
             "format",
             "dashboard",
+            "public-ready",
             "sbom",
             "chaos-process",
         ),
@@ -51,6 +52,7 @@ def main() -> None:
             "--port",
             "8765",
         ),
+        "public-ready": ("uv", "run", "python", "-m", "scripts.public_readiness"),
         "sbom": ("uv", "run", "python", "-m", "scripts.generate_sbom", "check"),
         "chaos-process": (
             "uv",
