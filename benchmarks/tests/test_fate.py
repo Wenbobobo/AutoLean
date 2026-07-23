@@ -29,6 +29,13 @@ def test_manifest_never_claims_to_contain_solutions() -> None:
     assert manifest["report_tiers_separately"] is True
 
 
+def test_checked_in_split_manifest_matches_the_stable_selection() -> None:
+    path = Path(__file__).parents[1] / "fate-splits.v1.json"
+    checked_in = json.loads(path.read_text(encoding="utf-8"))
+
+    assert checked_in == json.loads(json.dumps(split_manifest()))
+
+
 def test_loader_rejects_statement_without_exactly_one_hole(tmp_path: Path) -> None:
     path = tmp_path / "FATE-M.json"
     path.write_text(

@@ -18,6 +18,7 @@ INPUT_PATHS = (
     Path("uv.lock"),
     Path("Dashboard/ui/pnpm-lock.yaml"),
     Path("benchmarks/fate.lock.json"),
+    Path("benchmarks/fate-splits.v1.json"),
 )
 _PNPM_HEADER = re.compile(r"^  (?P<key>\S.*):$")
 _PNPM_INTEGRITY = re.compile(r"\bintegrity:\s*(?P<value>[^,}\s]+)")
@@ -228,10 +229,19 @@ def _javascript_inventory(root: Path) -> dict[str, object]:
 
 def _benchmark_inventory(root: Path) -> dict[str, object]:
     path = root / "benchmarks/fate.lock.json"
+    split_path = root / "benchmarks/fate-splits.v1.json"
     try:
         lock = _mapping(json.loads(path.read_text(encoding="utf-8")), path.as_posix())
+        split_bytes = split_path.read_bytes()
+        split_manifest = _mapping(json.loads(split_bytes), split_path.as_posix())
     except (OSError, json.JSONDecodeError) as error:
-        raise InventoryError(f"cannot read {path.as_posix()}: {error}") from error
+        raise InventoryError(f"cannot read benchmark locks: {error}") from error
+    if (
+        split_manifest.get("schema_version") != "autolean.fate-splits.v1"
+        or split_manifest.get("contains_solutions") is not False
+        or split_manifest.get("report_tiers_separately") is not True
+    ):
+        raise InventoryError("FATE split manifest has an unsupported evidence boundary")
     tiers = _mapping(lock.get("tiers"), "fate.lock tiers")
     tier_entries: list[dict[str, object]] = []
     for tier_name in sorted(tiers):
@@ -251,6 +261,9 @@ def _benchmark_inventory(root: Path) -> dict[str, object]:
         "mathlib_revision": lock.get("mathlib_revision"),
         "revision": lock.get("revision"),
         "schema_version": lock.get("schema_version"),
+        "split_manifest_sha256": _sha256_bytes(split_bytes),
+        "split_schema_version": split_manifest.get("schema_version"),
+        "split_seed": split_manifest.get("seed"),
         "suite": lock.get("suite"),
         "tiers": tier_entries,
     }

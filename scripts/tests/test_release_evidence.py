@@ -39,6 +39,8 @@ def test_release_inventory_covers_python_ui_and_fate_locks() -> None:
     assert "autolean-workspace" in python_packages
     assert "react" in javascript_packages
     assert fate_tiers == {"M", "H", "X"}
+    assert inventory["benchmark"]["split_schema_version"] == "autolean.fate-splits.v1"
+    assert inventory["benchmark"]["split_seed"] == "autolean-fate-split-v1"
 
 
 def test_source_summary_does_not_export_raw_locators() -> None:

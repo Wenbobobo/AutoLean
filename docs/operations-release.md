@@ -9,18 +9,19 @@ an independent verification report from the pinned environment.
 
 The release inventory is deliberately an **offline lock inventory**, not an installed-host scan.
 It reads only `pyproject.toml`, `uv.lock`, `Dashboard/ui/pnpm-lock.yaml`, and
-`benchmarks/fate.lock.json`. It contains relative input paths, bytes, SHA-256 digests, package
-identities, package artifact/integrity hashes, and the pinned FATE facts. It intentionally contains
-no timestamps, absolute paths, environment variables, endpoint configuration, Git configuration,
-credentials, prompts, sessions, logs, or recovered archive contents.
+`benchmarks/fate.lock.json`, plus the answer-free `benchmarks/fate-splits.v1.json`. It contains
+relative input paths, bytes, SHA-256 digests, package identities, package artifact/integrity
+hashes, and the pinned FATE facts. It intentionally contains no timestamps, absolute paths,
+environment variables, endpoint configuration, Git configuration, credentials, prompts, sessions,
+logs, solutions, or recovered archive contents.
 
 ## Non-negotiable RC blockers
 
-An existing `.git/` directory is not source provenance. This checkout currently has no
-`.git/HEAD`, so it has no verifiable source commit. It must not be described as a release candidate
-and no release file may invent a commit identifier. Move the intended source into a normal cloned
-repository, record an actual resolved commit, and retain the clean-source evidence before running a
-release process.
+An existing `.git/` directory is not by itself source provenance. The bootstrap baseline is commit
+`48b129097773616a28534abfe833eb10b9779aac`, whose Windows/Linux GitHub CI run completed
+successfully. Every later release candidate must record its own resolved commit, clean status,
+remote CI URL, and exact evidence hashes; it may not inherit the bootstrap result after source or
+lock inputs change.
 
 Likewise, Python unit tests and source manifests do not establish the required Lean/OCI boundary.
 Until there are recorded clean builds in the pinned Linux/WSL2 OCI environment, including the
@@ -60,7 +61,7 @@ uv run python -m scripts.generate_sbom generate --output release-evidence/autole
 ```
 
 `release_evidence.py check` builds the inventory twice in memory, checks byte-for-byte equality,
-checks that exactly the four declared lock inputs were used, and rejects an absolute workspace path
+checks that exactly the five declared lock inputs were used, and rejects an absolute workspace path
 in the generated JSON. `generate` atomically writes the exact same canonical JSON. It refuses
 protected recovery and agent-work directories as output locations. Review the generated file before
 including it in a release evidence package; its source hashes must match the files supplied for the

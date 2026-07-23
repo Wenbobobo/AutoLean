@@ -17,18 +17,20 @@ uv run python -m scripts.generate_sbom generate --output release-evidence/autole
 ```
 
 The generator obtains all package data by calling the canonical release inventory generator. That
-inventory is restricted to these four versioned inputs:
+inventory is restricted to these five versioned inputs:
 
 1. `pyproject.toml`
 2. `uv.lock`
 3. `Dashboard/ui/pnpm-lock.yaml`
 4. `benchmarks/fate.lock.json`
+5. `benchmarks/fate-splits.v1.json`
 
 The SPDX document carries the canonical inventory SHA-256 and each declared input's relative path,
 byte count, and SHA-256 in its document comment. Python artifact hashes are emitted as SPDX SHA-256
 checksums. pnpm SRI values are decoded to SPDX checksum values without preserving registry URLs.
-The FATE lock is retained as a hashed declared input; it is not represented as a downloaded FATE
-source package because this generator never fetches or inventories that source tree.
+The FATE source lock and answer-free split manifest are retained as hashed declared inputs; they
+are not represented as downloaded FATE source packages because this generator never fetches or
+inventories that source tree.
 
 The fixed `1970-01-01T00:00:00Z` creation timestamp is a reproducibility marker. It is explicitly
 not evidence of package installation, source creation, or release time. Output is canonical JSON,
