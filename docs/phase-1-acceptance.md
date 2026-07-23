@@ -46,9 +46,12 @@ not claim absence of training contamination.
 
 Non-FATE specialist comparisons use the versioned
 [role benchmark protocol](role-benchmark-protocol.md). Each role is reported separately, every
-trial is bound to a frozen matrix cell, and repeated outcomes expose instability. A comparison
-with more than one changed dimension is labelled confounded rather than attributed to a model,
-prompt, retrieval policy, tool set, budget, environment, or code change.
+trial is bound to a frozen matrix cell plus a derived repetition seed, and repeated outcomes expose
+instability. Capability readiness is probed before execution but grants no authority. Raw outputs
+remain in a separate operator-private CAS while the aggregate report carries only their hashes. A
+comparison with more than one changed dimension is labelled confounded rather than attributed to a
+model, prompt, retrieval policy, tool set, budget, environment, or code change.
+The pre-RC V3 wire format rejects populated V1/V2 stores rather than inventing missing evidence.
 
 ## Mandatory acceptance gates
 

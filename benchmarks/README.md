@@ -22,10 +22,19 @@ any recorded result.
 
 `benchmarks.role_benchmark` adds a separate role-aware experiment contract for Prover, statement
 formalizer, fidelity reviewer, cheating supervisor, and task allocator evaluations. It freezes
-model/prompt/tool/retrieval/budget/code/environment identities, performs stable case sampling,
-persists repeated answer-free results in append-only SQLite WAL tables, and reports paired
-repeatability/ablation/confounding diagnostics. The checked-in CLI is fake-only and makes no
-external call. See the [role benchmark protocol](../docs/role-benchmark-protocol.md).
+model/prompt/tool/retrieval/capability/budget/code/environment identities, derives a stable seed
+for every repetition, performs stable case sampling, persists repeated answer-free results in
+append-only SQLite WAL tables, and reports paired repeatability/ablation/confounding diagnostics.
+Capability readiness is probed before execution and grants no authority. Raw JSON outputs live in
+a separate operator-private content-addressed store. Run-cell, complete trial-result, and aggregate
+public-result commitments bind its private manifest to the answer-free report. These hashes provide
+integrity only when retained externally or signed; an unsigned self-contained report has no
+independent authenticity. The checked-in CLI is fake-only and makes no external call. See the
+[role benchmark protocol](../docs/role-benchmark-protocol.md).
+
+The current role-benchmark wire format and store are V3. V1/V2 SQLite stores, fixtures, readiness
+records, and reports are intentionally rejected because their missing bindings cannot be
+reconstructed safely. The checked-in V1 file is an answer-free retirement tombstone only.
 
 `tests/test_builder_prover_closed_loop.py` is the one-node offline evidence-closure fixture. It
 persists canonical statement-fidelity evidence, freezes and bridges the reviewed revision, records

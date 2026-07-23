@@ -1,9 +1,12 @@
-"""Run and compare offline role benchmarks without network or external model access."""
+"""Preflight, run, and compare role benchmarks without implicit model access."""
 
 from __future__ import annotations
 
 import argparse
+import os
 import sys
+import tempfile
+from contextlib import suppress
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -24,28 +27,78 @@ def _write_or_print(payload: str, output: str | None) -> None:
         return
     path = _absolute(output, label="output")
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(payload, encoding="ascii", newline="\n")
+    encoded = payload.replace("\r\n", "\n").encode("ascii")
+    temporary: Path | None = None
+    try:
+        with tempfile.NamedTemporaryFile(
+            mode="wb",
+            dir=path.parent,
+            prefix=".benchmark-output-",
+            delete=False,
+        ) as handle:
+            temporary = Path(handle.name)
+            handle.write(encoded)
+            handle.flush()
+            os.fsync(handle.fileno())
+        with suppress(FileExistsError):
+            os.link(temporary, path)
+        if path.read_bytes() != encoded:
+            raise ValueError(f"refusing to replace conflicting benchmark output: {path}") from None
+    finally:
+        if temporary is not None:
+            with suppress(OSError):
+                temporary.unlink()
 
 
 def main() -> None:
+    from benchmarks.provider_readiness import (
+        build_scripted_fake_readiness,
+        load_readiness_json,
+        readiness_json,
+    )
     from benchmarks.role_benchmark import (
         RoleBenchmarkHarness,
+        RoleBenchmarkRawOutputStore,
         RoleBenchmarkStore,
         ScriptedFakeRoleExecutor,
         compare_reports,
         comparison_json,
         load_fake_fixture,
+        load_raw_artifact_manifest_json,
+        operator_private_benchmark_paths,
+        prepare_private_manifest_path,
+        raw_artifact_manifest_json,
         report_json,
+        validate_report_private_manifest,
     )
 
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
 
+    readiness_parser = subparsers.add_parser(
+        "readiness",
+        help="probe the scripted provider separately from execution",
+    )
+    readiness_parser.add_argument("--fixture", required=True)
+    readiness_parser.add_argument("--output")
+
     run_parser = subparsers.add_parser("run", help="run a strict fake-only fixture")
     run_parser.add_argument("--fixture", required=True)
+    run_parser.add_argument("--readiness", required=True)
     run_parser.add_argument("--database", required=True)
     run_parser.add_argument("--run-id", required=True)
     run_parser.add_argument("--output")
+
+    forward_parser = subparsers.add_parser(
+        "forward-test",
+        help="run the deterministic five-role fake workflow",
+    )
+    forward_parser.add_argument(
+        "--fixture",
+        default=str(PROJECT_ROOT / "benchmarks" / "roles" / "fake-smoke.v3.json"),
+    )
+    forward_parser.add_argument("--output-root", required=True)
+    forward_parser.add_argument("--run-id", default="fake-forward-v3")
 
     report_parser = subparsers.add_parser("report", help="replay one stored report")
     report_parser.add_argument("--database", required=True)
@@ -61,19 +114,81 @@ def main() -> None:
     compare_parser.add_argument("--output")
 
     args = parser.parse_args()
+    if args.command == "readiness":
+        fixture = load_fake_fixture(_absolute(args.fixture, label="fixture"))
+        readiness = build_scripted_fake_readiness(fixture.matrix)
+        _write_or_print(readiness_json(readiness), args.output)
+        return
+
+    if args.command == "forward-test":
+        output_root = _absolute(args.output_root, label="output root")
+        output_root.mkdir(parents=True, exist_ok=True)
+        fixture = load_fake_fixture(_absolute(args.fixture, label="fixture"))
+        readiness = build_scripted_fake_readiness(fixture.matrix)
+        executor = ScriptedFakeRoleExecutor(fixture)
+        _write_or_print(
+            readiness_json(readiness),
+            str(output_root / "readiness.json"),
+        )
+        database = output_root / "roles.sqlite3"
+        private_paths = operator_private_benchmark_paths(str(args.run_id))
+        raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
+        with RoleBenchmarkStore(database) as store:
+            report = RoleBenchmarkHarness().run(
+                fixture.matrix,
+                executor=executor,
+                store=store,
+                raw_output_store=raw_store,
+                readiness=readiness,
+                run_id=str(args.run_id),
+            )
+        manifest = raw_store.build_manifest(report.run, report.results)
+        validate_report_private_manifest(report, manifest)
+        _write_or_print(
+            raw_artifact_manifest_json(manifest),
+            str(prepare_private_manifest_path(private_paths)),
+        )
+        _write_or_print(report_json(report), str(output_root / "report.json"))
+        sys.stdout.write(report_json(report))
+        return
+
     database = _absolute(args.database, label="database")
     with RoleBenchmarkStore(database) as store:
         if args.command == "run":
             fixture = load_fake_fixture(_absolute(args.fixture, label="fixture"))
+            readiness = load_readiness_json(
+                _absolute(args.readiness, label="readiness").read_text(encoding="ascii")
+            )
+            executor = ScriptedFakeRoleExecutor(fixture)
+            private_paths = operator_private_benchmark_paths(str(args.run_id))
+            raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
             report = RoleBenchmarkHarness().run(
                 fixture.matrix,
-                executor=ScriptedFakeRoleExecutor(fixture),
+                executor=executor,
                 store=store,
+                raw_output_store=raw_store,
+                readiness=readiness,
                 run_id=str(args.run_id),
+            )
+            manifest = raw_store.build_manifest(report.run, report.results)
+            validate_report_private_manifest(report, manifest)
+            _write_or_print(
+                raw_artifact_manifest_json(manifest),
+                str(prepare_private_manifest_path(private_paths)),
             )
             _write_or_print(report_json(report), args.output)
         elif args.command == "report":
-            _write_or_print(report_json(store.report(str(args.run_id))), args.output)
+            report = store.report(str(args.run_id))
+            private_paths = operator_private_benchmark_paths(str(args.run_id))
+            raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
+            observed = raw_store.build_manifest(report.run, report.results)
+            expected = load_raw_artifact_manifest_json(
+                private_paths.manifest_path.read_text(encoding="ascii")
+            )
+            if observed != expected or expected.content_hash() != report.raw_artifact_manifest_hash:
+                raise ValueError("raw artifact manifest does not match the stored run")
+            validate_report_private_manifest(report, expected)
+            _write_or_print(report_json(report), args.output)
         else:
             baseline = store.report(str(args.baseline_run))
             candidate = store.report(str(args.candidate_run))

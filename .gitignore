@@ -24,6 +24,8 @@ Dashboard/dist/
 benchmarks/vendor/
 benchmarks/results/
 release-evidence/
+raw-artifacts/
+raw-artifact-manifest.json
 .env
 *.env
 !.env.example
