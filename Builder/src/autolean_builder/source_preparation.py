@@ -286,7 +286,7 @@ def _reject_link_or_reparse(root: Path, target: Path) -> None:
 
 def _is_reparse(path: Path) -> bool:
     try:
-        attributes = path.lstat().st_file_attributes
-    except (AttributeError, OSError):
+        attributes = getattr(path.lstat(), "st_file_attributes", 0)
+    except OSError:
         return False
     return bool(attributes & _REPARSE_POINT)
