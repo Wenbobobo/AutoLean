@@ -16,6 +16,8 @@ export interface Overview {
 
 export interface GraphNode {
   id: string;
+  source_node_id: string;
+  task_id: string;
   label: string;
   graph: GraphKind;
   status: string;
@@ -51,6 +53,7 @@ export interface EventView {
   sequence: number;
   event_type: string;
   entity_id: string;
+  task_id: string | null;
   occurred_at: string;
   summary: string;
 }

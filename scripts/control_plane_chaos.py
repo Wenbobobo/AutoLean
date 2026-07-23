@@ -220,6 +220,12 @@ def _bundle(
             "freeze": FreezeRecordV1(
                 contract_hash=draft.semantic_hash(),
                 source_hash=source.content_hash,
+                source_preparation_id=stable_identifier(
+                    "source-preparation", f"control-plane-chaos:{key}"
+                ),
+                source_preparation_hash=digest_text(
+                    HashKindV1.SOURCE_PREPARATION, f"control-plane-chaos:{key}"
+                ),
                 statement_source_hash=formal.statement_source_hash,
                 elaborated_type_hash=formal.elaborated_type_hash,
                 frozen_by="test-only-control-plane-authority",

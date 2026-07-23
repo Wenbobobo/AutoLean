@@ -208,6 +208,12 @@ def _bundle(
             "freeze": FreezeRecordV1(
                 contract_hash=draft.semantic_hash(),
                 source_hash=source.content_hash,
+                source_preparation_id=stable_identifier(
+                    "source-preparation", f"project-integration:{node.node_id}"
+                ),
+                source_preparation_hash=digest_text(
+                    HashKindV1.SOURCE_PREPARATION, f"project-integration:{node.node_id}"
+                ),
                 statement_source_hash=formal.statement_source_hash,
                 elaborated_type_hash=formal.elaborated_type_hash,
                 frozen_by="project-integration-test",

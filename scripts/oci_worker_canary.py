@@ -145,6 +145,10 @@ def _bundle(image_digest: str) -> FormalizationTaskBundleV1:
             "freeze": FreezeRecordV1(
                 contract_hash=draft.semantic_hash(),
                 source_hash=source.content_hash,
+                source_preparation_id=stable_identifier("source-preparation", "oci-real-canary"),
+                source_preparation_hash=digest_text(
+                    HashKindV1.SOURCE_PREPARATION, "oci-real-canary"
+                ),
                 statement_source_hash=formal.statement_source_hash,
                 elaborated_type_hash=formal.elaborated_type_hash,
                 frozen_by="oci-real-canary",

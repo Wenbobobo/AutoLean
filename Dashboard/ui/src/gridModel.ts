@@ -64,7 +64,7 @@ export const graphPresentation: Record<
     symbol: "circle"
   },
   formal: {
-    label: "Bridge · Formal",
+    label: "Contract boundary · Formal",
     shortLabel: "Contract",
     symbol: "diamond"
   },
@@ -76,16 +76,16 @@ export const graphPresentation: Record<
 };
 
 const tonePriority: Record<HealthTone, number> = {
-  unknown: 0,
-  nominal: 1,
-  attention: 2,
-  active: 3,
+  nominal: 0,
+  attention: 1,
+  active: 2,
+  unknown: 3,
   critical: 4
 };
 
 export function healthForStatus(status: string): HealthSignal {
   const normalized = status.trim().toLowerCase();
-  if (["blocked", "failed", "rejected", "expired", "stale"].includes(normalized)) {
+  if (["blocked", "critical", "failed", "rejected", "expired", "stale"].includes(normalized)) {
     return {
       color: "#dc6156",
       edgeColor: "#e37a70",
@@ -105,7 +105,7 @@ export function healthForStatus(status: string): HealthSignal {
       tone: "active"
     };
   }
-  if (["queued", "candidate", "review", "pending"].includes(normalized)) {
+  if (["attention", "queued", "candidate", "review", "pending"].includes(normalized)) {
     return {
       color: "#d7ae54",
       edgeColor: "#cbb36f",
@@ -115,7 +115,7 @@ export function healthForStatus(status: string): HealthSignal {
       tone: "attention"
     };
   }
-  if (["frozen", "verified", "accepted", "succeeded", "ready"].includes(normalized)) {
+  if (["nominal", "frozen", "verified", "accepted", "succeeded", "ready"].includes(normalized)) {
     return {
       color: "#4eb489",
       edgeColor: "#65b997",
@@ -149,6 +149,7 @@ export function summarizeGrid(nodes: GraphNode[]): GridSummary {
     summary[healthForStatus(node.status).tone] += 1;
   }
   if (summary.critical > 0) summary.overallTone = "critical";
+  else if (summary.unknown > 0) summary.overallTone = "unknown";
   else if (summary.active > 0) summary.overallTone = "active";
   else if (summary.attention > 0) summary.overallTone = "attention";
   else if (summary.nominal > 0) summary.overallTone = "nominal";
@@ -156,8 +157,9 @@ export function summarizeGrid(nodes: GraphNode[]): GridSummary {
 }
 
 function strongestTone(nodes: GraphNode[]): HealthTone {
-  let strongest: HealthTone = "unknown";
-  for (const node of nodes) {
+  if (nodes.length === 0) return "unknown";
+  let strongest = healthForStatus(nodes[0]!.status).tone;
+  for (const node of nodes.slice(1)) {
     const tone = healthForStatus(node.status).tone;
     if (tonePriority[tone] > tonePriority[strongest]) strongest = tone;
   }
@@ -217,7 +219,7 @@ function layoutLane(
   const rows = Math.max(1, Math.ceil(ordered.length / columns));
   const laneWidth = 100 / laneCount;
   const center = laneWidth * laneIndex + laneWidth / 2;
-  const horizontalSpan = laneWidth * (scope === "all" ? 0.58 : 0.78);
+  const horizontalSpan = laneWidth * (scope === "all" ? 0.58 : 0.5);
   const presentation = graphPresentation[graph];
 
   return ordered.map((node, index) => {

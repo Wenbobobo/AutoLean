@@ -19,6 +19,7 @@ use([ScatterChart, EffectScatterChart, LinesChart, GridComponent, TooltipCompone
 type GraphDatum = {
   dependencies: number;
   graphLabel: string;
+  nodeId: string;
   kind: string;
   rawLabel: string;
   revision: number;
@@ -38,11 +39,15 @@ const toneLabel: Record<HealthTone, string> = {
 export function GraphView({
   nodes,
   graph = "all",
-  compact = false
+  compact = false,
+  selectedNodeId,
+  onSelectNode
 }: {
   nodes: GraphNode[];
   graph?: GraphScope;
   compact?: boolean;
+  selectedNodeId?: string;
+  onSelectNode?: (nodeId: string) => void;
 }) {
   const element = useRef<HTMLDivElement>(null);
   const model = useMemo(() => buildGridModel(nodes, graph), [graph, nodes]);
@@ -50,6 +55,21 @@ export function GraphView({
   useEffect(() => {
     if (!element.current) return;
     const chart = init(element.current, undefined, { renderer: "canvas" });
+    const labelLimit = compact ? 14 : 18;
+    const showLaneLabels = graph !== "all" && model.nodes.length <= 4;
+    const selected = model.nodes.find((node) => node.id === selectedNodeId);
+    const upstreamIds = new Set(selected?.dependencies ?? []);
+    const downstreamIds = new Set(
+      model.nodes
+        .filter((node) => selected && node.dependencies.includes(selected.id))
+        .map((node) => node.id)
+    );
+    const relationFor = (nodeId: string) => {
+      if (!selected) return "visible";
+      if (nodeId === selected.id) return "selected";
+      if (upstreamIds.has(nodeId) || downstreamIds.has(nodeId)) return "frontier";
+      return "dimmed";
+    };
     chart.setOption({
       animationDuration: 360,
       animationEasing: "cubicOut",
@@ -89,19 +109,24 @@ export function GraphView({
           symbol: ["none", "arrow"],
           symbolSize: [0, 6],
           z: 1,
-          data: model.links.map((link) => ({
-            coords: [
-              [link.source.x, link.source.y],
-              [link.target.x, link.target.y]
-            ],
-            lineStyle: {
-              color: link.health.edgeColor,
-              curveness: 0.08,
-              opacity: link.health.tone === "unknown" ? 0.42 : 0.72,
-              type: link.health.edgeType,
-              width: link.health.tone === "critical" ? 1.7 : 1.1
-            }
-          }))
+          data: model.links.map((link) => {
+            const inFrontier =
+              selected &&
+              (link.source.id === selected.id || link.target.id === selected.id);
+            return {
+              coords: [
+                [link.source.x, link.source.y],
+                [link.target.x, link.target.y]
+              ],
+              lineStyle: {
+                color: link.health.edgeColor,
+                curveness: 0.08,
+                opacity: selected ? (inFrontier ? 0.92 : 0.12) : link.health.tone === "unknown" ? 0.42 : 0.72,
+                type: link.health.edgeType,
+                width: inFrontier ? 2.4 : link.health.tone === "critical" ? 1.7 : 1.1
+              }
+            };
+          })
         },
         {
           type: "lines",
@@ -145,42 +170,66 @@ export function GraphView({
         {
           type: "scatter",
           coordinateSystem: "cartesian2d",
+          cursor: onSelectNode ? "pointer" : "default",
           z: 4,
           label: {
-            show: model.nodes.length <= (compact ? 24 : 40),
+            show: showLaneLabels,
             position: "bottom",
             distance: 7,
             color: "#dce6e2",
             fontSize: compact ? 9 : 10,
             formatter: (item: { data?: Partial<GraphDatum> }) =>
-              graphText(item.data?.shortLabel ?? "", compact ? 20 : 28)
+              graphText(item.data?.shortLabel ?? "", labelLimit)
           },
           emphasis: {
             scale: 1.3,
             itemStyle: { borderColor: "#ffffff", borderWidth: 2 }
           },
-          data: model.nodes.map((node) => ({
-            value: [node.x, node.y],
-            symbol: node.symbol,
-            symbolSize: node.size,
-            graphLabel: graphPresentation[node.graph].label,
-            rawLabel: node.label,
-            shortLabel: graphText(node.label, compact ? 20 : 28),
-            status: node.status,
-            revision: node.revision,
-            dependencies: node.dependencies.length,
-            kind: node.kind,
-            updatedAt: node.updated_at ? displayText(node.updated_at, 72) : "No update timestamp",
-            itemStyle: {
-              color: node.health.color,
-              borderColor: node.health.tone === "unknown" ? "#c5ceca" : "#eff8f4",
-              borderWidth: node.kind === "mission" ? 2.5 : 1.25,
-              shadowBlur: node.health.tone === "active" ? 9 : 3,
-              shadowColor: node.health.color
-            }
-          }))
+          data: model.nodes.map((node) => {
+            const relation = relationFor(node.id);
+            return {
+              value: [node.x, node.y],
+              symbol: node.symbol,
+              symbolSize: node.size + (relation === "selected" ? 5 : 0),
+              nodeId: node.id,
+              graphLabel: graphPresentation[node.graph].label,
+              rawLabel: node.label,
+              shortLabel: graphText(node.label, labelLimit),
+              status: node.status,
+              revision: node.revision,
+              dependencies: node.dependencies.length,
+              kind: node.kind,
+              updatedAt: node.updated_at ? displayText(node.updated_at, 72) : "No update timestamp",
+              label: {
+                show:
+                  showLaneLabels ||
+                  relation === "selected" ||
+                  relation === "frontier",
+                fontWeight: relation === "selected" ? 700 : 400,
+                opacity: relation === "dimmed" ? 0.25 : 1
+              },
+              itemStyle: {
+                color: node.health.color,
+                opacity: relation === "dimmed" ? 0.22 : 1,
+                borderColor:
+                  relation === "selected"
+                    ? "#ffffff"
+                    : node.health.tone === "unknown"
+                      ? "#c5ceca"
+                      : "#eff8f4",
+                borderWidth:
+                  relation === "selected" ? 3 : relation === "frontier" ? 2 : node.kind === "mission" ? 2.5 : 1.25,
+                shadowBlur: relation === "selected" ? 14 : node.health.tone === "active" ? 9 : 3,
+                shadowColor: node.health.color
+              }
+            };
+          })
         }
       ]
+    });
+    chart.on("click", (item) => {
+      const datum = item.data as Partial<GraphDatum> | undefined;
+      if (item.seriesType === "scatter" && datum?.nodeId) onSelectNode?.(datum.nodeId);
     });
     const observer = new ResizeObserver(() => chart.resize());
     observer.observe(element.current);
@@ -188,7 +237,7 @@ export function GraphView({
       observer.disconnect();
       chart.dispose();
     };
-  }, [compact, model]);
+  }, [compact, model, onSelectNode, selectedNodeId]);
 
   return (
     <div className={compact ? "graph-view graph-view-compact" : "graph-view"}>
@@ -197,7 +246,7 @@ export function GraphView({
         style={{ gridTemplateColumns: `repeat(${model.lanes.length}, minmax(0, 1fr))` }}
       >
         {model.lanes.map((lane) => (
-          <div className="grid-lane-head" key={lane.graph}>
+          <div className={`grid-lane-head grid-lane-head-${lane.graph}`} key={lane.graph}>
             <span className={`health-signal tone-${lane.tone}`} aria-hidden="true" />
             <strong>{lane.label}</strong>
             <span>{lane.count}</span>
@@ -210,7 +259,9 @@ export function GraphView({
           style={{ gridTemplateColumns: `repeat(${model.lanes.length}, minmax(0, 1fr))` }}
           aria-hidden="true"
         >
-          {model.lanes.map((lane) => <span key={lane.graph} />)}
+          {model.lanes.map((lane) => (
+            <span className={`grid-lane grid-lane-${lane.graph}`} key={lane.graph} />
+          ))}
         </div>
         <div
           className="graph-canvas"
@@ -227,6 +278,9 @@ export function GraphView({
         <span className="dependency-legend">→ Dependency</span>
         {model.unresolvedDependencies > 0 && (
           <span className="boundary-count">{model.unresolvedDependencies} external edges</span>
+        )}
+        {model.nodes.length > 96 && (
+          <span className="density-warning">{model.nodes.length} nodes · dense view</span>
         )}
       </div>
     </div>

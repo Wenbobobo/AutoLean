@@ -54,6 +54,7 @@ def _work_record(event: EventView) -> WorkRecord:
         category=category,
         event_type=event.event_type,
         entity_id=event.entity_id,
+        task_id=event.task_id,
         occurred_at=event.occurred_at,
         summary=event.summary,
     )
@@ -180,6 +181,8 @@ def create_app(reader: ProjectionReader | None = None) -> FastAPI:
         return [
             StatementRevision(
                 id=item.id,
+                source_node_id=item.source_node_id,
+                task_id=item.task_id,
                 label=item.label,
                 graph=item.graph,
                 revision=item.revision,

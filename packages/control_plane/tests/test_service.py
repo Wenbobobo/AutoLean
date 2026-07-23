@@ -70,6 +70,7 @@ from autolean_control_plane.errors import (
     ProjectionError,
     StaleFence,
 )
+from autolean_control_plane.events import StoredEvent
 
 
 def _id(key: str) -> StableIdentifierV1:
@@ -194,6 +195,12 @@ def _bundle(
             "freeze": FreezeRecordV1(
                 contract_hash=draft.semantic_hash(),
                 source_hash=source.content_hash,
+                source_preparation_id=stable_identifier(
+                    "source-preparation", f"{bundle_key}:fixture"
+                ),
+                source_preparation_hash=digest_text(
+                    HashKindV1.SOURCE_PREPARATION, f"{bundle_key}:fixture"
+                ),
                 statement_source_hash=formal.statement_source_hash,
                 elaborated_type_hash=formal.elaborated_type_hash,
                 frozen_by="fixture",
@@ -307,6 +314,31 @@ def test_control_plane_rejects_unreviewed_bundle_by_default(tmp_path: Path) -> N
         plane.register_bundle(_bundle(), idempotency_key="unreviewed")
 
 
+def test_control_plane_rejects_legacy_bundle_without_source_preparation(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle()
+    freeze = bundle.contract.freeze
+    assert freeze is not None
+    legacy_contract = bundle.contract.model_copy(
+        update={
+            "freeze": freeze.model_copy(
+                update={
+                    "source_preparation_id": None,
+                    "source_preparation_hash": None,
+                }
+            )
+        }
+    )
+    legacy_bundle = bundle.model_copy(update={"contract": legacy_contract})
+
+    with pytest.raises(InvalidTransition, match="source-preparation evidence"):
+        _plane(tmp_path).register_bundle(
+            legacy_bundle,
+            idempotency_key="legacy-source-preparation",
+        )
+
+
 def test_protocol_accepts_only_evidence_for_the_registered_frozen_contract(tmp_path: Path) -> None:
     plane = _plane(tmp_path)
     bundle = _bundle()
@@ -334,6 +366,15 @@ def test_protocol_accepts_only_evidence_for_the_registered_frozen_contract(tmp_p
     )
     assert outcome.accepted
     assert outcome.event.event_type == "verification.accepted"
+    snapshot = DashboardProjection(plane.events.read_all()).snapshot()
+    assert {node["status"] for node in snapshot["nodes"]} == {"verified"}
+    assert snapshot["overview"]["active_runs"] == 0
+    assert snapshot["overview"]["blocked_nodes"] == 0
+    assert snapshot["runs"][0]["verification"] == "accepted"
+    verification_event = next(
+        item for item in snapshot["events"] if item["event_type"] == "verification.accepted"
+    )
+    assert verification_event["task_id"] == bundle.bundle_id.value
 
 
 def test_verifier_records_but_never_accepts_sorry_axiom(tmp_path: Path) -> None:
@@ -444,8 +485,189 @@ def test_projection_exports_only_summaries_not_proof_or_source_text(tmp_path: Pa
     snapshot = DashboardProjection(plane.events.read_all()).snapshot()
     text = json.dumps(snapshot)
     assert "by\\n  rfl" not in text
+    node = snapshot["nodes"][0]
+    run = snapshot["runs"][0]
+    proof_event = next(
+        item for item in snapshot["events"] if item["event_type"] == "proof.submitted"
+    )
+    assert node["source_node_id"] == bundle.graphs.mathematical.nodes[0].node_id.value
+    assert node["task_id"] == run["task_id"] == proof_event["task_id"] == bundle.bundle_id.value
+    assert node["id"] == (
+        f"dashboard-node|{bundle.bundle_id.value}|mathematical|"
+        f"{bundle.graphs.mathematical.nodes[0].node_id.value}"
+    )
+    assert "bundle_id" not in node
+    claim_event = next(item for item in snapshot["events"] if item["event_type"] == "task.claimed")
+    assert claim_event["task_id"] == bundle.bundle_id.value
+    assert node["status"] == "running"
+    assert snapshot["overview"]["active_runs"] == 1
     path = export_dashboard_projection(tmp_path / "projection.json", plane.events.read_all())
     assert json.loads(path.read_text(encoding="utf-8"))["runs"][0]["status"] == "candidate"
+
+
+def test_projection_composite_node_ids_preserve_names_and_drop_tainted_fields(
+    tmp_path: Path,
+) -> None:
+    def registered(
+        *,
+        position: int,
+        bundle_id: str,
+        graph_nodes: list[dict[str, object]],
+    ) -> StoredEvent:
+        return StoredEvent(
+            global_position=position,
+            event_id=f"event-{position}",
+            entity_type="task",
+            entity_id=bundle_id,
+            entity_sequence=1,
+            event_type="task.registered",
+            payload={"bundle_id": bundle_id, "graph_nodes": graph_nodes},
+            metadata={},
+            recorded_at=f"2026-07-23T12:00:0{position}Z",
+        )
+
+    def graph_node(
+        graph: str,
+        *,
+        node_id: str = "shared-node",
+        dependencies: list[str] | None = None,
+    ) -> dict[str, object]:
+        return {
+            "id": node_id,
+            "bundle_id": "ignored-node-copy",
+            "label": f"{graph} {node_id}",
+            "graph": graph,
+            "status": "frozen",
+            "revision": 1,
+            "kind": "statement",
+            "dependencies": dependencies or [],
+            "proof_source": "TAINTED-PROOF-SOURCE",
+            "metadata": {"prompt": "TAINTED-MODEL-PROMPT"},
+        }
+
+    events = (
+        registered(
+            position=1,
+            bundle_id="bundle-a",
+            graph_nodes=[graph_node("mathematical"), graph_node("formal")],
+        ),
+        registered(
+            position=2,
+            bundle_id="bundle-b",
+            graph_nodes=[
+                graph_node("mathematical"),
+                graph_node(
+                    "mathematical",
+                    node_id="child-node",
+                    dependencies=["shared-node"],
+                ),
+            ],
+        ),
+    )
+    snapshot = DashboardProjection(events).snapshot()
+    nodes = snapshot["nodes"]
+
+    assert len(nodes) == 4
+    assert len({node["id"] for node in nodes}) == 4
+    assert {(node["task_id"], node["graph"], node["source_node_id"]) for node in nodes} == {
+        ("bundle-a", "mathematical", "shared-node"),
+        ("bundle-a", "formal", "shared-node"),
+        ("bundle-b", "mathematical", "shared-node"),
+        ("bundle-b", "mathematical", "child-node"),
+    }
+    bundle_b_root = next(
+        node
+        for node in nodes
+        if node["task_id"] == "bundle-b" and node["source_node_id"] == "shared-node"
+    )
+    bundle_b_child = next(
+        node
+        for node in nodes
+        if node["task_id"] == "bundle-b" and node["source_node_id"] == "child-node"
+    )
+    assert bundle_b_child["dependencies"] == [bundle_b_root["id"]]
+    assert all("bundle_id" not in node for node in nodes)
+    assert all(
+        set(node)
+        == {
+            "dependencies",
+            "graph",
+            "id",
+            "kind",
+            "label",
+            "revision",
+            "source_node_id",
+            "status",
+            "task_id",
+            "updated_at",
+        }
+        for node in nodes
+    )
+    exported = export_dashboard_projection(tmp_path / "projection.json", events).read_text(
+        encoding="utf-8"
+    )
+    assert "TAINTED-PROOF-SOURCE" not in exported
+    assert "TAINTED-MODEL-PROMPT" not in exported
+    assert '"proof_source"' not in exported
+    assert '"metadata"' not in exported
+
+
+def test_projection_rejected_verification_is_fail_closed() -> None:
+    event = StoredEvent(
+        global_position=1,
+        event_id="verification-rejected",
+        entity_type="verification",
+        entity_id="proof-1",
+        entity_sequence=1,
+        event_type="verification.rejected",
+        payload={
+            "bundle_id": "bundle-a",
+            "proof_id": "proof-1",
+            "accepted": False,
+            "reasons": ["kernel failure"],
+        },
+        metadata={},
+        recorded_at="2026-07-23T12:00:00Z",
+    )
+
+    snapshot = DashboardProjection((event,)).snapshot()
+
+    assert snapshot["overview"]["blocked_nodes"] == 1
+    assert snapshot["events"][0]["task_id"] == "bundle-a"
+
+
+@pytest.mark.parametrize(
+    ("event_type", "accepted"),
+    [
+        ("verification.accepted", "false"),
+        ("verification.accepted", False),
+        ("verification.rejected", True),
+        ("verification.unknown", False),
+    ],
+)
+def test_projection_rejects_malformed_or_inconsistent_verification(
+    event_type: str,
+    accepted: object,
+) -> None:
+    event = StoredEvent(
+        global_position=1,
+        event_id="verification-malformed",
+        entity_type="verification",
+        entity_id="proof-1",
+        entity_sequence=1,
+        event_type=event_type,
+        payload={
+            "bundle_id": "bundle-a",
+            "proof_id": "proof-1",
+            "accepted": accepted,
+            "reasons": [],
+        },
+        metadata={},
+        recorded_at="2026-07-23T12:00:00Z",
+    )
+
+    with pytest.raises(ProjectionError, match="verification"):
+        DashboardProjection((event,)).snapshot()
 
 
 def _proof_submission_artifact_digest(

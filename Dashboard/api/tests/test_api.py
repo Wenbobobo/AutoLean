@@ -24,7 +24,9 @@ class FixedReader:
             overview=Overview(mission="Test mission"),
             nodes=(
                 GraphNode(
-                    id="node-1",
+                    id="dashboard-node|task-1|formal|node-1",
+                    source_node_id="node-1",
+                    task_id="task-1",
                     label='<img src=x onerror="alert(1)">',
                     graph="formal",
                     status="frozen",
@@ -34,7 +36,7 @@ class FixedReader:
             runs=(
                 RunSummary(
                     id="attempt-1",
-                    task_id="node-1",
+                    task_id="task-1",
                     provider="codex-cli",
                     model="gpt-5",
                     status="candidate",
@@ -53,6 +55,7 @@ class FixedReader:
                     sequence=1,
                     event_type="gap.reported",
                     entity_id="node-1",
+                    task_id="task-1",
                     occurred_at=now,
                     summary="Gap reported",
                 ),
@@ -60,6 +63,7 @@ class FixedReader:
                     sequence=2,
                     event_type="contract_change.requested",
                     entity_id="node-1",
+                    task_id="task-1",
                     occurred_at=now,
                     summary="Contract change requested",
                 ),
@@ -67,6 +71,7 @@ class FixedReader:
                     sequence=3,
                     event_type="verification.accepted",
                     entity_id="node-1",
+                    task_id="task-1",
                     occurred_at=now,
                     summary="Verification accepted",
                 ),
@@ -91,12 +96,17 @@ def test_api_is_read_only_and_exposes_projection_metadata() -> None:
 
     node = client.get("/api/nodes").json()[0]
     assert node["label"].startswith("<img")
-    assert client.get("/api/revisions").json()[0]["revision"] == 3
+    assert node["task_id"] == "task-1"
+    revision = client.get("/api/revisions").json()[0]
+    assert revision["revision"] == 3
+    assert revision["source_node_id"] == "node-1"
+    assert revision["task_id"] == "task-1"
     assert [item["category"] for item in client.get("/api/work-records").json()] == [
         "gap",
         "contract_change",
         "verification",
     ]
+    assert {item["task_id"] for item in client.get("/api/work-records").json()} == {"task-1"}
 
 
 def test_untrusted_projection_strings_are_json_metadata_not_browser_markup() -> None:

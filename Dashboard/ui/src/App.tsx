@@ -16,17 +16,29 @@ import { api } from "./api";
 import { displayText } from "./display";
 import { GraphView } from "./GraphView";
 import { summarizeGrid, type GraphScope } from "./gridModel";
+import {
+  buildNodeInspection,
+  classifyWorkRecord,
+  focusNode
+} from "./inspectionModel";
+import { NodeInspector } from "./NodeInspector";
 import type {
   ArtifactSummary,
   EventView,
   GraphNode,
   Overview,
   RunSummary,
-  WorkRecord,
   WorkRecordCategory
 } from "./types";
 
 type View = "overview" | "graph" | "runs" | "evidence" | "artifacts";
+
+const graphFilterLabel: Record<GraphScope, string> = {
+  all: "All",
+  mathematical: "Math",
+  formal: "Formal",
+  execution: "Exec"
+};
 
 const nav: Array<{ id: View; label: string; icon: typeof Activity }> = [
   { id: "overview", label: "Overview", icon: Activity },
@@ -59,16 +71,6 @@ function statusClass(status: string) {
   return `status status-${normalized || "unknown"}`;
 }
 
-function classifyWorkRecord(event: EventView): WorkRecord {
-  let category: WorkRecordCategory = "other";
-  if (event.event_type === "gap.reported") category = "gap";
-  else if (event.event_type === "contract_change.requested") category = "contract_change";
-  else if (event.event_type.startsWith("verification.")) category = "verification";
-  else if (event.event_type === "proof.submitted") category = "attempt";
-  else if (event.event_type.startsWith("task.")) category = "task";
-  return { sequence: event.sequence, category, event };
-}
-
 function categoryLabel(category: WorkRecordCategory) {
   return category.replaceAll("_", " ");
 }
@@ -82,6 +84,7 @@ export default function App() {
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [events, setEvents] = useState<EventView[]>([]);
   const [query, setQuery] = useState("");
+  const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -133,6 +136,14 @@ export default function App() {
   const gridSummary = useMemo(() => summarizeGrid(nodes), [nodes]);
   const visibleGraphNodes =
     graph === "all" ? nodes : nodes.filter((node) => node.graph === graph);
+  const focusedNode = useMemo(
+    () => focusNode(visibleGraphNodes, focusedNodeId),
+    [focusedNodeId, visibleGraphNodes]
+  );
+  const nodeInspection = useMemo(
+    () => buildNodeInspection(nodes, runs, events, focusedNode?.id ?? null),
+    [events, focusedNode?.id, nodes, runs]
+  );
 
   return (
     <div className="app-shell">
@@ -232,21 +243,40 @@ export default function App() {
                     className={graph === kind ? "selected" : ""}
                     onClick={() => setGraph(kind)}
                     aria-pressed={graph === kind}
+                    aria-label={kind}
                     key={kind}
                   >
-                    {kind}
+                    {graphFilterLabel[kind]}
                   </button>
                 ))}
               </div>
             </div>
-            <GraphView nodes={nodes} graph={graph} />
+            <div className="topology-workbench">
+              <GraphView
+                nodes={nodes}
+                graph={graph}
+                selectedNodeId={focusedNode?.id}
+                onSelectNode={setFocusedNodeId}
+              />
+              <NodeInspector inspection={nodeInspection} />
+            </div>
             <div className="node-ledger table-wrap">
               <table>
                 <thead><tr><th>Node</th><th>Kind</th><th>Revision</th><th>Status</th><th>Dependencies</th><th>Updated</th></tr></thead>
                 <tbody>
                   {visibleGraphNodes.map((node) => (
-                    <tr key={node.id}>
-                      <td><strong>{displayText(node.label)}</strong><span className="subtle">{displayText(node.id, 128)}</span></td>
+                    <tr className={node.id === focusedNode?.id ? "is-selected" : ""} key={node.id}>
+                      <td>
+                        <button
+                          type="button"
+                          className="node-focus-button"
+                          aria-pressed={node.id === focusedNode?.id}
+                          onClick={() => setFocusedNodeId(node.id)}
+                        >
+                          <strong>{displayText(node.label)}</strong>
+                          <span className="subtle">{displayText(node.source_node_id, 128)}</span>
+                        </button>
+                      </td>
                       <td>{displayText(node.kind, 64)}</td>
                       <td>r{node.revision}</td>
                       <td><span className={statusClass(node.status)}>{displayText(node.status, 64)}</span></td>

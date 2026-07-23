@@ -25,7 +25,9 @@ class Overview(StrictModel):
 
 
 class GraphNode(StrictModel):
-    id: str = Field(min_length=1, max_length=256)
+    id: str = Field(min_length=1, max_length=768)
+    source_node_id: str = Field(min_length=1, max_length=256)
+    task_id: str = Field(min_length=1, max_length=256)
     label: str = Field(min_length=1, max_length=512)
     graph: Literal["mathematical", "formal", "execution"]
     status: str = Field(min_length=1, max_length=64)
@@ -61,6 +63,7 @@ class EventView(StrictModel):
     sequence: int = Field(ge=1)
     event_type: str = Field(min_length=1, max_length=128)
     entity_id: str = Field(min_length=1, max_length=256)
+    task_id: str | None = Field(default=None, min_length=1, max_length=256)
     occurred_at: datetime
     summary: str = Field(min_length=1, max_length=512)
 
@@ -68,7 +71,9 @@ class EventView(StrictModel):
 class StatementRevision(StrictModel):
     """A public, revision-oriented view derived from graph nodes only."""
 
-    id: str = Field(min_length=1, max_length=256)
+    id: str = Field(min_length=1, max_length=768)
+    source_node_id: str = Field(min_length=1, max_length=256)
+    task_id: str = Field(min_length=1, max_length=256)
     label: str = Field(min_length=1, max_length=512)
     graph: Literal["mathematical", "formal", "execution"]
     revision: int = Field(ge=1)
@@ -94,6 +99,7 @@ class WorkRecord(StrictModel):
     category: WorkRecordCategory
     event_type: str = Field(min_length=1, max_length=128)
     entity_id: str = Field(min_length=1, max_length=256)
+    task_id: str | None = Field(default=None, min_length=1, max_length=256)
     occurred_at: datetime
     summary: str = Field(min_length=1, max_length=512)
 

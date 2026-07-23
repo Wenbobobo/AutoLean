@@ -114,6 +114,10 @@ def frozen_bundle(*, external_egress: bool = False) -> FormalizationTaskBundleV1
             "freeze": FreezeRecordV1(
                 contract_hash=draft.semantic_hash(),
                 source_hash=source.content_hash,
+                source_preparation_id=stable_identifier("source-preparation", "prover-fixture"),
+                source_preparation_hash=digest_text(
+                    HashKindV1.SOURCE_PREPARATION, "prover-fixture"
+                ),
                 statement_source_hash=formal.statement_source_hash,
                 elaborated_type_hash=formal.elaborated_type_hash,
                 frozen_by="fixture",

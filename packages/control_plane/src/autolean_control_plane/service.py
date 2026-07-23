@@ -190,6 +190,15 @@ class ControlPlane:
     ) -> TaskBinding:
         """Register an immutable Builder handoff before any worker can claim it."""
 
+        freeze = bundle.contract.freeze
+        if (
+            freeze is None
+            or freeze.source_preparation_id is None
+            or freeze.source_preparation_hash is None
+        ):
+            raise InvalidTransition(
+                "Builder handoff requires committed source-preparation evidence"
+            )
         bundle_id = bundle.bundle_id.value
         attestation_signature = (
             None if bundle.builder_attestation is None else bundle.builder_attestation.signature

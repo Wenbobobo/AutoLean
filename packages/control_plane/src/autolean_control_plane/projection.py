@@ -10,7 +10,8 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import cast
 
-from .events import JsonObject, StoredEvent, canonical_json
+from .errors import ProjectionError
+from .events import JsonObject, JsonValue, StoredEvent, canonical_json
 
 
 class DashboardProjection:
@@ -29,14 +30,16 @@ class DashboardProjection:
 
         for event in self._events:
             payload = event.payload
-            bundle_id = self._optional_text(payload, "bundle_id")
+            bundle_id = self._event_task_id(event)
             if event.event_type == "task.registered":
                 for raw_node in self._optional_list(payload, "graph_nodes"):
                     if isinstance(raw_node, dict):
-                        node = cast(JsonObject, raw_node).copy()
-                        identifier = self._optional_text(node, "id")
-                        if identifier:
-                            nodes[identifier] = node
+                        node = self._public_identity_node(
+                            cast(JsonObject, raw_node),
+                            event_bundle_id=bundle_id,
+                        )
+                        if node is not None:
+                            nodes[cast(str, node["id"])] = node
                 self._capture_artifact(payload, "bundle_artifact", artifacts)
             elif event.event_type == "task.claimed" and bundle_id:
                 active_bundles.add(bundle_id)
@@ -57,7 +60,7 @@ class DashboardProjection:
                 self._capture_artifact(payload, "request_artifact", artifacts)
             elif event.event_type.startswith("verification."):
                 verified_proof_id = self._optional_text(payload, "proof_id")
-                accepted = bool(payload.get("accepted"))
+                accepted = self._verification_accepted(event)
                 if verified_proof_id and verified_proof_id in runs:
                     runs[verified_proof_id]["status"] = "succeeded" if accepted else "failed"
                     runs[verified_proof_id]["verification"] = "accepted" if accepted else "rejected"
@@ -68,7 +71,7 @@ class DashboardProjection:
                         blocked_bundles.add(bundle_id)
                 self._capture_artifact(payload, "verification_artifact", artifacts)
 
-            event_views.append(self._event_view(event))
+            event_views.append(self._event_view(event, task_id=bundle_id))
 
         return self._json_object(
             {
@@ -101,6 +104,60 @@ class DashboardProjection:
     def _public_node(node: JsonObject) -> JsonObject:
         return DashboardProjection._json_object(
             {key: value for key, value in node.items() if key != "bundle_id"}
+        )
+
+    @staticmethod
+    def _public_identity_node(
+        raw_node: JsonObject,
+        *,
+        event_bundle_id: str | None,
+    ) -> JsonObject | None:
+        source_node_id = DashboardProjection._optional_text(raw_node, "id")
+        graph = DashboardProjection._optional_text(raw_node, "graph")
+        bundle_id = event_bundle_id or DashboardProjection._optional_text(raw_node, "bundle_id")
+        label = DashboardProjection._optional_text(raw_node, "label")
+        status = DashboardProjection._optional_text(raw_node, "status")
+        revision = DashboardProjection._optional_int(raw_node, "revision")
+        kind = DashboardProjection._optional_text(raw_node, "kind")
+        if (
+            source_node_id is None
+            or graph not in {"mathematical", "formal", "execution"}
+            or bundle_id is None
+            or label is None
+            or status is None
+            or revision is None
+            or revision < 1
+            or kind is None
+        ):
+            return None
+
+        def public_id(identifier: str) -> str:
+            # StableIdentifierV1 values cannot contain "|", so this tuple encoding is
+            # unambiguous while remaining inspectable and stable across event replays.
+            return f"dashboard-node|{bundle_id}|{graph}|{identifier}"
+
+        dependencies: list[JsonValue] = [
+            public_id(identifier)
+            for identifier in DashboardProjection._optional_list(raw_node, "dependencies")
+            if isinstance(identifier, str) and identifier
+        ]
+        return DashboardProjection._json_object(
+            {
+                # Internal-only key retained for status projection, then removed by _public_node.
+                "bundle_id": bundle_id,
+                "dependencies": dependencies,
+                "graph": graph,
+                "id": public_id(source_node_id),
+                "kind": kind,
+                "label": label,
+                "revision": revision,
+                "source_node_id": source_node_id,
+                "status": status,
+                # This is the explicit public join key shared by nodes, runs, and events.
+                # Bundle IDs are already exposed as RunSummary.task_id.
+                "task_id": bundle_id,
+                "updated_at": DashboardProjection._optional_text(raw_node, "updated_at"),
+            }
         )
 
     @staticmethod
@@ -141,17 +198,38 @@ class DashboardProjection:
         )
 
     @staticmethod
-    def _event_view(event: StoredEvent) -> JsonObject:
-        bundle_id = DashboardProjection._optional_text(event.payload, "bundle_id")
+    def _event_view(event: StoredEvent, *, task_id: str | None) -> JsonObject:
         return DashboardProjection._json_object(
             {
                 "sequence": event.global_position,
                 "event_type": event.event_type,
-                "entity_id": bundle_id or event.entity_id,
+                "entity_id": task_id or event.entity_id,
+                "task_id": task_id,
                 "occurred_at": event.recorded_at,
                 "summary": event.event_type.replace(".", " "),
             }
         )
+
+    @staticmethod
+    def _event_task_id(event: StoredEvent) -> str | None:
+        payload_id = DashboardProjection._optional_text(event.payload, "bundle_id")
+        if payload_id is not None:
+            return payload_id
+        # task.claimed stores its task identity in the task stream rather than duplicating
+        # it inside the payload. No other entity stream is treated as a task implicitly.
+        if event.entity_type == "task" and event.entity_id:
+            return event.entity_id
+        return None
+
+    @staticmethod
+    def _verification_accepted(event: StoredEvent) -> bool:
+        accepted = event.payload.get("accepted")
+        if not isinstance(accepted, bool):
+            raise ProjectionError("verification acceptance flag must be a boolean")
+        expected_type = "verification.accepted" if accepted else "verification.rejected"
+        if event.event_type != expected_type:
+            raise ProjectionError("verification event type conflicts with its acceptance flag")
+        return accepted
 
     @staticmethod
     def _optional_text(payload: JsonObject, key: str) -> str | None:
