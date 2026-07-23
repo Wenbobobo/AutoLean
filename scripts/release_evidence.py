@@ -290,7 +290,7 @@ def _input_inventory(root: Path) -> list[dict[str, object]]:
 
 
 def build_inventory(root: Path) -> dict[str, object]:
-    """Build the release inventory using only the four declared, versioned input files."""
+    """Build the release inventory using only the declared, versioned input files."""
     root = root.resolve()
     return {
         "benchmark": _benchmark_inventory(root),

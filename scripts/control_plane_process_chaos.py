@@ -22,7 +22,11 @@ Run the bounded 1,000-job target explicitly:
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
+import os
+import re
+import stat
 import subprocess
 import sys
 import tempfile
@@ -31,12 +35,240 @@ from pathlib import Path
 from typing import Literal, cast
 
 _SCHEMA_VERSION = "autolean.control-plane-process-chaos.v1"
+_REPORT_ENVELOPE_SCHEMA = "autolean.control-plane-process-chaos-report-envelope.v1"
+_REPORT_HASH_DOMAIN = b"autolean.control-plane-process-chaos-report-envelope.v1\x00"
 _SCENARIO_FILE = "scenario.json"
 _READY_FILE = "crash-ready.json"
 _RECOVERY_FILE = "recovery.json"
 _REPLAY_FILE = "replay.json"
 _MAX_JOBS = 1_000
 _REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPORT_DIRECTORY = "release-evidence"
+_DOES_NOT_EXERCISE = (
+    "lean",
+    "oci",
+    "network",
+    "model_provider",
+    "real_attestation_authority",
+    "power_loss",
+    "mid_transaction_sqlite_kill",
+)
+_SUMMARY_FIELDS = frozenset(
+    {
+        "schema_version",
+        "evidence_scope",
+        "lean_or_oci_execution",
+        "network_or_model_execution",
+        "test_only_hmac_authority",
+        "jobs_requested",
+        "jobs_completed",
+        "child_processes_started",
+        "os_process_kill_exercised",
+        "process_termination_target",
+        "crash_phase",
+        "restart_mode",
+        "replacement_claims",
+        "expired_leases",
+        "stale_fence_rejections",
+        "duplicate_delivery_replays",
+        "terminal_verdicts",
+        "per_proof_terminal_verdicts",
+        "event_count",
+        "expected_event_count",
+        "event_positions_contiguous",
+        "event_replay_consistent",
+        "content_addressed_artifacts_verified",
+        "task_loss_detected",
+        "duplicate_terminal_verdict_detected",
+        "does_not_exercise",
+    }
+)
+
+
+def _canonical_json(value: object) -> bytes:
+    return json.dumps(
+        value,
+        ensure_ascii=True,
+        separators=(",", ":"),
+        sort_keys=True,
+        allow_nan=False,
+    ).encode("ascii")
+
+
+def _canonical_object(value: object) -> dict[str, object]:
+    """Create a JSON-only deep snapshot so later caller mutations cannot alter a report."""
+
+    parsed = json.loads(_canonical_json(value))
+    if not isinstance(parsed, dict):
+        raise ValueError("process-chaos report data must be a JSON object")
+    return cast(dict[str, object], parsed)
+
+
+def _validate_summary(summary: dict[str, object]) -> None:
+    """Reject arbitrary payloads: this writer retains only this harness's redacted V1 summary."""
+
+    if set(summary) != _SUMMARY_FIELDS:
+        raise ValueError("process-chaos report has unexpected or missing summary fields")
+    literals: dict[str, object] = {
+        "schema_version": _SCHEMA_VERSION,
+        "evidence_scope": "synthetic_control_plane_process_recovery_only",
+        "process_termination_target": "purpose_built_prepare_worker",
+        "crash_phase": "after_durable_registration_and_claim_before_proof_submission",
+        "restart_mode": "new_os_processes_reopen_persisted_sqlite_wal_and_artifacts",
+    }
+    for field, expected in literals.items():
+        if summary.get(field) != expected:
+            raise ValueError(f"process-chaos report has an invalid {field}")
+    if summary.get("does_not_exercise") != list(_DOES_NOT_EXERCISE):
+        raise ValueError("process-chaos report has an invalid does_not_exercise boundary")
+    boolean_fields: dict[str, bool] = {
+        "lean_or_oci_execution": False,
+        "network_or_model_execution": False,
+        "test_only_hmac_authority": True,
+        "os_process_kill_exercised": True,
+        "event_positions_contiguous": True,
+        "event_replay_consistent": True,
+        "task_loss_detected": False,
+        "duplicate_terminal_verdict_detected": False,
+    }
+    for field, expected in boolean_fields.items():
+        if summary.get(field) is not expected:
+            raise ValueError(f"process-chaos report has an invalid {field}")
+    jobs = summary.get("jobs_requested")
+    if type(jobs) is not int or not 1 <= jobs <= _MAX_JOBS:
+        raise ValueError("process-chaos report has an invalid jobs_requested")
+    expected_counts: dict[str, int] = {
+        "jobs_completed": jobs,
+        "child_processes_started": 3,
+        "replacement_claims": jobs,
+        "expired_leases": jobs,
+        "stale_fence_rejections": jobs,
+        "duplicate_delivery_replays": jobs * 4,
+        "terminal_verdicts": jobs,
+        "per_proof_terminal_verdicts": 1,
+        "event_count": jobs * 5,
+        "expected_event_count": jobs * 5,
+        "content_addressed_artifacts_verified": jobs * 4,
+    }
+    for field, expected in expected_counts.items():
+        if summary.get(field) != expected or type(summary.get(field)) is not int:
+            raise ValueError(f"process-chaos report has an invalid {field}")
+
+
+def _report_sha256(summary: dict[str, object]) -> str:
+    return hashlib.sha256(_REPORT_HASH_DOMAIN + _canonical_json(summary)).hexdigest()
+
+
+def report_envelope(summary: dict[str, object]) -> dict[str, object]:
+    """Create an immutable, domain-separated envelope for the redacted V1 summary."""
+
+    report = _canonical_object(summary)
+    _validate_summary(report)
+    return {
+        "schema_version": _REPORT_ENVELOPE_SCHEMA,
+        "report_sha256": _report_sha256(report),
+        "report": report,
+    }
+
+
+def _is_link_or_reparse(path: Path) -> bool:
+    metadata = path.lstat()
+    return stat.S_ISLNK(metadata.st_mode) or bool(
+        getattr(metadata, "st_file_attributes", 0)
+        & getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    )
+
+
+def _validate_envelope(envelope: dict[str, object]) -> dict[str, object]:
+    normalized = _canonical_object(envelope)
+    if set(normalized) != {"schema_version", "report_sha256", "report"}:
+        raise ValueError("process-chaos report envelope has unexpected or missing fields")
+    if normalized.get("schema_version") != _REPORT_ENVELOPE_SCHEMA:
+        raise ValueError("process-chaos report envelope has an unsupported schema version")
+    report = normalized.get("report")
+    report_hash = normalized.get("report_sha256")
+    if not isinstance(report, dict) or not isinstance(report_hash, str):
+        raise ValueError("process-chaos report envelope has invalid report fields")
+    canonical_report = cast(dict[str, object], report)
+    _validate_summary(canonical_report)
+    if not re.fullmatch(r"[0-9a-f]{64}", report_hash):
+        raise ValueError("process-chaos report envelope has an invalid report hash")
+    if report_hash != _report_sha256(canonical_report):
+        raise ValueError("process-chaos report envelope hash does not match its report")
+    return normalized
+
+
+def _validated_output_path(output: Path, *, root: Path) -> Path:
+    workspace = root.resolve()
+    if not workspace.is_dir():
+        raise ValueError("process-chaos workspace root must be an existing directory")
+    if output.is_absolute():
+        candidate = output.absolute()
+    elif output.drive:
+        raise ValueError("--output may not use a drive-relative path")
+    else:
+        candidate = (workspace / output).absolute()
+    if candidate.suffix != ".json":
+        raise ValueError("--output must have a .json filename")
+    if candidate.exists() or candidate.is_symlink():
+        raise ValueError("--output already exists; process-chaos evidence is immutable")
+    parent = candidate.parent
+    evidence_root = workspace / _REPORT_DIRECTORY
+    if not evidence_root.is_dir():
+        raise ValueError("--output requires an existing release-evidence directory")
+    resolved_parent = parent.resolve()
+    resolved_evidence_root = evidence_root.resolve()
+    if not resolved_evidence_root.is_relative_to(workspace):
+        raise ValueError("release-evidence must stay inside the workspace")
+    if not resolved_parent.is_relative_to(resolved_evidence_root):
+        raise ValueError("--output must stay inside release-evidence")
+    if not parent.is_dir():
+        raise ValueError("--output parent must be an existing directory")
+
+    current = parent
+    while True:
+        if _is_link_or_reparse(current):
+            raise ValueError("--output path may not traverse a link or junction")
+        if current.resolve() == workspace:
+            break
+        if current.parent == current:
+            raise ValueError("--output must stay inside the workspace")
+        current = current.parent
+    return candidate
+
+
+def write_report_exclusive(
+    output: Path,
+    envelope: dict[str, object],
+    *,
+    root: Path = _REPO_ROOT,
+) -> Path:
+    """Write one report without following links or replacing prior evidence."""
+
+    candidate = _validated_output_path(output, root=root)
+    normalized_envelope = _validate_envelope(envelope)
+    payload = _canonical_json(normalized_envelope) + b"\n"
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(
+            candidate,
+            os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
+            0o600,
+        )
+        if not stat.S_ISREG(os.fstat(descriptor).st_mode):
+            os.close(descriptor)
+            descriptor = None
+            raise ValueError("process-chaos report output must be a regular file")
+        with os.fdopen(descriptor, "wb") as handle:
+            descriptor = None
+            handle.write(payload)
+            handle.flush()
+            os.fsync(handle.fileno())
+    except OSError as error:
+        if descriptor is not None:
+            os.close(descriptor)
+        raise ValueError("process-chaos report write failed") from error
+    return candidate
 
 
 def _require(condition: bool, message: str) -> None:
@@ -236,15 +468,7 @@ def run_process_campaign(
             "content_addressed_artifacts_verified": replay["content_addressed_artifacts_verified"],
             "task_loss_detected": False,
             "duplicate_terminal_verdict_detected": False,
-            "does_not_exercise": (
-                "lean",
-                "oci",
-                "network",
-                "model_provider",
-                "real_attestation_authority",
-                "power_loss",
-                "mid_transaction_sqlite_kill",
-            ),
+            "does_not_exercise": _DOES_NOT_EXERCISE,
         }
     finally:
         if temporary is not None:
@@ -264,8 +488,17 @@ def main() -> None:
         type=Path,
         help="optional empty directory to retain only synthetic SQLite/artifact evidence",
     )
+    parser.add_argument(
+        "--output",
+        type=Path,
+        help="existing in-repository directory plus a new immutable report filename",
+    )
     args = parser.parse_args()
+    output = None if args.output is None else _validated_output_path(args.output, root=_REPO_ROOT)
     summary = run_process_campaign(jobs=args.jobs, workspace=args.workspace)
+    envelope = report_envelope(summary)
+    if output is not None:
+        write_report_exclusive(output, envelope)
     print(json.dumps(summary, ensure_ascii=True, separators=(",", ":"), sort_keys=True))
 
 

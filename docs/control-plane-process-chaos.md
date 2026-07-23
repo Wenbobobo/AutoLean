@@ -46,13 +46,24 @@ Use the short project task for smoke coverage:
 uv run python scripts/dev.py chaos-process
 ```
 
-Run the bounded 1,000-job control-plane target explicitly and retain only synthetic evidence in an
-empty operator-selected directory:
+Run the bounded 1,000-job control-plane target explicitly and retain only synthetic evidence in a
+new `.json` file below the existing `release-evidence/` directory. Relative output paths are
+resolved from the repository root; the writer refuses links, junctions, overwrite, and paths
+outside that evidence subtree:
 
 ```powershell
-uv run python scripts/dev.py chaos-process --jobs 1000
+uv run python scripts/control_plane_process_chaos.py --jobs 1000 `
+  --output release-evidence/control-plane-process-chaos-1000.v1.json
 ```
 
-The job count is capped at 1,000. The result is one deterministic, redacted JSON line. Retain that
-line with the exact source/environment evidence used for an operational review; do not treat a
-small smoke result as completion of the 1,000-job acceptance gate.
+The job count is capped at 1,000. The retained file is a canonical report envelope whose SHA-256
+binds a normalized, domain-separated deterministic summary. The target path and report schema are
+validated before the campaign starts, then the writer uses exclusive creation and fsync. Retain it
+with the exact source/environment evidence used for an operational review; do not treat a small
+smoke result as completion of the 1,000-job acceptance gate.
+
+The path checks reject existing links and junctions, but cannot make a hostile concurrently
+modified filesystem trustworthy. The release-evidence directory must be operator-owned and not
+writable by untrusted processes. If a process or filesystem fails during exclusive creation, an
+incomplete file may remain intentionally non-overwritable; inspect it as invalid evidence and have
+an operator remove it before rerunning.

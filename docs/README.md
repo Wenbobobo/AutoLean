@@ -11,9 +11,10 @@ runner reports success.
    three graphs, and the contract lifecycle.
 2. [Protocol](protocol.md) defines the only five commands that cross the Builder--Prover
    boundary and the immutable artifact rules behind them.
-3. [Builder fidelity Harness](builder-fidelity-harness.md) and the
-   [Builder--Prover evidence closure](builder-prover-evidence-closure.md) define the semantic
-   freeze gate and the artifact root handed to Prover.
+3. [Builder reference cache](builder-reference-cache.md),
+   [Builder fidelity Harness](builder-fidelity-harness.md), and the
+   [Builder--Prover evidence closure](builder-prover-evidence-closure.md) define the lawful
+   source-to-contract entry, semantic freeze gate, and artifact root handed to Prover.
 4. [Elaborated-type comparator](elaborated-type-comparator.md) defines how a frozen Lean
    declaration type is queried from the pinned runner and compared without trusting a model.
 5. [Pinned pure-Lean OCI worker](oci-lean-worker.md) records the real Linux image, replay command,
@@ -28,16 +29,17 @@ runner reports success.
    and custom-compatible endpoint policy. Anthropic and Claude are intentionally excluded.
 10. [Role benchmark protocol](role-benchmark-protocol.md) freezes repeatable specialist-role
    comparisons before any paid or external model execution.
-11. [FATE compile canary](fate-compile-canary.md) and the
-    [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain and
-    recovery evidence.
+11. [FATE compile canary](fate-compile-canary.md), the non-promotable
+    [agent-smoke-8 vertical bridge](fate-agent-smoke.md), and the
+    [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain,
+    proof-search, and recovery evidence.
 12. [HF incident containment](hf-incident-containment.md) records the recovery boundary
    without including recovered data, archive names, prompts, sessions, or credentials.
 13. [Phase 1 acceptance](phase-1-acceptance.md) defines the 12-week gates, the
     [parallel execution plan](phase-1-parallel-execution.md) defines work packages and critical
     paths, and the [current progress ledger](phase-1-progress.md) records executed evidence and
     unrun gates.
-14. [Builder domain pilot](domain-pilot-selection.md) records the proposed Riemannian-connections
+14. [Builder domain pilot](domain-pilot-selection.md) records the proposed connection-curvature
     discovery graph, alternatives, rights boundary, and expert gates.
 15. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
    deliberately narrow evidence boundary.
