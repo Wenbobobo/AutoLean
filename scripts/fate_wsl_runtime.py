@@ -904,6 +904,9 @@ def prepare_runtime(
         "schema_version": HOST_RESULT_SCHEMA,
         "status": "prepared",
         "mode": mode,
+        "runtime_path_relative_to_cache": paths.runtime_root.relative_to(
+            paths.cache_root
+        ).as_posix(),
         "runtime_state_sha256": expectation.state_sha256,
         "audit_sha256": audit["audit_sha256"],
         "source_count": audit["source_count"],

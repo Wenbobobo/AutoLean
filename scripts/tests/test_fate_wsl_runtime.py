@@ -133,6 +133,9 @@ def test_posix_boundaries_and_deterministic_layout_reject_escape(tmp_path: Path)
         _require_descendant(root, tmp_path / "outside", "packages")
     paths = _runtime_paths(root, root / "packages", "b" * 40)
     assert paths.layout_root.name == "fate-runtime-v1-bbbbbbbb"
+    assert paths.runtime_root.relative_to(paths.cache_root).as_posix() == (
+        "fate-runtime-v1-bbbbbbbb/runtime"
+    )
 
 
 def test_locked_dependency_parser_accepts_crlf_and_rejects_unlocked_entry(

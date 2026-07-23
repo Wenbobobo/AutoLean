@@ -63,13 +63,16 @@ Example audit of an existing runtime:
 uv run python scripts/fate_wsl_runtime.py audit `
   --cache-root /home/operator/.cache/autolean `
   --packages-root /home/operator/.cache/autolean/fate-cache/FATE-M/.lake/packages `
-  --runtime-root /home/operator/.cache/autolean/fate-runtime
+  --runtime-root /home/operator/.cache/autolean/fate-runtime-v1-bb646ecb/runtime
 ```
 
 For a new managed layout, replace `audit` with `prepare` and omit `--runtime-root`. The layout
 name is derived from the locked root commit. A second `prepare` reuses it only when its canonical,
 path-free state file and complete audit still match. Existing partial layouts, unknown targets,
-state drift, or output files are never deleted or overwritten.
+state drift, or output files are never deleted or overwritten. The prepare result returns a
+`runtime_path_relative_to_cache` such as `fate-runtime-v1-bb646ecb/runtime`; pass the cache root
+joined to that relative path as `--runtime-root`. The enclosing deterministic layout directory is
+not itself a Git worktree and must not be passed as the runtime root.
 
 Run with a new output path:
 
@@ -77,7 +80,7 @@ Run with a new output path:
 uv run python scripts/fate_wsl_runtime.py run `
   --cache-root /home/operator/.cache/autolean `
   --packages-root /home/operator/.cache/autolean/fate-cache/FATE-M/.lake/packages `
-  --runtime-root /home/operator/.cache/autolean/fate-runtime `
+  --runtime-root /home/operator/.cache/autolean/fate-runtime-v1-bb646ecb/runtime `
   --output benchmarks/results/fate-compile-canary-ext4.v1.json
 ```
 
