@@ -5,7 +5,7 @@ Snapshot: 2026-07-23
 Decision: the local architecture has substantial adversarial evidence, but this branch is not a
 Phase 1 release candidate. The remaining blockers are authoritative mathlib-in-image execution,
 authenticated Builder/verifier authorities, authorized external-model evaluation, fixed
-regression/compare runs, a human-calibrated Builder slice, and current-branch remote CI.
+regression/compare runs, and a human-calibrated Builder slice.
 
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
@@ -34,13 +34,13 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Dashboard | Verified, loopback | Projection/API tests plus 11/11 UI tests, production build, desktop/mobile controlled-browser screenshots, XSS/display sanitization, stable three-lane graph layout, task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
 | Builder reference cache | Verified offline | McKay PDF: 94,902,360 bytes, SHA `1cd1660be5e63bf2d5198e7a7f7e912d3179c9cf3b5f2d972db6283e0b483ea4`; official extracted text: 1,194,775 bytes, SHA `3fdfa27690ce473d8b84c322dbd12779ce5ba76aa12ef8d07608db768894bd25`; manifest SHA `881d535d62661ad496f8385964151830688a78d10123b59ff8326cb8a3a5a907` | Local-only egress; no human-calibrated pilot statement yet |
 | HF recovery boundary | Incident open | Recovery work completed locally without migrating sessions, prompts, logs, or credentials | The API still reported `Garydesu/AutoArchon_Private` as `private=false`, `gated=false` on this snapshot; credential rotation is operator-owned |
-| Local CI, inventory, and SBOM | Verified | 415 Python tests, Ruff format/check, all Mypy targets, 226-file secret/provider/public scans, 11 UI tests/build, reference replay, inventory SHA `4beb3113a106ccc687b0421e30feea6908f4a16bc406e765d970581831233039`, SPDX SHA `03d9645cf1c8e52f8a0acfb425ff9fa62a4653638fc5cd466030522fe0797917` | Current branch has not yet passed remote Windows/Linux CI |
+| Local and remote CI, inventory, and SBOM | Verified | 415 Python tests, Ruff format/check, all Mypy targets, 226-file secret/provider/public scans, 11 UI tests/build, reference replay, inventory SHA `4beb3113a106ccc687b0421e30feea6908f4a16bc406e765d970581831233039`, SPDX SHA `03d9645cf1c8e52f8a0acfb425ff9fa62a4653638fc5cd466030522fe0797917`; Draft PR code head `28d9d5e` passed Ubuntu/Windows Python+policy and UI in [run 30024075567](https://github.com/Wenbobobo/AutoLean/actions/runs/30024075567) | GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
 
 ## Week route
 
 | Weeks | State | What remains before the milestone is closed |
 | --- | --- | --- |
-| 1--2 | Implemented and locally verified | Retain current-branch Windows/Linux CI; bootstrap `main` alone is not enough |
+| 1--2 | Verified | Current Draft PR code passed the fixed local and Windows/Linux remote gates |
 | 3--4 | Partially verified | Build mathlib and verifier helper inside one pinned image; route FATE smoke through immutable bundle, lease, evidence artifact, and signing gateway |
 | 5--6 | Partially implemented | Add operator-authorized external executor and production role evaluators; measure Archon adapter; run fixed `regression-48` pass@1 |
 | 7--8 | Partially verified | Run compare-90 pass@1 and one-factor model/retrieval/specialist ablations; complete five human-reviewed Builder calibration statements |
@@ -68,7 +68,8 @@ fidelity, expert, or rights gates pauses ingestion rather than weakening a theor
 
 ## Immediate execution order
 
-1. Commit this evidence-bearing branch, push it, open a Draft PR, and retain its Windows/Linux CI.
+1. Review Draft PR #1 as an evidence checkpoint; do not merge or change repository visibility
+   until the external incident and release gates are explicitly resolved.
 2. Build a source-clean, mathlib-containing OCI verifier image and repeat `agent-smoke-8` through
    bundle, lease, evidence artifact, and signing-gateway boundaries.
 3. Implement the authorized online executor and production role evaluators. Request an
