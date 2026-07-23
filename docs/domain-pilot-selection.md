@@ -1,171 +1,172 @@
 # Builder Domain Pilot Selection
 
-Status: discovery proposal, not a frozen Builder mission
+Status: discovery decision, not a frozen Builder mission
+
 Decision date: 2026-07-23
-Primary candidate: Riemannian geometry, connections and the Levi-Civita connection
+
+Primary: curvature of vector-bundle connections and the first Bianchi boundary
+
+Backup: abstract variational PDE, Galerkin orthogonality, and Cea-type error bounds
 
 ## Decision
 
-The first chapter-scale Builder discovery should target the transition from a Riemannian
-metric to connections, torsion, metric compatibility, and the Levi-Civita connection. The
-preferred source is John M. Lee, *Introduction to Riemannian Manifolds*, second edition,
-Chapters 4--6. The publisher describes it as a graduate introduction with explicit chapters
-on connections and the Levi-Civita connection:
+The first 20--40 node Builder pilot should remain in Riemannian/geometric analysis, but the
+original Levi-Civita target is revoked. Current mathlib already contains covariant derivatives,
+metric compatibility, and torsion, while an active upstream pull request implements existence and
+uniqueness of the Levi-Civita connection. Duplicating that work would give misleading progress.
 
-- <https://link.springer.com/book/10.1007/978-3-319-91755-9>
+The revised pilot begins one layer later: define curvature for a connection on a smooth vector
+bundle, establish its tensorial and alternating laws, relate it to local connection forms, and
+reach a sharply scoped Bianchi boundary. It uses the existing connection API without depending on
+the open Levi-Civita pull request for its first accepted nodes.
 
-This is a proposal for source mapping and human review. It is not permission to redistribute
-the book, not evidence that the source has been ingested, and not a claim that the resulting
-statements are faithful.
+The primary source is Benjamin McKay, *Lectures on Differential Geometry*, Chapters 59--60,
+especially pages 505--520. University College Cork describes this 643-page published book as
+peer-reviewed and licenses it under CC BY-SA 4.0:
 
-## Why this slice
+- <https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full>
 
-Current mathlib documentation exposes substantial prerequisites:
+The exact PDF and repository-extracted text are pinned in
+[`Builder/references/manifest.v1.json`](../Builder/references/manifest.v1.json). Their bytes remain
+under the ignored local `.cache/references/` tree.
 
-- manifold differentiability and tangent-space APIs;
-- tangent and Riemannian vector bundles;
-- smooth sections, local frames, and tensoriality;
-- vector-field Lie brackets;
-- a basic Riemannian manifold structure and path-length distance.
+## Evidence snapshots
 
-Primary module references:
+Two mathlib snapshots must not be conflated:
 
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/Riemannian/Basic.html>
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/Riemannian/PathELength.html>
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/VectorBundle/LocalFrame.html>
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/VectorBundle/SmoothSection.html>
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/VectorBundle/Tensoriality.html>
-- <https://leanprover-community.github.io/mathlib4_docs/Mathlib/Geometry/Manifold/VectorField/LieBracket.html>
+1. FATE v4.28.0 pins mathlib commit
+   [`8f9d9cff`](https://github.com/leanprover-community/mathlib4/commit/8f9d9cff6bd728b17a24e163c9402775d9e6a365).
+   In the locally verified checkout, `Geometry/Manifold/Riemannian` contains only `Basic.lean` and
+   `PathELength.lean`; there is no manifold covariant-derivative module.
+2. The original discovery census used the pinned snapshot
+   [`e780b56e`](https://github.com/leanprover-community/mathlib4/commit/e780b56e9235c747285043b5cd5f2ebba300daad).
+   It contains
+   [`CovariantDerivative/Basic.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Basic.lean),
+   [`Metric.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Metric.lean),
+   and
+   [`Torsion.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Torsion.lean).
+3. During integration, `master` had advanced to
+   [`bbc4475e`](https://github.com/leanprover-community/mathlib4/commit/bbc4475e9e8fd25fbc8e26d636dd8b37be8f105a).
+   A second GitHub tree census found the same three covariant-derivative modules and no path
+   containing curvature or parallel transport. PR #36845 was still open. This reduces snapshot
+   drift; it does not replace maintainer coordination.
 
-The public module index currently lists `Riemannian.Basic` and `Riemannian.PathELength`, but
-does not expose a corresponding connection, covariant-derivative, or curvature module. A
-GitHub issue and code search on 2026-07-23 also returned no direct match for a Levi-Civita or
-covariant-derivative implementation. Absence from those searches is only a lead: work may exist
-in branches, Zulip discussions, private experiments, or unindexed pull requests. Mathlib
-maintainer coordination is therefore a mandatory discovery gate.
+The observed modules explicitly provide bundled and local covariant derivatives, differences of
+connections, metric compatibility, and torsion. A code census at `e780b56e`, repeated at
+`bbc4475e`, found no
+`CovariantDerivative.curvature`, Riemann-curvature, or manifold parallel-transport declaration.
+Absence from one repository snapshot is not proof that no branch or downstream project exists.
+Maintainer coordination remains an admission gate.
 
-This slice has unusually good leverage:
+The overlap risk is concrete:
 
-1. It exercises Builder translation on definitions, identities, uniqueness statements, local
-   coordinate formulas, and side conditions.
-2. Its prerequisites appear close enough to support a 20--40 node pilot without rebuilding all
-   smooth-manifold foundations.
-3. It opens a path toward geometric analysis, comparison geometry, and geometric PDE, which are
-   relevant to the open-problem mission.
+- [PR #36845](https://github.com/leanprover-community/mathlib4/pull/36845), updated 2026-07-22,
+  implements the Levi-Civita connection.
+- [PR #26221](https://github.com/leanprover-community/mathlib4/pull/26221) is the umbrella
+  covariant-derivative project and lists Christoffel symbols and related follow-on work.
 
-## Proposed 24-node discovery graph
+AutoLean therefore treats those declarations as upstream dependencies or mappings, never as pilot
+deliverables.
 
-The first eight nodes are mappings to existing library concepts, not new declarations. They must
-be confirmed against the pinned mathlib revision before any downstream statement is frozen.
+## Three-domain comparison
 
-| ID | Kind | Proposed mathematical asset |
+| Candidate | Snapshot evidence | Why it fits | Blocking risk | Decision |
+| --- | --- | --- | --- | --- |
+| Connection curvature / geometric analysis | The two discovery snapshots have covariant derivative, metric, torsion, differential forms, Lie brackets, and tensoriality; no curvature module was found | A 24-node graph can reuse most structural prerequisites and exercises definitions, local/global equivalence, side conditions, and identities | Nearby upstream work can rapidly make the census stale; bundle-valued forms may require API design | Primary, conditional on maintainer check |
+| Abstract weak PDE / modern analysis | Mathlib has [Lax--Milgram](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Analysis/InnerProductSpace/LaxMilgram.lean), distributions, and Fourier/Bessel [Sobolev spaces](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Analysis/Distribution/Sobolev.lean) | Galerkin orthogonality and a Cea-style bound can stay abstract, avoiding boundary regularity in the first slice | Weak-derivative Sobolev spaces remain under [PR #32305](https://github.com/leanprover-community/mathlib4/pull/32305); concrete domain PDE statements would overrun 40 nodes | Backup |
+| Stochastic analysis / SDE | Current mathlib has [Brownian motion](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Probability/BrownianMotion/Basic.lean), martingales, stopping times, and convergence | Very high long-term leverage for SDE and stochastic PDE | No stochastic-integral or Ito-calculus module was found; Brownian work is active, and an earlier all-in-one attempt [PR #35571](https://github.com/leanprover-community/mathlib4/pull/35571) closed without merge | Defer until the integral boundary is designed with maintainers |
+
+The comparison is architectural, not a theorem-count score. If the latest snapshot census is wrong
+or an unindexed curvature project exists, the primary choice loses its non-overlap advantage and
+the backup becomes first.
+
+## Proposed 24-node graph
+
+The first eight nodes are mappings to existing APIs at a newly pinned mathlib commit. They are not
+new declarations and must compile in the pilot environment before downstream contracts are
+frozen.
+
+| ID | Kind | Mathematical asset |
 | --- | --- | --- |
-| `RG-E01` | existing map | smooth manifold and model with corners |
-| `RG-E02` | existing map | tangent bundle and tangent spaces |
-| `RG-E03` | existing map | smooth vector-bundle sections |
-| `RG-E04` | existing map | local frames |
-| `RG-E05` | existing map | Riemannian vector bundle |
-| `RG-E06` | existing map | Riemannian metric, path length, and induced distance |
-| `RG-E07` | existing map | vector-field Lie bracket |
-| `RG-E08` | existing map | tensoriality support |
-| `RG-N01` | new candidate | connection data and laws |
-| `RG-N02` | new candidate | connection extensionality |
-| `RG-N03` | new candidate | zero, addition, and scalar rules |
-| `RG-N04` | new candidate | difference of two connections |
-| `RG-N05` | new candidate | tensoriality of the connection difference |
-| `RG-N06` | new candidate | local connection coefficients |
-| `RG-N07` | new candidate | change-of-frame law |
-| `RG-N08` | new candidate | torsion |
-| `RG-N09` | new candidate | tensoriality of torsion |
-| `RG-N10` | new candidate | metric compatibility |
-| `RG-N11` | new candidate | Koszul expression |
-| `RG-N12` | new candidate | uniqueness of a torsion-free metric connection |
-| `RG-N13` | new candidate | construction and existence of the Levi-Civita connection |
-| `RG-N14` | new candidate | covariant acceleration and the geodesic equation |
-| `RG-N15` | new candidate | Euclidean-space sanity model |
-| `RG-N16` | new candidate | sphere or another existing manifold sanity model |
+| `GC-E01` | existing map | smooth manifolds and smooth vector bundles |
+| `GC-E02` | existing map | smooth sections and section extensionality |
+| `GC-E03` | existing map | bundled and local covariant derivatives |
+| `GC-E04` | existing map | adding an endomorphism-valued one-form and connection difference |
+| `GC-E05` | existing map | tensoriality constructors |
+| `GC-E06` | existing map | vector-field Lie bracket |
+| `GC-E07` | existing map | differential forms, wedge products, and bundle homomorphisms |
+| `GC-E08` | existing map | metric compatibility and torsion |
+| `GC-N01` | new candidate | unbundled curvature expression |
+| `GC-N02` | new candidate | additivity in the first vector field |
+| `GC-N03` | new candidate | scalar tensoriality in the first vector field |
+| `GC-N04` | new candidate | additivity in the second vector field |
+| `GC-N05` | new candidate | scalar tensoriality in the second vector field |
+| `GC-N06` | new candidate | dependence on the section value at a point |
+| `GC-N07` | new candidate | bundled curvature endomorphism |
+| `GC-N08` | new candidate | curvature application formula |
+| `GC-N09` | new candidate | alternating law and repeated-vector zero |
+| `GC-N10` | new candidate | flat connection predicate |
+| `GC-N11` | new candidate | zero curvature of a trivial flat connection |
+| `GC-N12` | new candidate | curvature after adding an endomorphism-valued one-form |
+| `GC-N13` | new candidate | local connection form and frame-change statement |
+| `GC-N14` | new candidate | local formula `dA + A wedge A` |
+| `GC-N15` | new candidate | skew-adjoint curvature of a metric connection |
+| `GC-N16` | boundary candidate | covariant exterior derivative and first Bianchi statement |
 
-The graph is intentionally provisional. A node is removed or split if its source span contains
-multiple independently meaningful claims, if a mathlib definition already covers it, or if its
-semantic review cannot be made local and testable.
+`GC-N13`--`GC-N16` are discovery boundaries, not promised declarations. If bundle-valued forms or
+local-frame APIs require a foundational redesign, Prover must emit a `GapReportV1`; Builder must
+not hide the gap by weakening the statement.
 
-## Builder roles and evidence
+## Source-to-contract path
 
-Each source statement should pass through independent role surfaces:
+Each trial statement follows one route:
 
-1. `source_analyst`: records the lawful source span, definitions in scope, and cross references.
-2. `normalizer`: produces an explicit quantifier/assumption/conclusion form.
-3. `mathlib_mapper`: proposes existing definitions and import boundaries.
-4. `statement_formalizer_a` and `statement_formalizer_b`: independently propose Lean statements.
-5. `reverse_renderer`: renders each candidate back into mathematical language.
-6. `fidelity_reviewer`: compares source, normalization, reverse renderings, and examples.
-7. `mutation_supervisor`: challenges quantifiers, inequalities, nonempty conditions, parameter
-   order, regularity, and vacuity.
-8. `domain_expert`: supplies the semantic signoff that automation cannot establish.
+1. `reference_cache.py` independently verifies the parent PDF and its manifest-typed derived text.
+2. A source analyst selects exact UTF-8 byte offsets in the derived text and separately declares
+   the corresponding chapter/page locator in the parent PDF.
+3. An operator records a rights decision no broader than the manifest egress policy.
+4. `SourceToStatementHarness.prepare_draft` creates a `draft` `StatementContractV1` with source,
+   span, rights, alignment, environment, and provenance bindings.
+5. Normalization and mathlib mapping complete before independent candidates are produced.
+6. `SourceToStatementHarness.run_fidelity` delegates to the existing
+   `StatementFidelityHarness`.
+7. Preparation commits the complete source, rights, span, and contract state to the append-only
+   source-preparation ledger.
+8. `SourceToStatementHarness.revalidate_freeze_and_bridge` reloads that record, revalidates both
+   artifacts and every excerpt, freezes the reviewed statement with the preparation record ID and
+   typed digest, and emits the signed bundle.
 
-Role independence is an operational policy backed by separate ContextPacks and artifacts. Merely
-using different `actor_id` strings does not establish cognitive independence.
+The local reference cache proves artifact and derived-text byte identity, not semantic fidelity.
+The parent-PDF page locator is a human declaration. Page alignment, notation scope, quantifier
+recovery, and mathematical equivalence still require independent review. Production release also
+remains blocked on the Builder signing gateway because the local freeze authority is not yet
+authenticated.
 
-## Rights boundary
+## Admission and revocation gates
 
-Lee's text is copyrighted. Until an operator supplies a lawfully held source and a
-`RightsRecordV1` policy:
+The primary pilot starts only if all conditions hold:
 
-- no chapter text is stored in repository fixtures;
-- no source prose is sent to an external model;
-- no verbatim textbook statement is emitted in a public benchmark;
-- discovery artifacts contain only citation metadata, hashes, locally authored normalization,
-  and independently reviewed formal statements.
+1. Maintainers report no conflicting curvature project or agree on a collaboration boundary.
+2. At least six of the eight existing mappings compile without API redesign.
+3. Five trial claims can be cut into local source spans and pass reverse rendering, mutation,
+   positive/negative example, non-vacuity, library review, and domain review.
+4. At least one qualified differential geometer reviews semantic fidelity.
+5. The first ten proposed nodes do not require a general theory of parallel transport.
+6. Rights review permits the selected model endpoints; the initial cached source policy is
+   local-only.
 
-The source may remain local-only even if the derived Lean declaration is later contributed under
-mathlib's terms. Source rights and code licensing are separate decisions.
-
-## Alternatives
-
-### Stochastic analysis and SDE
-
-Bernt Oksendal, *Stochastic Differential Equations: An Introduction with Applications*, sixth
-edition, is the preferred textbook candidate:
-
-- <https://link.springer.com/book/10.1007/978-3-642-14394-6>
-
-Mathlib now documents Brownian motion, martingales, stopping times, optional stopping, and
-martingale convergence. The large missing bridge appears to be stochastic integration and Ito
-calculus. This has high open-problem leverage, but an Ito-integral pilot may exceed the desired
-20--40 node scope if foundational constructions are not already stable.
-
-### PDE and modern analysis
-
-Lawrence C. Evans, *Partial Differential Equations*, second edition, is the preferred textbook
-candidate:
-
-- <https://bookstore.ams.org/gsm-19-r>
-
-Mathlib has substantial measure, functional-analysis, Fourier, and Sobolev infrastructure.
-However, a PDE chapter often hides boundary regularity, weak derivatives, trace theory, and
-function-space conventions inside apparently short statements. It remains a strong second pilot,
-but the first slice needs a more detailed prerequisite census.
-
-## Discovery gates
-
-The primary choice is revoked or deferred if any of these gates fails:
-
-1. Mathlib maintainers identify an active overlapping project or incompatible planned API.
-2. Fewer than 70 percent of the eight prerequisite mappings are usable without redesign.
-3. No qualified domain reviewer is available.
-4. Source rights cannot support the intended model-egress policy.
-5. Five trial statements cannot pass reverse rendering, mutation tests, non-vacuity review, and
-   independent signoff.
-6. The 24-node graph cannot be cut into reviewable contracts with local failure evidence.
+Failure of gates 1, 2, or 5 moves the pilot to the abstract variational PDE backup. Failure of
+gates 3, 4, or 6 pauses Builder ingestion rather than changing the theorem.
 
 ## Feedback cadence
 
-Discovery should produce an externally legible result every five accepted nodes:
+Every five accepted nodes must yield:
 
-- one frozen statement-contract packet with all fidelity evidence;
-- one known theorem or example proved and independently recompiled by Prover;
-- one gap report when the required library API is absent;
-- one short comparison against the corresponding informal source and existing mathlib surface.
+- a frozen statement contract and canonical fidelity artifact;
+- one Prover result independently recompiled in the pinned environment;
+- a `GapReportV1` for every missing API rather than an informal TODO;
+- a source-to-normalization-to-Lean trace that a domain reviewer can inspect; and
+- a current-main overlap check before proposing anything upstream.
 
-These feedback artifacts demonstrate useful formalization progress. They do not convert a known
-theorem into an open-problem result and they do not waive semantic review.
+These artifacts demonstrate the Builder--Prover interface. They do not establish research novelty
+or progress on an open problem by themselves.

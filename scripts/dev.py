@@ -25,6 +25,7 @@ def main() -> None:
             "format",
             "dashboard",
             "public-ready",
+            "references",
             "sbom",
             "chaos-process",
         ),
@@ -53,6 +54,14 @@ def main() -> None:
             "8765",
         ),
         "public-ready": ("uv", "run", "python", "-m", "scripts.public_readiness"),
+        "references": (
+            "uv",
+            "run",
+            "python",
+            "-m",
+            "scripts.reference_cache",
+            "verify-all",
+        ),
         "sbom": ("uv", "run", "python", "-m", "scripts.generate_sbom", "check"),
         "chaos-process": (
             "uv",

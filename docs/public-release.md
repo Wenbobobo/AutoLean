@@ -15,8 +15,12 @@ uv run python -m scripts.provider_policy_guard
 The public-readiness command inventories Git-tracked and non-ignored candidate files. It rejects
 local caches, quarantine or result directories, source PDFs and office documents, archives,
 databases, raw JSONL/logs, key material, symlinks, files above 5 MiB, and environment files other
-than `.env.example`. It also requires the root Apache-2.0 license and matching metadata in every
-Python workspace package and the Dashboard UI.
+than `.env.example`. It explicitly rejects role-benchmark raw-output CAS directories and private
+raw-artifact manifests, even when a file is force-added outside the normal ignored paths. JSON
+containing a non-null `permitted_excerpt` is also rejected because fidelity artifacts with
+verbatim source text are private evidence. It also
+requires the root Apache-2.0 license and matching metadata in every Python workspace package and
+the Dashboard UI.
 
 This is a repository-tree policy, not a forensic content scanner. The secret scanner and provider
 policy run separately, and an operator must still inspect the reachable Git history and Git-host

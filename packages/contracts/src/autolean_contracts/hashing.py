@@ -15,6 +15,7 @@ from .base import ContractModel
 class HashKindV1(StrEnum):
     SOURCE_BYTES = "source_bytes"
     SOURCE_SPAN = "source_span"
+    SOURCE_PREPARATION = "source_preparation"
     STATEMENT_SOURCE = "statement_source"
     ELABORATED_TYPE = "elaborated_type"
     ENVIRONMENT = "environment"

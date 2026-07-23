@@ -19,11 +19,16 @@ from autolean_builder import (
     SemanticObligationKind,
     SemanticReviewPacket,
     SemanticReviewVerdict,
+    SourcePreparationRecordV1,
     StatementFidelityHarness,
     TranslationTask,
-    bridge_frozen_contract,
     create_next_revision,
-    freeze_contract,
+)
+from autolean_builder.workflow import (
+    _bridge_frozen_contract as bridge_frozen_contract,
+)
+from autolean_builder.workflow import (
+    _freeze_reviewed_contract as freeze_contract,
 )
 from autolean_contracts import (
     AlignmentTargetV1,
@@ -67,6 +72,7 @@ from autolean_contracts import (
     VerificationEvidenceArtifactV1,
     VerificationEvidenceV1,
     VerificationReportV1,
+    digest_model,
     digest_text,
     proof_dependency_manifest_hash,
     stable_identifier,
@@ -385,6 +391,25 @@ def _evaluation(contract: StatementContractV1) -> FidelityEvaluation:
     )
 
 
+def _source_preparation(contract: StatementContractV1) -> SourcePreparationRecordV1:
+    content_hash = contract.semantic_hash().value
+    return SourcePreparationRecordV1(
+        preparation_id=stable_identifier(
+            "source-preparation",
+            f"{contract.contract_id.value}:revision:{contract.revision}",
+        ),
+        contract_id=contract.contract_id,
+        revision=contract.revision,
+        packet_sha256=content_hash,
+        contract_sha256=digest_model(HashKindV1.CONTRACT, contract).value,
+        rights_sha256=content_hash,
+        spans_sha256=content_hash,
+        manifest_sha256=content_hash,
+        artifact_sha256=contract.source.content_hash.value,
+        parent_artifact_sha256=contract.source.content_hash.value,
+    )
+
+
 def _graphs(*, revision: int) -> GraphBundleV1:
     return GraphBundleV1(
         mathematical=MathematicalGraphV1(
@@ -432,6 +457,7 @@ def _review_and_bridge(
     frozen = freeze_contract(
         draft,
         evaluation=evaluation,
+        source_preparation=_source_preparation(draft),
         frozen_by="closed-loop-builder-fixture",
     )
     bundle = bridge_frozen_contract(
@@ -659,6 +685,7 @@ def test_failure_feedback_is_immutable_and_a_new_revision_restarts_builder(
         freeze_contract(
             draft_v2,
             evaluation=evaluation,
+            source_preparation=_source_preparation(draft_v2),
             frozen_by="closed-loop-builder-fixture",
         )
 

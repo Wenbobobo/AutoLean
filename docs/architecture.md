@@ -23,9 +23,9 @@ construct a coherent multi-file mathematical library.
 
 This split is enforced in the current code by the shared
 [StatementContractV1](../packages/contracts/src/autolean_contracts/models.py#L521), the
-Builder freeze/bridge functions
-([freeze_contract](../Builder/src/autolean_builder/workflow.py#L273) and
-[bridge_frozen_contract](../Builder/src/autolean_builder/workflow.py#L302)), and the
+source-preparation ledger and supported Builder handoff
+([SourceToStatementHarness](../Builder/src/autolean_builder/source_harness.py) and
+[SourcePreparationLedger](../Builder/src/autolean_builder/source_preparation.py)), and the
 control-plane command gateway
 ([ControlPlane](../packages/control_plane/src/autolean_control_plane/service.py#L87)).
 
@@ -61,7 +61,7 @@ implemented in [models.py](../packages/contracts/src/autolean_contracts/models.p
 
 | V1 record | Binding purpose |
 | --- | --- |
-| SourceRecordV1 and SourceSpanV1 | Source identity, version, locator, byte hash, reviewed spans, and permitted excerpts |
+| SourceRecordV1 and SourceSpanV1 | Source identity, version, locator, byte hash, and reviewed span coordinates; source-backed public contracts omit verbatim excerpts |
 | RightsRecordV1 | License, redistribution/model-egress decisions, endpoint classes, restrictions, and reviewer evidence |
 | StatementContractV1 | Stable contract ID/revision plus normalized mathematics, Lean source, imports, axioms, policy, fidelity, and provenance |
 | FormalizationTaskBundleV1 | The only Builder-to-Prover handoff: frozen contract, typed fidelity-artifact reference, and hash-bound three-graph snapshot |

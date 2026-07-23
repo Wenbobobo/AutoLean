@@ -1,0 +1,73 @@
+{
+  "schema_version": "autolean.reference-manifest.v1",
+  "entries": [
+    {
+      "reference_id": "mckay-lectures-differential-geometry-2022-pdf",
+      "title": "Lectures on Differential Geometry",
+      "authors": [
+        "Benjamin McKay"
+      ],
+      "version": "published-2022-04-12",
+      "citation": "McKay, Benjamin. Lectures on Differential Geometry. Cork, 2022.",
+      "source_record_url": "https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full",
+      "download_url": "https://cora.ucc.ie/server/api/core/bitstreams/7e88cdfe-4fe8-424c-83cd-f573764c123e/content",
+      "allowed_redirect_urls": [],
+      "media_type": "application/pdf",
+      "file_extension": ".pdf",
+      "size_bytes": 94902360,
+      "max_bytes": 100000000,
+      "sha256": "1cd1660be5e63bf2d5198e7a7f7e912d3179c9cf3b5f2d972db6283e0b483ea4",
+      "retrieved_at": "2026-07-23T13:04:38.627Z",
+      "license": {
+        "expression": "CC-BY-SA-4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "evidence_url": "https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full"
+      },
+      "access_policy": "public_open_access",
+      "acquisition_policy": "operator_only",
+      "model_egress_policy": "local_only",
+      "artifact_kind": "source_document",
+      "derivation": null,
+      "attribution": "McKay, Benjamin. Lectures on Differential Geometry. University College Cork, 2022. CC BY-SA 4.0."
+    },
+    {
+      "reference_id": "mckay-lectures-differential-geometry-2022-text",
+      "title": "Lectures on Differential Geometry (repository-extracted text)",
+      "authors": [
+        "Benjamin McKay"
+      ],
+      "version": "dspace-text-filter-2022-07-30",
+      "citation": "Repository-extracted text companion to McKay, Benjamin. Lectures on Differential Geometry. Cork, 2022.",
+      "source_record_url": "https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full",
+      "download_url": "https://cora.ucc.ie/server/api/core/bitstreams/f251e87e-620b-4adf-8ef7-e37878840235/content",
+      "allowed_redirect_urls": [],
+      "media_type": "text/plain",
+      "file_extension": ".txt",
+      "size_bytes": 1194775,
+      "max_bytes": 2000000,
+      "sha256": "3fdfa27690ce473d8b84c322dbd12779ce5ba76aa12ef8d07608db768894bd25",
+      "retrieved_at": "2026-07-23T12:50:27.134Z",
+      "license": {
+        "expression": "CC-BY-SA-4.0",
+        "url": "https://creativecommons.org/licenses/by-sa/4.0/",
+        "evidence_url": "https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full"
+      },
+      "access_policy": "public_open_access",
+      "acquisition_policy": "operator_only",
+      "model_egress_policy": "local_only",
+      "artifact_kind": "derived_text",
+      "derivation": {
+        "kind": "repository_text_extraction",
+        "parent_reference_id": "mckay-lectures-differential-geometry-2022-pdf",
+        "parent_sha256": "1cd1660be5e63bf2d5198e7a7f7e912d3179c9cf3b5f2d972db6283e0b483ea4",
+        "producer": "University College Cork CORA repository",
+        "method": "repository_provided_text_bitstream",
+        "tool_name": null,
+        "tool_version": null,
+        "provenance_url": "https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full",
+        "parent_locator_authority": "human_declared"
+      },
+      "attribution": "McKay, Benjamin. Lectures on Differential Geometry. University College Cork, 2022. CC BY-SA 4.0."
+    }
+  ]
+}

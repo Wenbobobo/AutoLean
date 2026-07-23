@@ -189,3 +189,17 @@ are not a remote-worker or external-evaluation attestation.
   serializer tests, and a decision about whether it belongs inside a frozen semantic hash.
 - Contract revisions are data, not migrations. A new revision changes a particular theorem task;
   a schema version changes the language all tasks use.
+
+`FreezeRecordV1.source_preparation_id` and `source_preparation_hash` are an explicit pre-RC
+additive migration. Both default to absent so old standalone contracts remain readable, and the
+model rejects a partial pair. New Builder bridges and control-plane registration require both
+fields. They are outside `StatementContractV1.semantic_hash` with the rest of the freeze record,
+but are covered by the bundle handoff hash, freeze-evidence hash, and Builder attestation.
+Legacy contracts without the pair are replay-only and cannot be promoted.
+
+`SourceSpanV1.permitted_excerpt` remains optional for legacy and private synthetic records.
+`SourceToStatementHarness` always emits it as `null`: public draft and frozen contracts bind the
+span ID, locator, byte offsets, and typed excerpt hash, while the exact text stays in the
+verified local source cache and rights-scoped private fidelity artifact. The source-preparation
+record commits the private packet hash without copying the text into SQLite. A public bundle
+carries only the fidelity-artifact digest and size.

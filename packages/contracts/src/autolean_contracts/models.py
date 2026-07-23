@@ -526,6 +526,8 @@ class FidelityEvidenceArtifactRefV1(ContractModel):
 class FreezeRecordV1(ContractModel):
     contract_hash: DigestV1
     source_hash: DigestV1
+    source_preparation_id: StableIdentifierV1 | None = None
+    source_preparation_hash: DigestV1 | None = None
     statement_source_hash: DigestV1
     elaborated_type_hash: DigestV1 | None = None
     frozen_by: str = Field(min_length=1)
@@ -535,6 +537,17 @@ class FreezeRecordV1(ContractModel):
     def validate_hash_kinds(self) -> FreezeRecordV1:
         require_digest_kind(self.contract_hash, HashKindV1.CONTRACT, "contract_hash")
         require_digest_kind(self.source_hash, HashKindV1.SOURCE_BYTES, "source_hash")
+        if (self.source_preparation_id is None) != (self.source_preparation_hash is None):
+            raise ValueError("source preparation ID and hash must be present together")
+        if self.source_preparation_id is not None:
+            if self.source_preparation_id.namespace != "source-preparation":
+                raise ValueError("source_preparation_id must use the source-preparation namespace")
+            assert self.source_preparation_hash is not None
+            require_digest_kind(
+                self.source_preparation_hash,
+                HashKindV1.SOURCE_PREPARATION,
+                "source_preparation_hash",
+            )
         require_digest_kind(
             self.statement_source_hash,
             HashKindV1.STATEMENT_SOURCE,

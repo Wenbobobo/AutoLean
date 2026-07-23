@@ -72,6 +72,7 @@ class SemanticObligationKind(StrEnum):
 class SourceClaimSpan:
     span_id: StableIdentifierV1
     locator: str
+    content_hash: DigestV1
     permitted_excerpt: str
 
     def __post_init__(self) -> None:
@@ -79,13 +80,48 @@ class SourceClaimSpan:
             raise FidelityHarnessError(
                 "statement translation requires a located, permitted source excerpt"
             )
+        if self.content_hash != digest_text(
+            HashKindV1.SOURCE_SPAN,
+            self.permitted_excerpt,
+        ):
+            raise FidelityHarnessError(
+                "statement translation excerpt differs from its public span hash"
+            )
 
-    def payload(self) -> dict[str, str]:
+    def payload(self) -> dict[str, object]:
         return {
             "span_id": self.span_id.value,
             "locator": self.locator,
+            "content_hash": self.content_hash.model_dump(mode="json"),
             "permitted_excerpt": self.permitted_excerpt,
         }
+
+
+def _assert_source_claims_bind_contract(
+    contract: StatementContractV1,
+    claims: tuple[SourceClaimSpan, ...],
+) -> None:
+    contract_spans = {span.span_id: span for span in contract.source.spans}
+    claim_spans = {span.span_id: span for span in claims}
+    if (
+        len(claim_spans) != len(claims)
+        or not claim_spans
+        or set(claim_spans) != set(contract_spans)
+    ):
+        raise FidelityHarnessError("private source claims differ from the public contract span set")
+    for span_id, claim in claim_spans.items():
+        public_span = contract_spans[span_id]
+        if (
+            claim.locator != public_span.locator
+            or claim.content_hash != public_span.content_hash
+            or (
+                public_span.permitted_excerpt is not None
+                and claim.permitted_excerpt != public_span.permitted_excerpt
+            )
+        ):
+            raise FidelityHarnessError(
+                "private source claim differs from its public contract span binding"
+            )
 
 
 @dataclass(frozen=True, slots=True)
@@ -145,15 +181,22 @@ class TranslationTask:
         cls,
         contract: StatementContractV1,
         obligations: tuple[SemanticObligation, ...],
+        *,
+        source_claims: tuple[SourceClaimSpan, ...] | None = None,
     ) -> TranslationTask:
-        spans = tuple(
-            SourceClaimSpan(
-                span_id=span.span_id,
-                locator=span.locator,
-                permitted_excerpt=span.permitted_excerpt or "",
+        if source_claims is None:
+            spans = tuple(
+                SourceClaimSpan(
+                    span_id=span.span_id,
+                    locator=span.locator,
+                    content_hash=span.content_hash,
+                    permitted_excerpt=span.permitted_excerpt or "",
+                )
+                for span in contract.source.spans
             )
-            for span in contract.source.spans
-        )
+        else:
+            spans = source_claims
+        _assert_source_claims_bind_contract(contract, spans)
         task = cls(
             contract_id=contract.contract_id,
             revision=contract.revision,
@@ -474,7 +517,11 @@ class FidelityEvaluation:
             raise FidelityHarnessError("fidelity evaluation targets another contract revision")
         if self.task.draft_contract_hash != contract.semantic_hash():
             raise FidelityHarnessError("draft contract changed after fidelity evaluation")
-        expected_task = TranslationTask.from_contract(contract, self.task.obligations)
+        expected_task = TranslationTask.from_contract(
+            contract,
+            self.task.obligations,
+            source_claims=self.task.source_spans,
+        )
         if self.task != expected_task:
             raise FidelityHarnessError(
                 "translation task does not reproduce from the draft contract"
@@ -619,12 +666,17 @@ class StatementFidelityHarness:
         contract: StatementContractV1,
         *,
         obligations: tuple[SemanticObligation, ...],
+        source_claims: tuple[SourceClaimSpan, ...] | None = None,
         translators: tuple[TranslationAgent, ...],
         mutation_agent: MutationSuiteAgent,
         reviewer: SemanticReviewAgent,
         additional_signoffs: tuple[ReviewerSignoffV1, ...] = (),
     ) -> FidelityEvaluation:
-        task = TranslationTask.from_contract(contract, obligations)
+        task = TranslationTask.from_contract(
+            contract,
+            obligations,
+            source_claims=source_claims,
+        )
         candidates = tuple(agent.translate(task) for agent in translators)
         automatic_checks = self._validate_candidates(task, translators, candidates)
         probes = mutation_agent.generate(task, candidates[0])

@@ -35,6 +35,7 @@ from autolean_contracts import (
 from autolean_contracts.models import FreezeRecordV1
 
 from .fidelity_harness import CandidateFormalization, FidelityEvaluation
+from .source_preparation import SourcePreparationError, SourcePreparationRecordV1
 
 
 class BuilderError(Exception):
@@ -262,10 +263,11 @@ class FreezeGate:
         return failures
 
 
-def freeze_contract(
+def _freeze_reviewed_contract(
     contract: StatementContractV1,
     *,
     evaluation: FidelityEvaluation,
+    source_preparation: SourcePreparationRecordV1,
     frozen_by: str,
     gate: FreezeGate | None = None,
 ) -> StatementContractV1:
@@ -273,6 +275,10 @@ def freeze_contract(
 
     if not frozen_by.strip():
         raise BuilderError("frozen_by must not be empty")
+    try:
+        source_preparation.assert_binds_contract(contract)
+    except SourcePreparationError as error:
+        raise FreezeRejected(str(error)) from error
     try:
         evaluation.assert_binds(contract)
     except ValueError as error:
@@ -289,6 +295,8 @@ def freeze_contract(
     record = FreezeRecordV1(
         contract_hash=reviewed.semantic_hash(),
         source_hash=reviewed.source.content_hash,
+        source_preparation_id=source_preparation.preparation_id,
+        source_preparation_hash=source_preparation.artifact_digest(),
         statement_source_hash=reviewed.formal.statement_source_hash,
         elaborated_type_hash=reviewed.formal.elaborated_type_hash,
         frozen_by=frozen_by,
@@ -298,7 +306,7 @@ def freeze_contract(
     return StatementContractV1.model_validate(frozen_payload)
 
 
-def bridge_frozen_contract(
+def _bridge_frozen_contract(
     contract: StatementContractV1,
     graphs: GraphBundleV1,
     *,
@@ -316,6 +324,12 @@ def bridge_frozen_contract(
 
     if contract.status is not StatementStatusV1.FROZEN:
         raise BuilderError("only a frozen contract may cross the Builder-Prover boundary")
+    if (
+        contract.freeze is None
+        or contract.freeze.source_preparation_id is None
+        or contract.freeze.source_preparation_hash is None
+    ):
+        raise BuilderError("the Builder-Prover bridge requires source-preparation evidence")
     if not bundle_key.strip():
         raise BuilderError("bundle_key must not be empty")
     if not evidence_identity.strip():

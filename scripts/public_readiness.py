@@ -17,12 +17,22 @@ EXPECTED_LICENSE = "Apache-2.0"
 FORBIDDEN_COMPONENTS = frozenset(
     {
         ".artifacts",
+        ".cache",
         ".quarantine",
         "node_modules",
+        "raw-artifact-manifests",
+        "raw-artifacts",
+        "raw-outputs",
         "release-evidence",
         "results",
         "source-cache",
         "vendor",
+    }
+)
+FORBIDDEN_NAMES = frozenset(
+    {
+        "raw-artifact-manifest.json",
+        "raw-output-manifest.json",
     }
 )
 FORBIDDEN_SUFFIXES = (
@@ -64,6 +74,7 @@ class CandidateFile:
     path: PurePosixPath
     size: int
     is_symlink: bool = False
+    contains_private_source_excerpt: bool = False
 
 
 @dataclass(frozen=True)
@@ -112,14 +123,39 @@ def candidate_files(root: Path) -> tuple[CandidateFile, ...]:
         if not absolute.exists() and not absolute.is_symlink():
             raise PublicReadinessError("git candidate inventory contains a missing path")
         stat = absolute.lstat()
+        contains_private_source_excerpt = (
+            not absolute.is_symlink()
+            and stat.st_size <= MAX_TRACKED_FILE_BYTES
+            and relative.suffix.casefold() == ".json"
+            and _json_contains_private_source_excerpt(absolute)
+        )
         records.append(
             CandidateFile(
                 path=PurePosixPath(relative.as_posix()),
                 size=stat.st_size,
                 is_symlink=absolute.is_symlink(),
+                contains_private_source_excerpt=contains_private_source_excerpt,
             )
         )
     return tuple(records)
+
+
+def _contains_non_null_private_source_excerpt(value: object) -> bool:
+    if isinstance(value, dict):
+        if value.get("permitted_excerpt") is not None:
+            return True
+        return any(_contains_non_null_private_source_excerpt(item) for item in value.values())
+    if isinstance(value, list):
+        return any(_contains_non_null_private_source_excerpt(item) for item in value)
+    return False
+
+
+def _json_contains_private_source_excerpt(path: Path) -> bool:
+    try:
+        value = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, UnicodeDecodeError, json.JSONDecodeError):
+        return False
+    return _contains_non_null_private_source_excerpt(value)
 
 
 def audit_candidates(files: tuple[CandidateFile, ...]) -> tuple[Finding, ...]:
@@ -131,8 +167,12 @@ def audit_candidates(files: tuple[CandidateFile, ...]) -> tuple[Finding, ...]:
         rendered_path = path.as_posix()
         if candidate.is_symlink:
             findings.append(Finding(path=rendered_path, rule="symlink_not_public_release_input"))
+        if candidate.contains_private_source_excerpt:
+            findings.append(Finding(path=rendered_path, rule="private_source_excerpt"))
         if any(part in FORBIDDEN_COMPONENTS for part in lowered_parts):
             findings.append(Finding(path=rendered_path, rule="local_or_restricted_directory"))
+        if lowered_name in FORBIDDEN_NAMES or lowered_name.endswith(".raw-artifact-manifest.json"):
+            findings.append(Finding(path=rendered_path, rule="private_benchmark_manifest"))
         if lowered_name != ".env.example" and (
             lowered_name == ".env"
             or lowered_name.endswith(".env")

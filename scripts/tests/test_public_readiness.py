@@ -7,6 +7,7 @@ from scripts.public_readiness import (
     PROJECT_ROOT,
     CandidateFile,
     PublicReadinessError,
+    _json_contains_private_source_excerpt,
     audit_candidates,
     audit_license_metadata,
     check,
@@ -27,8 +28,29 @@ def test_candidate_policy_accepts_source_and_reference_manifest() -> None:
     ("path", "rule"),
     [
         ("Builder/references/source-cache/book.pdf", "local_or_restricted_directory"),
+        (".cache/references/book.txt", "local_or_restricted_directory"),
         (".quarantine/archive.gpg", "local_or_restricted_directory"),
         ("benchmarks/results/raw.jsonl", "local_or_restricted_directory"),
+        (
+            "benchmarks/raw-artifacts/sha256/aa/bb/deadbeef",
+            "local_or_restricted_directory",
+        ),
+        (
+            "benchmarks/raw-artifact-manifest.json",
+            "private_benchmark_manifest",
+        ),
+        (
+            "benchmarks/raw-artifact-manifests/run.json",
+            "local_or_restricted_directory",
+        ),
+        (
+            "benchmarks/raw-outputs/sha256/aa/bb/deadbeef",
+            "local_or_restricted_directory",
+        ),
+        (
+            "benchmarks/fake.raw-artifact-manifest.json",
+            "private_benchmark_manifest",
+        ),
         ("operator.env", "environment_file"),
         ("keys/verifier.pem", "restricted_or_binary_payload"),
     ],
@@ -51,6 +73,32 @@ def test_candidate_policy_rejects_symlink_and_large_file() -> None:
         "oversized_tracked_file",
         "symlink_not_public_release_input",
     }
+
+
+def test_candidate_policy_rejects_private_source_excerpt_json(tmp_path: Path) -> None:
+    private_artifact = tmp_path / "fidelity-artifact.json"
+    private_artifact.write_text(
+        '{"task":{"source_spans":[{"permitted_excerpt":"licensed source prose"}]}}',
+        encoding="utf-8",
+    )
+    public_contract = tmp_path / "statement-contract.json"
+    public_contract.write_text(
+        '{"source":{"spans":[{"permitted_excerpt":null}]}}',
+        encoding="utf-8",
+    )
+
+    assert _json_contains_private_source_excerpt(private_artifact) is True
+    assert _json_contains_private_source_excerpt(public_contract) is False
+    findings = audit_candidates(
+        (
+            CandidateFile(
+                PurePosixPath("artifacts/fidelity-artifact.json"),
+                private_artifact.stat().st_size,
+                contains_private_source_excerpt=True,
+            ),
+        )
+    )
+    assert {finding.rule for finding in findings} == {"private_source_excerpt"}
 
 
 def test_current_repository_has_consistent_license_metadata() -> None:

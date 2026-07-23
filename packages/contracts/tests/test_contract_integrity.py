@@ -10,6 +10,7 @@ from autolean_contracts import (
     EventEnvelopeV1,
     FidelityRiskV1,
     FormalSpecificationV1,
+    FreezeRecordV1,
     HashKindV1,
     LeanEnvironmentV1,
     MathematicalEdgeKindV1,
@@ -161,6 +162,39 @@ def test_model_copy_revalidates_cross_field_state_machine_and_field_invariants()
         policy.model_copy(update={"proof_budget": {"attempts": -1}})
     with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
         policy.model_copy(update={"unknown_field": True})
+
+
+def test_freeze_record_requires_typed_source_preparation_commitment() -> None:
+    draft = _draft_contract()
+    common = {
+        "contract_hash": draft.semantic_hash(),
+        "source_hash": draft.source.content_hash,
+        "statement_source_hash": draft.formal.statement_source_hash,
+        "frozen_by": "fixture",
+    }
+
+    legacy = FreezeRecordV1.model_validate(common)
+    assert legacy.source_preparation_id is None
+    assert legacy.source_preparation_hash is None
+    with pytest.raises(ValidationError, match="present together"):
+        FreezeRecordV1(
+            **common,
+            source_preparation_id=stable_identifier("source-preparation", "source-preparation"),
+        )
+    with pytest.raises(ValidationError, match="source-preparation namespace"):
+        FreezeRecordV1(
+            **common,
+            source_preparation_id=stable_identifier("fixture", "source-preparation"),
+            source_preparation_hash=digest_text(
+                HashKindV1.SOURCE_PREPARATION, "source-preparation"
+            ),
+        )
+    with pytest.raises(ValidationError, match="source_preparation_hash must use digest kind"):
+        FreezeRecordV1(
+            **common,
+            source_preparation_id=stable_identifier("source-preparation", "source-preparation"),
+            source_preparation_hash=digest_text(HashKindV1.CONTRACT, "wrong-kind"),
+        )
 
 
 def test_stable_identifier_namespace_must_match_its_urn() -> None:

@@ -22,11 +22,16 @@ from autolean_builder import (
     SemanticObligationKind,
     SemanticReviewPacket,
     SemanticReviewVerdict,
+    SourcePreparationRecordV1,
     StatementFidelityHarness,
     TranslationTask,
-    bridge_frozen_contract,
     create_next_revision,
-    freeze_contract,
+)
+from autolean_builder.workflow import (
+    _bridge_frozen_contract as bridge_frozen_contract,
+)
+from autolean_builder.workflow import (
+    _freeze_reviewed_contract as freeze_contract,
 )
 from autolean_contracts import (
     AlignmentTargetV1,
@@ -62,6 +67,7 @@ from autolean_contracts import (
     TaskPolicyV1,
     builder_attestation_payload,
     digest_bytes,
+    digest_model,
     digest_text,
     stable_identifier,
 )
@@ -193,6 +199,25 @@ def _contract() -> StatementContractV1:
             release_tier=ReleaseTierV1.CALIBRATION,
             fidelity_risk="l1_simple",
         ),
+    )
+
+
+def _source_preparation(contract: StatementContractV1) -> SourcePreparationRecordV1:
+    content_hash = contract.semantic_hash().value
+    return SourcePreparationRecordV1(
+        preparation_id=stable_identifier(
+            "source-preparation",
+            f"{contract.contract_id.value}:revision:{contract.revision}",
+        ),
+        contract_id=contract.contract_id,
+        revision=contract.revision,
+        packet_sha256=content_hash,
+        contract_sha256=digest_model(HashKindV1.CONTRACT, contract).value,
+        rights_sha256=content_hash,
+        spans_sha256=content_hash,
+        manifest_sha256=content_hash,
+        artifact_sha256=contract.source.content_hash.value,
+        parent_artifact_sha256=contract.source.content_hash.value,
     )
 
 
@@ -342,15 +367,19 @@ def _evaluation(
 def test_harness_freeze_and_bridge_preserve_the_reviewed_boundary() -> None:
     draft = _contract()
     evaluation = _evaluation(draft)
+    preparation = _source_preparation(draft)
     frozen = freeze_contract(
         draft,
         evaluation=evaluation,
+        source_preparation=preparation,
         frozen_by="builder-service",
     )
     assert draft.status is StatementStatusV1.DRAFT
     assert frozen.status is StatementStatusV1.FROZEN
     assert frozen.freeze is not None
     assert frozen.freeze.contract_hash == frozen.semantic_hash()
+    assert frozen.freeze.source_preparation_id == preparation.preparation_id
+    assert frozen.freeze.source_preparation_hash == preparation.artifact_digest()
     assert frozen.fidelity == evaluation.report
     assert all(
         item.authority is EvidenceAuthority.AUTOMATIC for item in evaluation.automatic_checks
@@ -391,6 +420,77 @@ def test_harness_freeze_and_bridge_preserve_the_reviewed_boundary() -> None:
     )
 
 
+def test_freeze_rejects_source_preparation_for_another_contract_state() -> None:
+    draft = _contract()
+    evaluation = _evaluation(draft)
+    preparation = _source_preparation(draft)
+
+    with pytest.raises(FreezeRejected, match="another contract ID"):
+        freeze_contract(
+            draft,
+            evaluation=evaluation,
+            source_preparation=replace(
+                preparation,
+                contract_id=_id("different-contract"),
+            ),
+            frozen_by="builder-service",
+        )
+    with pytest.raises(FreezeRejected, match="another contract revision"):
+        freeze_contract(
+            draft,
+            evaluation=evaluation,
+            source_preparation=replace(preparation, revision=draft.revision + 1),
+            frozen_by="builder-service",
+        )
+    with pytest.raises(FreezeRejected, match="another contract hash"):
+        freeze_contract(
+            draft,
+            evaluation=evaluation,
+            source_preparation=replace(preparation, contract_sha256="0" * 64),
+            frozen_by="builder-service",
+        )
+
+
+def test_bridge_rejects_legacy_freeze_without_source_preparation_commitment() -> None:
+    draft = _contract()
+    evaluation = _evaluation(draft)
+    frozen = freeze_contract(
+        draft,
+        evaluation=evaluation,
+        source_preparation=_source_preparation(draft),
+        frozen_by="builder-service",
+    )
+    assert frozen.freeze is not None
+    legacy = frozen.model_copy(
+        update={
+            "freeze": frozen.freeze.model_copy(
+                update={
+                    "source_preparation_id": None,
+                    "source_preparation_hash": None,
+                }
+            )
+        }
+    )
+    graphs = GraphBundleV1(
+        mathematical=MathematicalGraphV1(graph_id=_id("legacy-math"), revision=1),
+        formal=FormalGraphV1(graph_id=_id("legacy-formal"), revision=1),
+        execution=ExecutionGraphV1(graph_id=_id("legacy-execution"), revision=1),
+    )
+
+    with pytest.raises(BuilderError, match="requires source-preparation evidence"):
+        bridge_frozen_contract(
+            legacy,
+            graphs,
+            bundle_key="legacy-source-preparation",
+            fidelity_evidence=FidelityEvidenceArtifactRefV1(
+                digest=evaluation.evidence_hash,
+                size=len(evaluation.render_artifact()),
+            ),
+            attestor=HmacAttestationSignerV1(_builder_key()),
+            evidence_identity="legacy-source-preparation",
+        )
+
+
 @pytest.mark.parametrize(
     "kind",
     tuple(MutationKindV1(item["kind"]) for item in _golden()["mutations"]),
@@ -404,6 +504,7 @@ def test_false_negative_mutation_golden_blocks_freeze(kind: MutationKindV1) -> N
         freeze_contract(
             draft,
             evaluation=evaluation,
+            source_preparation=_source_preparation(draft),
             frozen_by="builder-service",
         )
 
@@ -509,6 +610,7 @@ def test_freeze_rejects_a_tampered_harness_report() -> None:
         freeze_contract(
             draft,
             evaluation=replace(evaluation, report=detached_report),
+            source_preparation=_source_preparation(draft),
             frozen_by="builder-service",
         )
 
@@ -527,6 +629,7 @@ def test_freeze_revalidates_candidate_structure_instead_of_trusting_check_boolea
                 evaluation,
                 candidates=(evaluation.candidates[0], impersonating),
             ),
+            source_preparation=_source_preparation(draft),
             frozen_by="builder-service",
         )
 
@@ -554,6 +657,7 @@ def test_new_revision_does_not_change_the_frozen_original() -> None:
     original = freeze_contract(
         contract,
         evaluation=_evaluation(contract),
+        source_preparation=_source_preparation(contract),
         frozen_by="builder-service",
     )
     replacement = _contract().model_copy(update={"revision": 2})
