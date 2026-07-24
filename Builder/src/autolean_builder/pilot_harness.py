@@ -1110,10 +1110,10 @@ def load_pilot_boundary_decision(path: Path) -> PilotBoundaryDecisionV2:
         raise PilotHarnessError(f"cannot read pilot boundary decision: {path}") from error
     try:
         payload = json.loads(raw, object_pairs_hook=_reject_duplicate_decision_keys)
-    except ValueError as error:
-        raise PilotHarnessError(str(error)) from error
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise PilotHarnessError("pilot boundary decision is not valid UTF-8 JSON") from error
+    except ValueError as error:
+        raise PilotHarnessError(str(error)) from error
     try:
         return PilotBoundaryDecisionV2.model_validate(payload)
     except ValueError as error:
@@ -1213,10 +1213,10 @@ def _read_workspace_file(root: Path, relative_path: str, *, label: str) -> bytes
 def _decode_json_object(raw: bytes, *, label: str) -> dict[str, object]:
     try:
         value = json.loads(raw, object_pairs_hook=_reject_duplicate_evidence_keys)
-    except ValueError as error:
-        raise PilotHarnessError(f"{label} is ambiguous: {error}") from error
     except (UnicodeDecodeError, json.JSONDecodeError) as error:
         raise PilotHarnessError(f"{label} is not valid UTF-8 JSON") from error
+    except ValueError as error:
+        raise PilotHarnessError(f"{label} is ambiguous: {error}") from error
     return _json_object(value, label=label)
 
 

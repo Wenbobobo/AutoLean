@@ -4,6 +4,7 @@ import hashlib
 import json
 from pathlib import Path
 
+import pytest
 from autolean_builder import (
     ReferenceCache,
     ReferenceManifestV1,
@@ -227,7 +228,7 @@ def test_public_rule_matrix_is_a_complete_projection_of_the_gap_decision() -> No
 def test_cached_source_anchors_replay_only_when_local_cache_exists() -> None:
     cached_text = _REFERENCE_CACHE_ROOT / _SOURCE_REFERENCE_ID
     if not cached_text.exists():
-        return
+        pytest.skip("official local SLC cache is intentionally absent")
 
     cache = ReferenceCache(
         ReferenceManifestV1.load(_REFERENCE_MANIFEST_PATH),
