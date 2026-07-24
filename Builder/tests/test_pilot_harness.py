@@ -738,6 +738,35 @@ def test_v2_workspace_evidence_recomputes_files_and_internal_receipt(tmp_path: P
         missing_packet.assert_matches_workspace(tmp_path)
 
 
+@pytest.mark.parametrize("raw", (b"{", b"\xff"))
+def test_v2_workspace_evidence_classifies_invalid_utf8_json(tmp_path: Path, raw: bytes) -> None:
+    decision = _v2_workspace_decision(tmp_path)
+    packet_path = tmp_path / decision.implementation.compile_packet_path
+    packet_path.write_bytes(raw)
+    implementation = decision.implementation.model_copy(
+        update={"compile_packet_sha256": hashlib.sha256(raw).hexdigest()}
+    )
+
+    with pytest.raises(PilotHarnessError, match="V2 compile packet is not valid UTF-8 JSON"):
+        implementation.assert_matches_workspace(tmp_path)
+
+
+def test_v2_workspace_evidence_keeps_duplicate_keys_ambiguous(tmp_path: Path) -> None:
+    decision = _v2_workspace_decision(tmp_path)
+    raw = b'{"duplicate":1,"duplicate":2}'
+    packet_path = tmp_path / decision.implementation.compile_packet_path
+    packet_path.write_bytes(raw)
+    implementation = decision.implementation.model_copy(
+        update={"compile_packet_sha256": hashlib.sha256(raw).hexdigest()}
+    )
+
+    with pytest.raises(
+        PilotHarnessError,
+        match="V2 compile packet is ambiguous: duplicate JSON evidence key",
+    ):
+        implementation.assert_matches_workspace(tmp_path)
+
+
 def test_v2_replays_the_retained_t2_compile_evidence() -> None:
     _, payload = _v2_decision_payload(disposition="gap")
     lean_toolchain = "leanprover/lean4:v4.28.0"
@@ -826,6 +855,15 @@ def test_v2_decision_loader_rejects_duplicate_keys(tmp_path: Path) -> None:
         encoding="utf-8",
     )
     with pytest.raises(PilotHarnessError, match="duplicate JSON key"):
+        load_pilot_boundary_decision(path)
+
+
+@pytest.mark.parametrize("raw", (b"{", b"\xff"))
+def test_v2_decision_loader_classifies_invalid_utf8_json(tmp_path: Path, raw: bytes) -> None:
+    path = tmp_path / "decision.json"
+    path.write_bytes(raw)
+
+    with pytest.raises(PilotHarnessError, match="not valid UTF-8 JSON"):
         load_pilot_boundary_decision(path)
 
 
