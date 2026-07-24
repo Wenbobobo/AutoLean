@@ -66,9 +66,9 @@ provide that property.
 
 ### 1. Public HF archive exposure
 
-The HF API currently reports the dataset named `AutoArchon_Private` as public and
+On 2026-07-23, the HF API reported the dataset named `AutoArchon_Private` as public and
 ungated. Its [public tree metadata](https://huggingface.co/api/datasets/Garydesu/AutoArchon_Private/tree/main?recursive=true&expand=true)
-lists encrypted archives for private config, campaign metadata/workspaces, and Codex
+listed encrypted archives for private config, campaign metadata/workspaces, and Codex
 sessions. The checked-in recovery guide explicitly treats that dataset as the recovery
 source for `helper.env`, curated campaign state, and sessions
 ([migration guide](https://github.com/Wenbobobo/AutoArchon/blob/6a401ff552080bdfdd1e1f53bc6dc418379bf0ec/docs/migration-recovery.md#L22-L35)).

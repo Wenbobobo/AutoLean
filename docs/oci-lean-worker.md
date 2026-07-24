@@ -43,6 +43,37 @@ The build driver stages exactly the archive, Dockerfile, query helper, and wrapp
 temporary directory. It does not send the repository root, user home, environment files, or
 credentials to Docker.
 
+## Mathlib Source-Lock Precondition
+
+The first M3 increment now locks source-only archives for all nine Git packages in
+`Library/lake-manifest.json`. The tracked
+`Prover/worker/mathlib-source-lock.v1.json` is complete and has SHA-256
+`f9ef72acfebed52c6c7de1bacebe840fcd620568f7dc2875685771f363701448`. It binds:
+
+- the raw Lake manifest SHA-256
+  `e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89`;
+- the exact GitHub URL and 40-hex commit of each package;
+- the canonical credential-free `codeload.github.com` archive URL; and
+- the observed SHA-256 of each validated archive.
+
+The nine archives total 22,224,408 bytes and remain in the operator-owned
+`~/.cache/autolean/mathlib-sources` cache. They are not repository artifacts. Archive validation
+rejects path escape, Git metadata, generated Lake state, Lean build output, hard links, devices,
+and unsafe symlinks. Acquisition is resumable: each completed package is atomically bound into an
+incomplete lock, and a later run reuses it only after the recorded hash and full archive structure
+are revalidated. An unbound cache entry is never accepted as the first source observation.
+
+Run the read-only lock and cache checks with:
+
+```text
+uv run --frozen python scripts/mathlib_source_lock.py
+uv run --frozen python scripts/mathlib_source_lock.py --verify-cache
+```
+
+Only an explicit `--update` may download archives and rewrite the lock. This source lock closes
+neither the clean-build nor image-authority gate: no mathlib `.olean` has yet been built from these
+archives inside a network-disabled OCI build, and the pure-Lean image above remains unchanged.
+
 ## Replay
 
 From Windows or Linux:

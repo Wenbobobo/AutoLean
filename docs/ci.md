@@ -5,9 +5,11 @@
 `.github/workflows/ci.yml` runs the same offline gate on Ubuntu 24.04 and Windows
 Server 2022. The Python job installs the committed `uv.lock`, checks that the lock
 is current, checks Ruff formatting and lint, runs strict Mypy, runs Pytest, applies
-the repository secret and prohibited-provider policies, and checks deterministic
-release-inventory and SPDX generation. A separate matrix installs the committed
-pnpm lock and runs the Dashboard UI tests and production build.
+the current-tree and full reachable-history secret policies, validates the pinned
+mathlib source lock without downloading its local archives, applies the prohibited-provider
+policy, and checks deterministic release-inventory and SPDX generation. The Python checkout uses
+full history so the history result is not based on a shallow clone. A separate matrix installs the
+committed pnpm lock and runs the Dashboard UI tests and production build.
 
 The ordinary workflow deliberately does not:
 
@@ -33,12 +35,19 @@ pnpm --dir Dashboard/ui build
 
 ## Repository policies
 
-`scripts/secret_scan.py` reads only Git-tracked or non-ignored candidate files.
+The default `scripts/secret_scan.py` mode reads only Git-tracked or non-ignored candidate files.
 It explicitly refuses to scan `.git`, `.quarantine`, `.venv`, any
 `node_modules`, `benchmarks/vendor`, or `benchmarks/results`. Findings contain
-only a relative path and rule identifier; matching text and line contents are
-never printed. This is a lightweight regression guard, not a substitute for
-credential rotation, Git-host secret scanning, or history rewriting.
+only a relative path and rule identifier; matching text and line contents are never printed.
+Its `--history` mode instead reads each unique blob/path pair in commits reachable from local refs
+through Git object APIs and applies the public path policy as well as credential signatures. It
+does not claim to inspect an unfetched remote ref or an unreachable object. These are lightweight
+regression guards, not substitutes for credential rotation, Git-host secret scanning, or history
+rewriting.
+
+`scripts/mathlib_source_lock.py` checks that the tracked source-only archive lock still matches the
+Lake manifest and all nine dependency identities. Ordinary CI does not download or build those
+archives; cache-byte verification and clean OCI construction are separate explicit gates.
 
 `scripts/provider_policy_guard.py` blocks prohibited provider dependencies and
 production references while verifying that both runtime deny lists remain

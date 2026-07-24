@@ -22,6 +22,14 @@ the record recomputes the Library v2 input closure and cross-checks both raw-rec
 content digests. The quantifier-freshness bridge remains an active scope gap. Its only disposition
 is `gap`; neither candidate is selected.
 
+The public-safe
+[quantifier-boundary reconciliation](quantifier-boundary-2026-07-24.md) records a later pair of
+independent automated research inputs. It resolves one design ambiguity: the textbook theorem
+boundary is closed, while a level-indexed open layer is still required internally to encode
+substitution and eigenvariable freshness. It proposes a refined implementation spike, but it
+does not fill the round's authenticated role reports, select a candidate, or remove the human
+review blocker.
+
 Every candidate, role report, compile-spike packet, and round has a canonical SHA-256 integrity
 checksum. A checksum detects accidental or unsynchronized edits; it is not a signature, an
 identity proof, independence evidence, or authority. `load_self_calibration_round` rebinds the

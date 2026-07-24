@@ -25,6 +25,7 @@ def main() -> None:
             "format",
             "library-check",
             "library-build",
+            "mathlib-source-lock",
             "dashboard",
             "public-ready",
             "references",
@@ -45,6 +46,12 @@ def main() -> None:
         "format": ("uv", "run", "ruff", "format", "."),
         "library-check": ("uv", "run", "python", "Library/scripts/verify.py", "check"),
         "library-build": ("uv", "run", "python", "Library/scripts/verify.py", "build"),
+        "mathlib-source-lock": (
+            "uv",
+            "run",
+            "python",
+            "scripts/mathlib_source_lock.py",
+        ),
         "ci": ("uv", "run", "--frozen", "python", "scripts/ci.py"),
         "dashboard": (
             "uv",

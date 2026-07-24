@@ -32,12 +32,13 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Project DAG | Verified, synthetic | Fixed 20-node multi-file frontier, conflict, propagation, API-change, and integration-lease fixture | Does not compile a real multi-file Lean library |
 | Providers | Verified offline | Fake, Codex CLI, OpenAI Responses, and custom-compatible adapters; authorization/egress controls, stable failure taxonomy, and persistent circuit breaker | No paid/external run; no prohibited provider path |
 | OCI verifier | Verified, pure Lean test-only canary | Non-root image `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`; protocol V2 uses separate compile/query containers and binds both argv hashes plus the host-sealed `Candidate.olean` digest; statement replacement, wrong declaration/profile, stdout spoof, trusted-module shadow injection, persistent compile-time writer, and axiom attacks were rejected; an independent rerun produced an authenticated test-only execution receipt. Image-owned identity hash `81099458f107fc5a179e1d308b09ff0189424d8b4341dd47026cfbf01c3828e0`; policy-V2 canary SHA `8aa49896f153b763d5887a88b7ee646f0842e72d61f8c0379442332e8eb324b2` | The image deliberately contains no mathlib; FATE's matching two-phase path was code-tested but not rerun; the receipt and gateway are fixture-only, `promotion_attestation_created=false`, and no production KMS/mTLS evidence exists |
+| Mathlib source lock | Verified, source-input stage only | All nine Git dependencies in the pinned Lake manifest were acquired as source-only codeload archives, structurally validated, and rebound from the operator cache. The complete tracked lock SHA is `f9ef72acfebed52c6c7de1bacebe840fcd620568f7dc2875685771f363701448`; it binds Lake-manifest SHA `e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89`, exact commits/URLs, and every archive SHA. Both lock-only and cache-byte verification passed after a real interrupted-download resume | No mathlib build or `.olean` provenance exists yet. The next gate must unpack only these locked inputs into a fresh Docker context, build the required import closure with network disabled and no host `.lake`, and rerun a real mathlib-importing OCI V2 canary |
 | Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
 | Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
 | Builder self-calibration and pilot selection | Partial, blocked | Both model-theory semantic adapters compiled in the pinned Library lock. The tracked receipt v2 and self-calibration record bind canonical build-input SHA `1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795`, canonical report digest `9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769`, packet SHA `a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5`, receipt SHA `7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f`, verifier SHA `7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29`, dependency-tree SHA `43f889366a4c5dc6daaed5b56cf3704e82e491ff90f2044602a187d7da2bfe62`, and dependency-manifest SHA `7f83b557c145abc56ec83619871c305f4bb6b5abff54b1d6fd52dd837c4f6423`; the packet state is `partial_passed_with_gap` and `not_selected` | The adapters and observed-cache binding establish local API compatibility and byte-level replay detection only, not trusted clean-build provenance. The Builder self-calibration round deliberately remains incomplete/gap; quantifier/eigenvariable freshness, capture avoidance, weakening, source interpretation, and independent review remain open. No candidate is selected, frozen, handed to Prover, or promoted |
 | Builder reference cache | Verified offline | Four locked source/derived records, including locally extracted Open Logic Project *Sets, Logic, Computation*: source PDF SHA `39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9`, extracted text SHA `285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584`, manifest SHA `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab` | Retained only as local reference/provenance material; no human-calibrated pilot statement is recorded and model egress remains forbidden |
 | HF recovery boundary | Partially closed by operator confirmation | Operator confirmed deletion of the HF archive; no archive material is a migration source | This does not independently prove provider-side access state, credential rotation, or incident closure |
-| Local and remote CI, inventory, and SBOM | Verified in the recorded scope | Offline Python, formatting, type, secret/provider/public-readiness, Dashboard UI/build, reference-replay, inventory, and SPDX gates; Draft PR code head `28d9d5e` passed Ubuntu/Windows Python+policy and UI in [run 30024075567](https://github.com/Wenbobobo/AutoLean/actions/runs/30024075567) | GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
+| Local and remote CI, inventory, and SBOM | Verified in the recorded scope | The staged source-lock/publication increment passed 570 Python and policy tests locally, with two documented Windows skips; current-tree and reachable-history scans, source-lock, inventory, and SPDX checks passed. Draft PR baseline head `76d2092` passed Ubuntu/Windows Python+policy and UI in [run 30082181435](https://github.com/Wenbobobo/AutoLean/actions/runs/30082181435) | The staged increment still requires its own remote run. GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
 
 ## Current gated route
 
@@ -61,6 +62,13 @@ not represent a calculus, a soundness theorem, a textbook-faithful statement, or
 selection authority remains the resolved quantifier/freshness bridge and its independent review,
 not a model preference or a benchmark score. The backups are an abstract Cea-type variational-PDE
 bound and a van Kampen-style topology slice.
+
+Two later independent automated research inputs have refined the gap without closing it. The
+textbook target is a closed, two-sided classical `LK` sequent, while substitution and eigenvariable
+freshness still require an internal open layer. The next spike therefore uses level-indexed
+`Formula (Fin n)` sequents internally and exposes soundness only through an explicit `n = 0`
+sentence bridge. This reconciliation rejects both original candidates as sufficient in their
+current form; it is neither a selected replacement nor a human semantic review.
 
 Curvature is reference only: mathlib [PR #36036](https://github.com/leanprover-community/mathlib4/pull/36036)
 is an active, open connection/geodesics work-in-progress that includes curvature. No curvature
@@ -94,8 +102,12 @@ weakens a theorem.
    Builder/verifier authorities behind authenticated service boundaries before any result is
    called promotable.
 
-Repository visibility may be changed only after GitHub history is reviewed, host secret scanning is
-enabled or independently substituted, provider-side incident/credential gates are independently
-closed, and the current public-readiness/secret/provider gates pass. The operator-confirmed HF
-archive deletion does not satisfy those separate gates. Public source code never authorizes source
-document, recovered archive, raw model output, or credential publication.
+Repository visibility and the historical HF incident are separate decisions. Visibility may be
+changed only after all remote refs intended for publication are fetched, reachable history is
+reviewed, Git-host secret scanning is enabled or independently substituted, and the current
+public-readiness, history-secret, provider, and remote-CI gates pass. The history audit found no
+recovered archive, session, prompt, passphrase, or credential material in AutoLean's reachable
+objects. Provider-side incident state and credential rotation remain open for incident closure and
+future external-model authorization, but do not by themselves contaminate this independently
+constructed source repository. Public source code never authorizes source-document, recovered
+archive, raw model output, or credential publication.
