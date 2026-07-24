@@ -1,12 +1,13 @@
 import AutoLeanLibrary.Fixtures.ModelTheory.ClosedSentence
 import AutoLeanLibrary.Fixtures.ModelTheory.OpenFormulaContext
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK
 
 /-!
 Terminal fixture for the pinned first-order model-theory compile spike.
 
 It is intentionally not imported by `AutoLeanLibrary` or any promoted module.
 The corresponding packet in `Library/records/` retains its non-promotion and
-freshness/quantifier gap boundaries.
+independent semantic-review and Builder-admission gap boundaries.
 -/
 namespace AutoLeanLibrary.Fixtures.ModelTheory
 

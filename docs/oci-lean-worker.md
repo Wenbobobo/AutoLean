@@ -1,9 +1,10 @@
-# Pinned Pure-Lean OCI Worker
+# Pinned Lean OCI Workers
 
 ## Scope
 
-`Prover/worker` is the first exercised AutoLean OCI verifier image. It closes the earlier gap
-between the host-side `OciLeanRunner` protocol and a real Linux worker:
+`Prover/worker` contains two exercised AutoLean OCI verifier profiles. The original pure-Lean
+profile closes the earlier gap between the host-side `OciLeanRunner` protocol and a real Linux
+worker:
 
 - Ubuntu 24.04 base image is pinned by digest;
 - the official Lean 4.28.0 Linux archive is pinned and verified by SHA-256 in both the build driver
@@ -23,7 +24,7 @@ This image intentionally contains no mathlib. Its environment identifier is
 `none-pure-lean-v4.28.0`; it proves the OCI/Lean protocol works on a real theorem, not that the
 FATE or mathlib environment has been containerized.
 
-The currently observed local image is
+The currently observed local pure-Lean image is
 `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`.
 It is a local Docker identity, not a registry publication or a transferable environment
 attestation.
@@ -71,18 +72,71 @@ uv run --frozen python scripts/mathlib_source_lock.py --verify-cache
 ```
 
 Only an explicit `--update` may download archives and rewrite the lock. This source lock closes
-neither the clean-build nor image-authority gate: no mathlib `.olean` has yet been built from these
-archives inside a network-disabled OCI build, and the pure-Lean image above remains unchanged.
+neither the clean-build nor image-authority gate, and the pure-Lean image above remains unchanged.
+
+The separate `Dockerfile.mathlib` profile now proves more of the offline path without changing the
+pure-Lean image. Its fresh context contains only the pinned Lean archive, all nine hash-checked
+source archives, the source lock and manifests, and image-owned verifier files. The build uses
+`--no-cache --pull=false --network=none`, verifies every input before extraction, converts the
+locked Git dependency records to local-path records, and targets
+`+Mathlib.ModelTheory.Semantics:olean`. The conversion retains and attests mathlib's original Lake
+manifest.
+
+An earlier clean attempt stopped at `ProofWidgets.Component.Basic`, whose source embeds
+`.lake/build/js/interactiveExpr.js`. Removing the library's `widgetJsAll` dependency was therefore
+not valid and has been removed from this profile: the original `lakefile.lean` and default target
+are preserved.
+
+ProofWidgets revision `be3b2e63b1bbf496c478cef98b86972a37c1417d` is tag `v0.0.87`.
+`mathlib-build-resource-lock.v1.json` separately pins its official `ProofWidgets4.tar.gz` release
+asset by URL, size, and SHA-256. The original 13,772,162-byte archive remains only in the
+operator-owned `~/.cache/autolean/mathlib-build-resources` cache. A strict tar validator rejects
+traversal, duplicate paths, links, and special files, then writes only the 20 regular `js/**`
+files (6,902,528 bytes) into the fresh Docker context. The release archive and its `lib`, `ir`,
+`.olean`, and native payloads never enter that context. This follows mathlib's own
+`Cache/Requests.lean` policy, which fetches the ProofWidgets release for JavaScript and prunes
+`lib` and `ir`.
+
+The normal resource commands are read-only:
+
+```text
+uv run --frozen python scripts/mathlib_build_resources.py
+uv run --frozen python scripts/mathlib_build_resources.py --verify-cache
+```
+
+Only an explicit `--update` downloads or replaces the cached release asset. In-image checks require
+the complete JS manifest to be unchanged before and after `lake build widgetJsAll`, require
+`lake build --no-build widgetJsAll` to report the release trace up-to-date, and reject a generated
+`node_modules`. The runtime receipt also rejects extra or non-regular JS entries and recomputes its
+helper OLean, direct-import dependency manifest/count, target OLean, and runtime-file-manifest
+claims before emitting JSON. The receipt retains its existing `import_closure` field names for
+schema compatibility; those fields do not claim a transitive closure.
+
+This source-built profile completed all 889 build targets and produced the local test-only image
+`autolean/mathlib-worker@sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`.
+The canonical in-image receipt SHA-256 is
+`801959222c195e249e320a0568418d177022c8dbd925b70ad34ee28c0c2e2a90`; it records the helper's
+four-file direct import dependency set with SHA-256
+`2983d74fceb7bd025939793e1a9690653cf113f89d547f5e33bdcefc9fa8d44e` and target OLean SHA-256
+`6ecddc1bdec0ef5e871cac0feb5880a9b4048067bed154b95e0ba8f0c8e49297`. The ignored build evidence
+file has SHA-256 `bd7576eb489c140704c691aadb80669ed462133b973848b4a49871c0cf5b4aab`.
+Enumerating and binding the complete transitive import closure remains a T6 requirement.
 
 ## Replay
 
-From Windows or Linux:
+Build and exercise the mathlib profile from Windows or Linux:
+
+```text
+uv run --frozen python -m scripts.oci_mathlib_worker all
+```
+
+Replay the pure-Lean profile separately with:
 
 ```text
 uv run python scripts/oci_worker.py all
 ```
 
-On Windows the script delegates to WSL distribution `Ubuntu-24.04`. The Lean archive is retained
+On Windows both scripts delegate to WSL distribution `Ubuntu-24.04`. The Lean archive is retained
 under the WSL user's `~/.cache/autolean/oci-worker-sources`; a digest mismatch fails closed and
 leaves the unexpected file in place for audit. The Python environment used for the integrated
 canary is outside the repository at `~/.cache/autolean/oci-worker-python`. Initial setup may use
@@ -90,17 +144,19 @@ the network to download the official Lean archive and locked Python packages. Th
 Docker build itself uses `--network=none`, and every verifier container separately runs with
 `--network none`; the whole setup command must therefore not be described as offline.
 
-To replay an already-built exact image:
+To replay already-built exact images:
 
 ```text
 uv run python scripts/oci_worker.py canary --image autolean/lean-worker@sha256:<digest>
+uv run --frozen python -m scripts.oci_mathlib_worker verify --image autolean/mathlib-worker@sha256:<digest>
+uv run --frozen python -m scripts.oci_mathlib_worker canary --image autolean/mathlib-worker@sha256:<digest>
 ```
 
-Do not replace `<digest>` with the mutable tag. `build.v1.json` records the local Docker
-repository digest after every build. A local digest is not a published registry artifact; another
-machine must rebuild or consume a separately attested registry image.
+Do not replace `<digest>` with the mutable tag. `build.v1.json` records the pure image and
+`mathlib-build.v1.json` records the mathlib image. A local digest is not a published registry
+artifact; another machine must rebuild or consume a separately attested registry image.
 
-## Canary Gates
+## Pure-Lean Canary Gates
 
 The explicit canary runs a real Lean compile under `--network none`, `--read-only`,
 `--cap-drop ALL`, `--security-opt no-new-privileges`, fixed pids/memory limits, and a no-exec
@@ -142,22 +198,42 @@ do not expect the entire canary file hash or command hash to be identical across
 re-run that overwrites this ignored file must record its new hash rather than presenting this
 test-only run hash as a stable protocol or image identity.
 
+## Mathlib Profile Canary
+
+The mathlib canary imports `Mathlib.ModelTheory.Semantics` from the image-owned dependency set and
+compiles `AutoLean.OCI.fixture`, observing the exact type
+`∀ (n : Nat), @Eq.{1} Nat n n` with an empty axiom set. A deliberately invalid
+`/deps/Mathlib/ModelTheory/Semantics.olean` bind does not influence compilation, demonstrating that
+this profile uses its image-owned dependency path rather than the host dependency mount. The
+canary evidence SHA-256 is
+`95505c212b7bf32b027766399322d3a4af96d2a30cf1b309a869d8f2f64971ce`.
+The ignored evidence files are
+`release-evidence/oci-worker/mathlib-build.v1.json` and
+`release-evidence/oci-worker/mathlib-canary.v1.json`.
+
+This is a focused import/type/axiom/path canary. The complete pure-worker adversarial V3 suite,
+including every statement-replacement, wrong-profile, stdout-spoof, persistent-writer, and
+handoff case listed above, has not been rerun against the mathlib profile. Evidence from the pure
+profile is not inherited by relabeling the mathlib image.
+
 ## Evidence Boundary
 
-The canary produces verifier-owned execution evidence and uses the lease-bound signing gateway
-only with a local, authenticated **test-only** receipt authority. It records
+The pure-Lean canary produces verifier-owned execution evidence and uses the lease-bound signing
+gateway only with a local, authenticated **test-only** receipt authority. It records
 `test_gateway_attestation_created=true` and
 `control_plane_accepted_test_fixture=true`, but also records
 `promotion_attestation_created=false`. It does not establish reproducible registry publication,
 mathlib compatibility, FATE success, semantic statement fidelity, or model proof-search quality.
 The second Docker execution establishes an important anti-spoofing software boundary; it does not
 make two processes operated by one local fixture authority independent in the production sense.
-The canary establishes the two-container boundary for the pure-Lean image only. FATE's mounted
-mathlib smoke wrapper now follows the same two-phase handoff, but it has not been rerun here and
-remains explicitly non-promotable.
+The pure profile establishes its two-container boundary, while the mathlib profile adds a
+source-built, image-owned direct import dependency set and focused V2 canary, but no
+signing-gateway observation or complete transitive-closure enumeration.
+FATE's mounted mathlib smoke wrapper has not been rerun here and remains explicitly
+non-promotable.
 
-Promoting this worker beyond the pure-Lean architecture canary requires a separately pinned
-mathlib image, clean registry/SBOM provenance, the signing gateway under an
-operator-authenticated mTLS/ACL boundary, non-exportable KMS/HSM custody, and the same adversarial
-canaries rerun against that exact image digest. None of those production deployment requirements is
-satisfied by the local HMAC receipt fixture.
+Neither local image is a registry publication or promotion attestation. Promotion requires clean
+registry/SBOM provenance, the signing gateway under an operator-authenticated mTLS/ACL boundary,
+non-exportable KMS/HSM custody, lease- and bundle-bound integration, and the required adversarial
+canaries rerun against the exact mathlib digest. The current mathlib record explicitly has
+`promotion_attestation_created=false`.

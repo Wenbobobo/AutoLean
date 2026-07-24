@@ -8,8 +8,8 @@
   "selected_candidate_id": null,
   "build_exit_code": 0,
   "source_tree_schema": "autolean.library-build-input-tree.v2",
-  "source_tree_sha256": "1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795",
-  "packet_content_sha256": "3b4e9ccc608e4c8f998ed03c8ee3fd4afe07a62a09b1937e5306d3752bb51493",
+  "source_tree_sha256": "87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70",
+  "packet_content_sha256": "c8cff937a896804f8fa2d48232200e3153f14d33174b2e00aee16a963c6ecb36",
   "verification_script_sha256": "7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29",
   "environment": {
     "lean_toolchain": "leanprover/lean4:v4.28.0",
@@ -33,13 +33,13 @@
     "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
   ],
   "build_report_schema": "autolean.library-downstream-build.v2",
-  "build_report_sha256": "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769",
+  "build_report_sha256": "79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15",
   "build_report": {
     "build_root_filesystem": "ext4",
     "contains_absolute_paths": false,
     "contains_raw_build_output": false,
     "dependency_cache_key": "6a31416c208ea1e4a392ef5d804ef2a7238da331f0178052f32bd9219268313f",
-    "dependency_cache_prepare_seconds": 9.842,
+    "dependency_cache_prepare_seconds": 9.538,
     "dependency_tree": {
       "directory_count": 3644,
       "entry_count": 116924,
@@ -54,11 +54,11 @@
     "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
     "lake_version": "Lake version 5.0.0-src+7e01a1b (Lean version 4.28.0)",
     "lean_version": "Lean (version 4.28.0, x86_64-unknown-linux-gnu, commit 7e01a1bf5c70fc6167d49c345d3bf80596e9a79b, Release)",
-    "local_build_seconds": 19.149,
+    "local_build_seconds": 19.058,
     "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
     "schema_version": "autolean.library-downstream-build.v2",
     "source_tree_schema": "autolean.library-build-input-tree.v2",
-    "source_tree_sha256": "1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795",
+    "source_tree_sha256": "87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70",
     "status": "passed",
     "targets": [
       "AutoLeanLibrary",
@@ -66,7 +66,7 @@
       "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
     ],
     "toolchain": "leanprover/lean4:v4.28.0",
-    "total_duration_seconds": 28.991
+    "total_duration_seconds": 28.596
   },
   "contains_absolute_paths": false,
   "contains_raw_build_output": false

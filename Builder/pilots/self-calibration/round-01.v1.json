@@ -178,8 +178,8 @@
       "kind": "candidate_scope_gap",
       "affected_role": null,
       "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
-      "evidence_sha256": "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769",
-      "resolution_required": "Choose and implement a calculus-level quantifier/eigenvariable freshness bridge with capture avoidance and weakening; the tracked partial API-compatibility spike cannot substitute for it.",
+      "evidence_sha256": "79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15",
+      "resolution_required": "Independently review the implemented bounded bottom/implication/universal fragment against the retained source anchors and either admit it through Builder with its limitations preserved, or keep the gap active and retain the earlier candidates as fallback boundaries.",
       "state": "active"
     },
     {
@@ -235,7 +235,7 @@
       "evidence": {
         "evidence_id": "round-01-model-theory-build-report",
         "status": "partial_passed_with_gap",
-        "library_input_tree_sha256": "1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795",
+        "library_input_tree_sha256": "87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70",
         "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
         "toolchain_sha256": "26df5f74b79af0cd9e298b6583993699a54938d047ba1919428da80d3ae80c6e",
         "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
@@ -253,26 +253,26 @@
           "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
         ],
         "exit_status": 0,
-        "build_report_sha256": "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769",
+        "build_report_sha256": "79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15",
         "tracked_preselection_receipt": {
           "record_kind": "preselection_compile_spike",
           "packet_id": "round-01-model-theory-compile-spike",
           "receipt_id": "round-01-model-theory-compile-spike-wsl-v2",
           "packet_path": "records/staging/round-01-model-theory-compile-spike/packet.v1.json",
-          "packet_sha256": "a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5",
-          "packet_content_sha256": "3b4e9ccc608e4c8f998ed03c8ee3fd4afe07a62a09b1937e5306d3752bb51493",
+          "packet_sha256": "d58b0d7964c031438e89f28e4c6f627463e72a6272ec115d6d27e3c54110b065",
+          "packet_content_sha256": "c8cff937a896804f8fa2d48232200e3153f14d33174b2e00aee16a963c6ecb36",
           "receipt_path": "records/staging/round-01-model-theory-compile-spike/compile-receipt.v2.json",
-          "receipt_sha256": "7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f",
+          "receipt_sha256": "5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3",
           "receipt_schema": "autolean.library-compile-receipt.v2",
           "source_tree_schema": "autolean.library-build-input-tree.v2",
           "verification_script_sha256": "7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29"
         },
-        "integrity_checksum_sha256": "820256f5f193cd5fc07680bc06fd32e916067b88751148e57363d0f9c46a6dc5"
+        "integrity_checksum_sha256": "6232b36ae37851c2610297456ec0cf43873ae3479cc3ad9a0876b82731b3d86f"
       },
       "assurance": "untrusted_self_reported",
       "external_run_receipt": null
     },
-    "integrity_checksum_sha256": "675e63265ff33b156357b4e893916a9ae7d8649c6fa8197a07dc060bdc0ff9c9"
+    "integrity_checksum_sha256": "262d01e0fc95fe2469ef0fe3f3cf23ebd8b374053d0f886b42390171a4f243d7"
   },
   "disposition": "gap",
   "selected_candidate_id": null,
@@ -283,5 +283,5 @@
     "model_egress": "forbidden",
     "promotion": "forbidden"
   },
-  "integrity_checksum_sha256": "ec37a860bc7b4f803d93da5d8d221b9675ac1dfc7e0d5cb59aac12bf67d1385e"
+  "integrity_checksum_sha256": "76e7841f2a08e4370c7665fb65fd017e3a020e59eb94ca971f32ec8db6a26323"
 }

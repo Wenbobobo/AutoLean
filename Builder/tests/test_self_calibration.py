@@ -208,10 +208,10 @@ def test_round_01_is_a_bound_incomplete_agent_record() -> None:
     assert round_record.compile_spike.state.value == "partial_passed_with_gap"
     assert round_record.compile_spike.receipt is not None
     assert round_record.compile_spike.receipt.evidence.library_input_tree_sha256 == (
-        "1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795"
+        "87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70"
     )
     assert round_record.compile_spike.receipt.evidence.build_report_sha256 == (
-        "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769"
+        "79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15"
     )
     assert round_record.compile_spike.receipt.evidence.dependency_tree_sha256 == (
         "43f889366a4c5dc6daaed5b56cf3704e82e491ff90f2044602a187d7da2bfe62"
@@ -220,10 +220,10 @@ def test_round_01_is_a_bound_incomplete_agent_record() -> None:
     tracked = round_record.compile_spike.receipt.evidence.tracked_preselection_receipt
     assert tracked is not None
     assert tracked.packet_sha256 == (
-        "a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5"
+        "d58b0d7964c031438e89f28e4c6f627463e72a6272ec115d6d27e3c54110b065"
     )
     assert tracked.receipt_sha256 == (
-        "7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f"
+        "5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3"
     )
     assert round_record.compile_spike.receipt.evidence.target_modules == (
         "AutoLeanLibrary",
