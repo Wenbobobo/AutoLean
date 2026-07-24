@@ -19,15 +19,25 @@ from autolean_builder import (
 )
 
 _ROOT = Path(__file__).resolve().parents[1]
-_TRACKED_MANIFEST = _ROOT / "Builder" / "references" / "manifest.v1.json"
 _IGNORED_CACHE = _ROOT / ".cache" / "references"
-_EXPECTED_MANIFEST_SHA256 = "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab"
+_MANIFEST_BINDINGS: dict[str, tuple[Path, str]] = {
+    "v1": (
+        _ROOT / "Builder" / "references" / "manifest.v1.json",
+        "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+    ),
+    "v2": (
+        _ROOT / "Builder" / "references" / "manifest.v2.json",
+        "b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91",
+    ),
+}
+_DEFAULT_MANIFEST_VERSION = "v2"
+_TRACKED_MANIFEST, _EXPECTED_MANIFEST_SHA256 = _MANIFEST_BINDINGS[_DEFAULT_MANIFEST_VERSION]
 _LOCAL_PDF_TEXT_METHOD = "pypdf-pdfreader-extract-text-plain-form-feed-v1"
-_PINNED_PYPDF_VERSION = "6.10.0"
+_PINNED_PYPDF_VERSION = "6.14.2"
 
 
 def _build_parser() -> argparse.ArgumentParser:
-    parser = argparse.ArgumentParser(description=__doc__)
+    parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
     parser.add_argument(
         "action",
         choices=(
@@ -41,6 +51,12 @@ def _build_parser() -> argparse.ArgumentParser:
         ),
     )
     parser.add_argument("reference_id", nargs="?")
+    parser.add_argument(
+        "--manifest-version",
+        choices=tuple(_MANIFEST_BINDINGS),
+        default=_DEFAULT_MANIFEST_VERSION,
+        help="tracked manifest revision to verify; defaults to the current revision",
+    )
     parser.add_argument(
         "--refresh",
         action="store_true",
@@ -76,11 +92,16 @@ def main(argv: Sequence[str] | None = None) -> None:
         parser.error("--input is only valid with a local input action")
     if args.action in {"operator-import-local", "fingerprint-pdf-text"} and args.input is None:
         parser.error(f"{args.action} requires --input")
+    if args.action == "fingerprint-pdf-text" and args.manifest_version != _DEFAULT_MANIFEST_VERSION:
+        parser.error(
+            "fingerprint-pdf-text supports only the current extractor-bound manifest revision"
+        )
 
     try:
+        manifest_path, expected_manifest_sha256 = _MANIFEST_BINDINGS[args.manifest_version]
         manifest = ReferenceManifestV1.load(
-            _TRACKED_MANIFEST,
-            expected_sha256=_EXPECTED_MANIFEST_SHA256,
+            manifest_path,
+            expected_sha256=expected_manifest_sha256,
         )
         cache = ReferenceCache(
             manifest,

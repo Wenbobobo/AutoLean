@@ -416,12 +416,116 @@ def test_cli_does_not_accept_arbitrary_manifest_cache_or_receipt_paths(
     assert "unrecognized arguments" in capsys.readouterr().err
 
 
-def test_cli_manifest_sha_binding_matches_the_tracked_manifest() -> None:
+@pytest.mark.parametrize("revision", ("v1", "v2"))
+def test_cli_manifest_bindings_match_the_tracked_manifests(revision: str) -> None:
+    manifest_path, expected_sha256 = reference_cache_cli._MANIFEST_BINDINGS[revision]
     manifest = ReferenceManifestV1.load(
-        reference_cache_cli._TRACKED_MANIFEST,
-        expected_sha256=reference_cache_cli._EXPECTED_MANIFEST_SHA256,
+        manifest_path,
+        expected_sha256=expected_sha256,
     )
-    assert manifest.manifest_sha256 == reference_cache_cli._EXPECTED_MANIFEST_SHA256
+    assert manifest.manifest_sha256 == expected_sha256
+
+
+def test_cli_defaults_to_the_current_v2_manifest() -> None:
+    parsed = reference_cache_cli._build_parser().parse_args(["list"])
+
+    assert reference_cache_cli._DEFAULT_MANIFEST_VERSION == "v2"
+    assert parsed.manifest_version == "v2"
+    assert reference_cache_cli._MANIFEST_BINDINGS["v2"] == (
+        reference_cache_cli._TRACKED_MANIFEST,
+        reference_cache_cli._EXPECTED_MANIFEST_SHA256,
+    )
+
+
+@pytest.mark.parametrize(
+    ("revision", "expected_sha256", "expected_count"),
+    (
+        (
+            "v1",
+            "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+            4,
+        ),
+        (
+            "v2",
+            "b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91",
+            5,
+        ),
+    ),
+)
+def test_cli_list_dispatches_to_the_selected_manifest(
+    revision: str,
+    expected_sha256: str,
+    expected_count: int,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    reference_cache_cli.main(["list", "--manifest-version", revision])
+
+    payload = json.loads(capsys.readouterr().out)
+    assert payload["manifest_sha256"] == expected_sha256
+    assert len(payload["references"]) == expected_count
+
+
+@pytest.mark.parametrize("revision", ("v3", r"C:\\untrusted\\manifest.json"))
+def test_cli_rejects_unknown_or_path_like_manifest_revisions(
+    revision: str,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    with pytest.raises(SystemExit) as raised:
+        reference_cache_cli.main(["list", "--manifest-version", revision])
+
+    assert raised.value.code == 2
+    assert "invalid choice" in capsys.readouterr().err
+
+
+def test_historical_local_pdf_derivation_fails_closed_while_cached_artifact_verifies(
+    tmp_path: Path,
+) -> None:
+    import pypdf
+
+    payload = _manifest_payload()
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    derived = entries[1]
+    assert isinstance(derived, dict)
+    derivation = derived["derivation"]
+    assert isinstance(derivation, dict)
+    derived.update(
+        {
+            "download_url": None,
+            "acquisition_policy": "local_derivation_only",
+        }
+    )
+    derivation.update(
+        {
+            "kind": "local_pdf_text_extraction",
+            "method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+            "tool_name": "pypdf",
+            "tool_version": "6.10.0",
+            "parent_locator_authority": "manifest_bound",
+        }
+    )
+    manifest = _manifest(tmp_path, payload=payload)
+    cache = ReferenceCache(
+        manifest,
+        tmp_path / "cache",
+        confinement_root=tmp_path,
+    )
+    parent_input = tmp_path / "parent.pdf"
+    parent_input.write_bytes(_PARENT_BYTES)
+    text_input = tmp_path / "historical.txt"
+    text_input.write_bytes(_TEXT_BYTES)
+    cache.operator_import_local(_PARENT_ID, parent_input)
+    cache.operator_import_local(_TEXT_ID, text_input)
+
+    assert pypdf.__version__ == reference_cache_cli._PINNED_PYPDF_VERSION == "6.14.2"
+    with pytest.raises(ReferenceCacheError, match="manifest-pinned local pypdf text derivation"):
+        reference_cache_cli._derive_pdf_text(
+            cache,
+            _TEXT_ID,
+            refresh=True,
+            verified_at=manifest.require(_TEXT_ID).retrieved_at,
+        )
+    assert cache.verify(_TEXT_ID).entry.sha256 == hashlib.sha256(_TEXT_BYTES).hexdigest()
 
 
 def test_pdf_text_serialization_uses_the_versioned_form_feed_boundary() -> None:
