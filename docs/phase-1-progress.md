@@ -3,10 +3,10 @@
 Snapshot: 2026-07-24
 
 Decision: the local architecture has substantial adversarial evidence, but this branch is not a
-Phase 1 release candidate. The remaining blockers include model-theory source-fidelity review and
-Builder admission/freeze, bundle/lease/signer integration, deployed authenticated Builder/verifier
-authorities, authorized external-model evaluation, fixed regression/compare runs, and later
-human-calibrated Builder statements.
+Phase 1 release candidate. Model-theory T3 now has a replayable V2 gap record and remains
+`not_selected`; T5 freeze is therefore blocked. Other remaining work includes authoritative
+bundle/lease/signer integration, deployed Builder/verifier authorities, authorized external-model
+evaluation, fixed regression/compare runs, and later calibrated Builder statements.
 
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
@@ -35,7 +35,7 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Mathlib source-built OCI profile | Verified, local test-only | All nine locked Git sources plus only the JS payload from the official ProofWidgets v0.0.87 release asset entered a fresh exact context; `--no-cache --pull=false --network=none` completed 889/889 targets for `+Mathlib.ModelTheory.Semantics:olean`. Image `autolean/mathlib-worker@sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`; build evidence SHA `bd7576eb489c140704c691aadb80669ed462133b973848b4a49871c0cf5b4aab`; canonical receipt SHA `801959222c195e249e320a0568418d177022c8dbd925b70ad34ee28c0c2e2a90`; canary SHA `95505c212b7bf32b027766399322d3a4af96d2a30cf1b309a869d8f2f64971ce`. The canary observed `∀ (n : Nat), @Eq.{1} Nat n n`, zero axioms, and ignored an invalid `/deps` shadow | Local test-only evidence only: no registry, KMS/mTLS, production signer, promotion attestation, bundle/lease integration, full Mathlib build, FATE claim, or full rerun of the pure-worker adversarial V3 suite |
 | Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
 | Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
-| Builder self-calibration and pilot selection | Partial, technically advanced | The pinned Library packet now includes the kernel-checked `UniversalLK` micro-slice for the classical two-sided `⊥`, `→`, and `∀` fragment: level-indexed formulas, weakening, capture-avoiding instantiation, eigenvariable-safe universal rules, local/global soundness, the level-zero sentence bridge, and retained Bool rejection controls. The clean WSL/ext4 receipt binds source-tree SHA `87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70`, build-report SHA `79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15`, packet-content SHA `c8cff937a896804f8fa2d48232200e3153f14d33174b2e00aee16a963c6ecb36`, and receipt SHA `5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3` | The packet remains `partial_passed_with_gap` and `not_selected`. It is not full LK; source fidelity, independent Builder admission, contract freeze, Prover handoff, promotion, and open-problem claims remain open |
+| Builder self-calibration and pilot selection | T3 gap, `not_selected` | The pinned Library packet includes the kernel-checked `UniversalLK` micro-slice for the classical two-sided `⊥`, `→`, and `∀` fragment: level-indexed formulas, capture-avoiding instantiation, eigenvariable-safe universal rules, local/global soundness, the level-zero sentence bridge, and retained Bool rejection controls. The public-safe V2 decision and rule matrix bind the candidate, manifest/closure, four coarse source spans, compile packet/receipt, and local T4 profile. Local replay confirms those bindings, the retained files, and that a gap decision cannot issue an admission receipt | Replay proves internal consistency only; it does not independently recompute the complete Library input tree or query declarations in the T4 image. Fine-grained source spans, declaration-specific type/axiom evidence, independent semantic review, and authenticated admission-authority verification are missing. The fragment has no existential constructors or sequent-level structural rules; it is not frozen or handed to Prover |
 | Builder reference cache | Verified offline | Four locked source/derived records, including locally extracted Open Logic Project *Sets, Logic, Computation*: source PDF SHA `39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9`, extracted text SHA `285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584`, manifest SHA `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab` | Retained only as local reference/provenance material; no human-calibrated pilot statement is recorded and model egress remains forbidden |
 | HF recovery boundary | Partially closed by operator confirmation | Operator confirmed deletion of the HF archive; no archive material is a migration source | This does not independently prove provider-side access state, credential rotation, or incident closure |
 | Local and remote CI, inventory, and SBOM | Verified in the recorded scope | The staged source-lock/publication increment passed 570 Python and policy tests locally, with two documented Windows skips; current-tree and reachable-history scans, source-lock, inventory, and SPDX checks passed. Draft PR baseline head `76d2092` passed Ubuntu/Windows Python+policy and UI in [run 30082181435](https://github.com/Wenbobobo/AutoLean/actions/runs/30082181435) | The staged increment still requires its own remote run. GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
@@ -45,9 +45,9 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Gate | State | What remains before the gate can close |
 | --- | --- | --- |
 | Local architecture baseline | Verified in the stated local/synthetic scopes | Retain the evidence boundaries; it does not close authoritative Lean/OCI, production authority, or semantic-fidelity gates |
-| Pilot self-calibration | Partial, blocked | The technical freshness micro-slice and rejection controls now compile; reconcile them with independent source-fidelity and Builder-admission review. Agreement or compilation is never a freeze |
-| Pinned Library selection spike | Partial passed with gap | The universal fragment is kernel-checked, but retain `not_selected` until source interpretation, rule boundaries, and admission are independently accepted |
-| Manual Builder calibration | Deferred | Begin only after candidate selection, rights readiness, and domain review; retain normal fidelity/non-vacuity evidence |
+| Pilot self-calibration | T3 gap, blocked | V2 records `gap/not_selected` and replays locally. Close the missing fine spans, axiom evidence, semantic review, and admission-authority checks, or evaluate and record a backup |
+| Pinned Library selection spike | Partial passed with gap | The universal fragment is kernel-checked, but local replay does not select it or establish source fidelity |
+| First calibrated contract slice (T5) | Blocked by T3 | A backup may be evaluated now, but no model-theory statement may freeze until one boundary is admitted with rights and review readiness |
 | Authoritative Prover path | Partially verified | The local test-only mathlib image and focused canary passed; bind a frozen bundle through lease, verifier evidence, signer integration, and rejected controls, then separately close the production-authority and full adversarial-suite gaps |
 | Controlled model/benchmark evaluation | Blocked before egress | Obtain operator authorization, then run fixed suites and ablations as secondary diagnostics; no FATE result closes a Builder or Library gate |
 | Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
@@ -56,41 +56,42 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 
 The conditional primary is first-order model-theory sequent-calculus soundness. The two original
 candidates disagreed over a closed-only conservative formulation versus explicit structural
-freshness and open-formula contexts. The retained packet now contains a kernel-checked calculus and
-soundness theorem for only the `⊥`, `→`, and `∀` fragment, but deliberately remains
-`partial_passed_with_gap` and `not_selected`: it is neither full LK nor a textbook-fidelity or
-admission decision. Selection authority remains independent source-fidelity and Builder-admission
-review, not compilation, a model preference, or a benchmark score. The backups are an abstract
-Cea-type variational-PDE bound and a van Kampen-style topology slice.
+freshness and open-formula contexts. The current `model-theory-closed-level-indexed-fragment`
+revision records the result as a V2 T3 gap: the `⊥`, `→`, and `∀` micro-slice is kernel-checked,
+but remains `not_selected`. Local replay establishes that the gap artifacts consistently bind the
+current manifest, workspace, source anchors, and retained build evidence; it does not establish
+source fidelity or admission authority. The backups remain an abstract Cea-type variational-PDE
+bound and a van Kampen-style topology slice.
 
-The technical spike now uses level-indexed `Formula (Fin n)` sequents internally and exposes
-soundness through an explicit `n = 0` sentence bridge. It implements only the `⊥`, `→`, and `∀`
-fragment and retains capture/freshness rejection controls. This closes the named implementation
-micro-slice, not the source-fidelity or Builder-admission decision: neither original candidate nor
-the new representation is selected, frozen, or human-reviewed by compilation.
+The technical spike uses level-indexed `Formula (Fin n)` sequents internally and exposes soundness
+through an explicit `n = 0` sentence bridge. It implements only the `⊥`, `→`, and `∀` fragment and
+retains capture/freshness rejection controls. Fine-grained source spans, exact source-rule
+variants, the quantifier-encoding equivalence, declaration-specific axiom-query evidence,
+independent semantic review, and authenticated admission authority remain open. The V2 record is
+therefore a durable reason not to freeze this candidate.
 
 Curvature is reference only: mathlib [PR #36036](https://github.com/leanprover-community/mathlib4/pull/36036)
 is an active, open connection/geodesics work-in-progress that includes curvature. No curvature
 mapping, source-to-contract calibration, or upstream duplication is current work.
 
-Before manual Builder calibration, the active work requires:
+Before T5 can begin, the active work requires:
 
-- independent source-fidelity, rule-boundary, and Builder-admission records for the implemented
-  fragment;
+- fine-grained source-span bindings and independent semantic review of the implemented fragment;
+- declaration-specific axiom evidence and authenticated verification of any admission decision;
 - the retained pinned-Library receipt preserving its deliberately limited scope;
-- a complete gap/backup record if admission rejects that representation; and
+- an admitted candidate or a reviewed backup replacing the current `not_selected` state; and
 - an explicit rights decision before any non-local model egress.
 
-Only after that selection may human source-to-contract calibration start. Failure of selection,
-fidelity, expert, or rights gates creates a gap, pauses ingestion, or selects a backup; it never
+Only after that selection may source-to-contract calibration start. A failed selection, fidelity,
+semantic-review, or rights gate retains the gap, pauses ingestion, or selects a backup; it never
 weakens a theorem.
 
 ## Immediate execution order
 
-1. Complete T3 admission: independently review source fidelity and rule boundaries, then record
-   either an admission receipt or an immutable gap/backup decision.
-2. Complete T5 only after admission: calibrate and freeze a coherent source-backed contract slice,
-   preserving rejected mutations and every Builder-owned revision.
+1. Treat the replayable T3 V2 decision as a blocking `gap/not_selected` record. Resolve its named
+   evidence gaps or evaluate the two backups and record which boundary, if any, can proceed.
+2. Keep T5 blocked until one boundary is admitted. Backup source/rule evaluation may proceed, but
+   no statement freeze or Prover bundle may be issued.
 3. Complete T6 against the exact T4 digest: enumerate and bind the complete transitive import
    closure, then carry an unchanged bundle through claim, lease, execution evidence,
    verifier/signer integration, and retained rejected controls.

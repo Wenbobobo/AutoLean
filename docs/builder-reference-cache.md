@@ -123,7 +123,10 @@ peer-reviewed published book as CC BY-SA 4.0:
 ## Exact statement span
 
 `SourceToStatementHarness.prepare_draft` accepts only a verified `text/plain` `derived_text`
-artifact whose parent PDF is also cached and verified. Every `ChapterSourceSpan` must provide:
+artifact whose parent PDF is also cached and verified. Repository-provided text keeps a
+`human_declared` parent-locator policy. Deterministic local PDF extraction instead keeps its
+parent identity `manifest_bound`; the human chapter and page declarations remain separate on
+every statement span. Every `ChapterSourceSpan` must provide:
 
 - nonempty `start_offset` and `end_offset` byte offsets;
 - `permitted_excerpt`;

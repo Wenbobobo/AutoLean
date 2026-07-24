@@ -1,0 +1,379 @@
+{
+  "schema_version": "autolean.pilot-boundary-decision.v2",
+  "manifest_sha256": "aee141516d7773b1f66677d5a846d4160d59b810bbbe2a2677f1ebba930df3a0",
+  "graph_id": "first-order-soundness-conditional",
+  "graph_sha256": "771cb7c9e061d2ec8ace5a5c45b32be897b38586d94e0f25dbfa96d054d948e6",
+  "target_node_id": "mt-soundness-target",
+  "target_closure_sha256": "2a07219baebd263ee44572102561eafa0e20770fc6bf7a9eab54ae8995fdb297",
+  "candidate": {
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "revision": "t3-boundary-v2",
+    "boundary_summary": "Soundness for a closed level-zero theorem boundary backed by a level-indexed, two-sided bottom, implication, and universal fragment with explicit assignments and structural eigenvariable freshness.",
+    "required_mechanisms": [
+      "closed level-zero theorem boundary",
+      "level-indexed open-formula semantics",
+      "capture-avoiding universal instantiation",
+      "fresh-variable universal-right discipline",
+      "two-sided fragment soundness"
+    ],
+    "out_of_scope": [
+      "existential rule constructors",
+      "sequent-level structural rules and cut",
+      "connective rules outside bottom, implication, and universal quantification",
+      "full LK",
+      "completeness",
+      "source-fidelity or admission authority"
+    ],
+    "candidate_sha256": "9e2b9535414bad0c3c9adf55446d60a70452f9052258dcf4cef3105dbe4b2530",
+    "predecessor_revision": "round-01-structural-open-formula-v1",
+    "predecessor_candidate_sha256": "dd5e6b59c6683eb8adc844cb783cc149a3f0d9a0afafd84c5e7942ef06d35181"
+  },
+  "source": {
+    "reference_manifest_sha256": "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+    "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+    "source_artifact_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+    "parent_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+    "parent_artifact_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+    "anchors": [
+      {
+        "anchor_id": "mt-terms-formulas",
+        "start_offset": 158052,
+        "end_offset": 163178,
+        "raw_sha256": "16de81b370496c7546d4c1a392c6310b29f41cc76b051e767cdf211a0b2a3f21",
+        "human_locator": "Chapter 6, Section 6.3, pp. 91-95"
+      },
+      {
+        "anchor_id": "mt-satisfaction",
+        "start_offset": 193351,
+        "end_offset": 202378,
+        "raw_sha256": "37394ba62eff7fd0598a5414bbf863b0f0c006172c6eab7b2fb02da4f861da82",
+        "human_locator": "Chapter 7, Section 7.4, pp. 117-123"
+      },
+      {
+        "anchor_id": "mt-sequent-calculus",
+        "start_offset": 259671,
+        "end_offset": 261613,
+        "raw_sha256": "6a3a1487fc0a86e24390e073f0cce517b6ee0e93d2b7927cdc9f7b45863d8248",
+        "human_locator": "Chapter 10, Section 10.1, pp. 162-163"
+      },
+      {
+        "anchor_id": "mt-sequent-soundness",
+        "start_offset": 282943,
+        "end_offset": 292557,
+        "raw_sha256": "0a2d927a3a90949f15a96960a13b1072c15f930a33639c341dfe83c299e38172",
+        "human_locator": "Chapter 10, Section 10.12, pp. 182-188"
+      }
+    ]
+  },
+  "implementation": {
+    "module_name": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+    "source_path": "Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean",
+    "source_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+    "declarations": [
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Fml",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Body",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.eigenExtend",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.eigenExtend_injective",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.wk",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.wkCtx",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.openLast",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.castSucc_ne_last",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.wk_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.openLast_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.all_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.AllRealize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.AnyRealize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.wkCtx_allRealize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.wkCtx_anyRealize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ValidIn",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.identity",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.falsumLeft",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impLeft",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impRight",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allLeft",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allRight",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.identity_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.falsumLeft_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impLeft_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impRight_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allLeft_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allRight_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close_sequent_realize",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ClosedAll",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ClosedAny",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.closedAll_iff",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.closedAny_iff",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_premise_valid",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_allRight_is_unsound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_premise_valid",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_is_unsound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.naive_capture_would_be_true",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0_capture_avoiding_control"
+    ],
+    "compile_chain": [
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+      "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
+    ],
+    "compile_packet_path": "Library/records/staging/round-01-model-theory-compile-spike/packet.v1.json",
+    "compile_packet_sha256": "d58b0d7964c031438e89f28e4c6f627463e72a6272ec115d6d27e3c54110b065",
+    "compile_packet_content_sha256": "c8cff937a896804f8fa2d48232200e3153f14d33174b2e00aee16a963c6ecb36",
+    "compile_receipt_path": "Library/records/staging/round-01-model-theory-compile-spike/compile-receipt.v2.json",
+    "compile_receipt_sha256": "5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3",
+    "build_report_sha256": "79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15",
+    "library_input_tree_sha256": "87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70"
+  },
+  "formal_profile": {
+    "lean_toolchain": "leanprover/lean4:v4.28.0",
+    "toolchain_sha256": "26df5f74b79af0cd9e298b6583993699a54938d047ba1919428da80d3ae80c6e",
+    "lean_version": "v4.28.0",
+    "lean_build_identity": "Lean (version 4.28.0, x86_64-unknown-linux-gnu, commit 7e01a1bf5c70fc6167d49c345d3bf80596e9a79b, Release)",
+    "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+    "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
+    "environment_sha256": "f4649c75ba59c358af7126121b681135a9024d93a94b45da6c35a6475cd45174",
+    "imports_allowlist": [
+      "Mathlib.ModelTheory.Semantics"
+    ],
+    "axioms_allowlist": [],
+    "axiom_profile": "strict",
+    "axiom_evidence_sha256": null,
+    "proof_slot_profile": "lean-exact-declaration-boundary.v1",
+    "allowed_write_paths": [
+      "Proof.lean"
+    ],
+    "worker_image_digest": "sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff"
+  },
+  "rule_matrix": [
+    {
+      "rule_id": "closed-sequent-boundary",
+      "source_anchor_ids": [
+        "mt-terms-formulas",
+        "mt-satisfaction",
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Fml",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close_realize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.close_sequent_realize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ClosedAll",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ClosedAny",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "The level-zero realization bridge is proved, but no admitted translation from every source sequent and rule derivation is retained."
+    },
+    {
+      "rule_id": "identity",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.identity",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.identity_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "Kernel soundness is retained while the exact source rule shape and its relation to structural rules remain unbound."
+    },
+    {
+      "rule_id": "bottom-left",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.falsumLeft",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.falsumLeft_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "The constructor is sound, but the fine-grained source rule span is not retained."
+    },
+    {
+      "rule_id": "implication-left",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impLeft",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impLeft_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "The candidate shares contexts between premises; the exact source context discipline is not admitted."
+    },
+    {
+      "rule_id": "implication-right",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impRight",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.impRight_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "The constructor is sound, but the fine-grained source rule span is not retained."
+    },
+    {
+      "rule_id": "universal-left",
+      "source_anchor_ids": [
+        "mt-terms-formulas",
+        "mt-satisfaction",
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0_realize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allLeft",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allLeft_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "Capture avoidance is proved, while the source closed-term and free-for side conditions are not bound to the internal Term (Fin n) representation."
+    },
+    {
+      "rule_id": "universal-right",
+      "source_anchor_ids": [
+        "mt-terms-formulas",
+        "mt-satisfaction",
+        "mt-sequent-calculus",
+        "mt-sequent-soundness"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.eigenExtend",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.eigenExtend_injective",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.wk",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.wkCtx",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.openLast",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.castSucc_ne_last",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.wkCtx_allRealize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.wkCtx_anyRealize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.openLast_realize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allRight",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.allRight_sound"
+      ],
+      "coverage_state": "unverified",
+      "rationale": "Structural freshness and soundness are proved, while equivalence to the source fresh-symbol discipline remains unadmitted."
+    },
+    {
+      "rule_id": "existential-left",
+      "source_anchor_ids": [
+        "mt-sequent-calculus",
+        "mt-sequent-soundness"
+      ],
+      "implementation_declarations": [],
+      "coverage_state": "blocking_gap",
+      "rationale": "The candidate has only a rejection control and no existential-left rule constructor or soundness theorem."
+    },
+    {
+      "rule_id": "existential-right",
+      "source_anchor_ids": [
+        "mt-terms-formulas",
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [],
+      "coverage_state": "blocking_gap",
+      "rationale": "No existential-right rule constructor or soundness theorem is implemented."
+    },
+    {
+      "rule_id": "structural-rules-and-cut",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [],
+      "coverage_state": "blocking_gap",
+      "rationale": "No sequent-level exchange, weakening, contraction, cut constructors, or admissibility theorems are retained."
+    },
+    {
+      "rule_id": "other-connective-rules",
+      "source_anchor_ids": [
+        "mt-sequent-calculus"
+      ],
+      "implementation_declarations": [],
+      "coverage_state": "blocking_gap",
+      "rationale": "The candidate intentionally omits connective rules outside bottom, implication, and universal quantification; the exact source inventory is not yet bound."
+    },
+    {
+      "rule_id": "candidate-soundness",
+      "source_anchor_ids": [
+        "mt-satisfaction",
+        "mt-sequent-soundness"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.AllRealize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Side.AnyRealize",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.ValidIn",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.sound",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound"
+      ],
+      "coverage_state": "exact",
+      "rationale": "Lean proves soundness for every constructor in the implemented fragment; this exact result does not establish source-calculus fidelity."
+    },
+    {
+      "rule_id": "capture-and-freshness-controls",
+      "source_anchor_ids": [
+        "mt-terms-formulas",
+        "mt-satisfaction",
+        "mt-sequent-soundness"
+      ],
+      "implementation_declarations": [
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_premise_valid",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_allRight_is_unsound",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_premise_valid",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_is_unsound",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.naive_capture_would_be_true",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0_capture_avoiding_control"
+      ],
+      "coverage_state": "exact",
+      "rationale": "The concrete Bool countermodels establish the stated candidate mutation controls, not completeness or source fidelity."
+    }
+  ],
+  "rule_matrix_sha256": "2fa7a00a8bb51a832b1ce3fb56ed427f691d727f2434ec7db825d185baa509f8",
+  "agent_reviews": [
+    {
+      "role": "source_interpreter",
+      "reviewer_id": "agent:t3-source-interpreter",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "t3-source-binding-audit",
+      "context_pack_sha256": "73e2f78a427dbad24016da6d92fbb72d14ec8f8851876b4be005b8799f49d56f",
+      "output_sha256": "c0134145a9f711723636b115a41f12be643e7ddd98fee54247547d8824673198",
+      "execution_run_receipt_sha256": "b323aaab8b0262aa22e384adde3cf57b38e184924b3ebed24e844441445c74a3",
+      "review_state": "pending",
+      "claims_human_or_expert_authority": false
+    },
+    {
+      "role": "adversarial_reviewer",
+      "reviewer_id": "agent:t3-adversarial-gap-review",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "t3-adversarial-boundary-review",
+      "context_pack_sha256": "9edff32f281a29a127ad27c7795109ade98bc2d293b3c240939155c4e10ea06f",
+      "output_sha256": "0571395ff17d1adfa51849f1f543ab30ffe5832d45aa38740c44347b0c1fefff",
+      "execution_run_receipt_sha256": "aea982aff6cdc1b96178a3ad5af6f25357ce19490ab259a50e9310fdd27fee37",
+      "review_state": "rejected",
+      "claims_human_or_expert_authority": false
+    }
+  ],
+  "disposition": "gap",
+  "blocker_ids": [
+    "fine-grained-source-anchors-missing",
+    "source-rule-variants-unverified",
+    "quantifier-encoding-equivalence-unverified",
+    "axiom-query-evidence-missing",
+    "operator-admission-authority-missing"
+  ],
+  "non_claims": [
+    "no_human_or_expert_review",
+    "not_full_lk",
+    "no_completeness_claim",
+    "not_a_frozen_contract",
+    "no_prover_handoff",
+    "no_promotion",
+    "no_open_problem_claim",
+    "no_model_egress_authorization"
+  ],
+  "authority": "automated_agent_evidence_only",
+  "issued_at": "2026-07-24T14:42:41Z"
+}

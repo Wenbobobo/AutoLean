@@ -55,6 +55,7 @@ from .reference_cache import (
     ReferenceArtifactKind,
     ReferenceCache,
     ReferenceCacheError,
+    ReferenceDerivationKind,
     ReferenceDerivationV1,
     ReferenceEgressPolicy,
     ReferenceEntryV1,
@@ -671,10 +672,18 @@ class SourceToStatementHarness:
             entry.artifact_kind is not ReferenceArtifactKind.DERIVED_TEXT
             or entry.media_type != "text/plain"
             or derivation is None
-            or derivation.parent_locator_authority is not ParentLocatorAuthority.HUMAN_DECLARED
         ):
             raise SourceHarnessError(
-                "statement drafts require derived text with a human-declared parent locator policy"
+                "statement drafts require derived text with manifest-typed provenance"
+            )
+        if derivation.kind is ReferenceDerivationKind.LOCAL_PDF_TEXT_EXTRACTION:
+            if derivation.parent_locator_authority is not ParentLocatorAuthority.MANIFEST_BOUND:
+                raise SourceHarnessError(
+                    "local PDF derived text requires a manifest-bound parent locator policy"
+                )
+        elif derivation.parent_locator_authority is not ParentLocatorAuthority.HUMAN_DECLARED:
+            raise SourceHarnessError(
+                "repository-derived text requires a human-declared parent locator policy"
             )
         return derivation
 

@@ -1,0 +1,147 @@
+{
+  "schema_version": "autolean.pilot-automated-review-evidence.v2",
+  "artifact_kind": "public_safe_t3_automated_review_evidence",
+  "candidate_id": "model-theory-closed-level-indexed-fragment",
+  "candidate_revision": "t3-boundary-v2",
+  "public_source_rule_matrix_path": "Builder/pilots/model-theory-admission/source-rule-matrix.v2.json",
+  "public_source_rule_matrix_sha256": "261b95e48aba36e3eb04b0f40fbf46eddbe39685b53bc5d8f2e40a9382662c65",
+  "report_context_policy": "Each report retains the public matrix digest it actually reviewed; a historical report digest may differ from the current public projection.",
+  "reports": [
+    {
+      "role": "source_interpreter",
+      "reviewer_id": "agent:t3-source-interpreter",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "t3-source-binding-audit",
+      "context_pack": {
+        "schema_version": "autolean.pilot-review-context.v2",
+        "review_scope": "source_binding_and_rule_correspondence",
+        "manifest_sha256": "aee141516d7773b1f66677d5a846d4160d59b810bbbe2a2677f1ebba930df3a0",
+        "graph_id": "first-order-soundness-conditional",
+        "target_node_id": "mt-soundness-target",
+        "candidate_id": "model-theory-closed-level-indexed-fragment",
+        "candidate_revision": "t3-boundary-v2",
+        "source_anchor_ids": [
+          "mt-terms-formulas",
+          "mt-satisfaction",
+          "mt-sequent-calculus",
+          "mt-sequent-soundness"
+        ],
+        "implementation_source_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+        "public_source_rule_matrix_sha256": "ef76f6bfa371d475d9b4d8660710c1fd4c366f0c484ce92d3ec6a0b69cc25881",
+        "source_material_policy": "local_only_hash_verification_and_public_safe_notes"
+      },
+      "output": {
+        "schema_version": "autolean.pilot-review-output.v2",
+        "disposition": "gap",
+        "review_state": "pending",
+        "findings": [
+          {
+            "finding_id": "granular-source-spans-missing",
+            "classification": "blocking_gap",
+            "summary": "The four retained coarse spans do not bind every fine-grained substitution, quantifier-rule, and side-condition locator used by the public-safe interpretation."
+          },
+          {
+            "finding_id": "quantifier-encoding-unverified",
+            "classification": "unverified",
+            "summary": "The level-indexed free-variable encoding is kernel-sound for the implemented fragment, but its equivalence to the source fresh-symbol discipline is not admitted."
+          },
+          {
+            "finding_id": "closed-boundary-translation-incomplete",
+            "classification": "unverified",
+            "summary": "The level-zero realization bridge is proved, while a rule-by-rule translation from the source closed calculus to the candidate derivation type is not retained."
+          }
+        ],
+        "claims_human_or_expert_authority": false,
+        "contains_source_excerpt": false
+      },
+      "execution_run_receipt": {
+        "schema_version": "autolean.pilot-review-run-receipt.v2",
+        "run_id": "t3-source-interpreter-public-safe-audit",
+        "execution_mode": "local_read_only_automated_agent",
+        "network_used": false,
+        "source_text_emitted": false,
+        "files_modified": false,
+        "assurance": "untrusted_self_reported",
+        "raw_log_retained": false
+      },
+      "review_state": "pending",
+      "claims_human_or_expert_authority": false
+    },
+    {
+      "role": "adversarial_reviewer",
+      "reviewer_id": "agent:t3-adversarial-gap-review",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "t3-adversarial-boundary-review",
+      "context_pack": {
+        "schema_version": "autolean.pilot-review-context.v2",
+        "review_scope": "candidate_scope_and_admission_failure_modes",
+        "manifest_sha256": "aee141516d7773b1f66677d5a846d4160d59b810bbbe2a2677f1ebba930df3a0",
+        "graph_id": "first-order-soundness-conditional",
+        "target_node_id": "mt-soundness-target",
+        "candidate_id": "model-theory-closed-level-indexed-fragment",
+        "candidate_revision": "t3-boundary-v2",
+        "source_anchor_ids": [
+          "mt-terms-formulas",
+          "mt-satisfaction",
+          "mt-sequent-calculus",
+          "mt-sequent-soundness"
+        ],
+        "implementation_source_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+        "public_source_rule_matrix_sha256": "ef76f6bfa371d475d9b4d8660710c1fd4c366f0c484ce92d3ec6a0b69cc25881",
+        "source_material_policy": "public_safe_artifacts_only"
+      },
+      "output": {
+        "schema_version": "autolean.pilot-review-output.v2",
+        "disposition": "gap",
+        "review_state": "rejected",
+        "findings": [
+          {
+            "finding_id": "structural-rules-absent",
+            "classification": "blocking_gap",
+            "summary": "Free-variable relabelling is not sequent weakening, exchange, contraction, or cut, and no corresponding constructors or admissibility theorems are retained."
+          },
+          {
+            "finding_id": "existential-rules-absent",
+            "classification": "blocking_gap",
+            "summary": "The existential-left declarations are rejection controls only, and neither existential rule is implemented."
+          },
+          {
+            "finding_id": "axiom-query-not-retained",
+            "classification": "blocking_gap",
+            "summary": "The clean compile receipt does not contain declaration-specific axiom-query evidence for the candidate theorem."
+          },
+          {
+            "finding_id": "operator-authority-absent",
+            "classification": "blocking_gap",
+            "summary": "Automated evidence cannot issue Builder admission authority."
+          }
+        ],
+        "claims_human_or_expert_authority": false,
+        "contains_source_excerpt": false
+      },
+      "execution_run_receipt": {
+        "schema_version": "autolean.pilot-review-run-receipt.v2",
+        "run_id": "t3-adversarial-public-gap-record",
+        "execution_mode": "public_safe_artifact_authoring_automated_agent",
+        "network_used": false,
+        "source_text_emitted": false,
+        "files_modified": true,
+        "output_artifact_sha256": "ef76f6bfa371d475d9b4d8660710c1fd4c366f0c484ce92d3ec6a0b69cc25881",
+        "assurance": "untrusted_self_reported",
+        "raw_log_retained": false
+      },
+      "review_state": "rejected",
+      "claims_human_or_expert_authority": false
+    }
+  ],
+  "authority_boundary": {
+    "human_review_present": false,
+    "expert_review_present": false,
+    "authenticated_independence_present": false,
+    "operator_admission_authority_present": false,
+    "may_issue_admission_receipt": false
+  },
+  "contains_source_excerpt": false,
+  "contains_local_cache_path": false,
+  "contains_prompt_or_raw_log": false
+}

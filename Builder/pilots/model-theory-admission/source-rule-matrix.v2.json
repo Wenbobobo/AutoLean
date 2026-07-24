@@ -1,0 +1,350 @@
+{
+  "schema_version": "autolean.public-source-rule-matrix.v2",
+  "artifact_kind": "public_safe_t3_gap_record",
+  "candidate": {
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "candidate_revision": "t3-boundary-v2",
+    "implementation_module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+    "implemented_fragment": [
+      "bottom",
+      "implication",
+      "universal_quantification"
+    ]
+  },
+  "disposition": {
+    "t3_admission": "gap",
+    "selection": "not_selected",
+    "statement_contract": "not_frozen",
+    "prover_handoff": "forbidden",
+    "promotion": "forbidden",
+    "open_problem_claim": "forbidden"
+  },
+  "authority_boundary": {
+    "record_kind": "automated_technical_cross_check",
+    "human_review_present": false,
+    "expert_review_present": false,
+    "builder_admission_authority_present": false,
+    "may_issue_admission_receipt": false
+  },
+  "source_binding": {
+    "source_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+    "source_pdf_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+    "derived_text_reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+    "derived_text_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+    "reference_manifest_sha256": "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+    "license_expression": "CC-BY-4.0",
+    "model_egress_policy": "local_only",
+    "contains_source_excerpt": false,
+    "contains_local_cache_path": false
+  },
+  "status_vocabulary": {
+    "exact": "Kernel evidence exactly establishes the matrix row as stated about the implemented candidate; it does not imply source fidelity.",
+    "deliberate_subset": "The candidate intentionally implements less than the source-facing scope.",
+    "unverified": "A declaration mapping exists, but its exact source correspondence or side-condition interpretation is not yet admitted.",
+    "missing": "The source-facing feature has no candidate rule constructor or required binding."
+  },
+  "coarse_source_anchors": [
+    {
+      "anchor_id": "mt-terms-formulas",
+      "human_locator": "Chapter 6, Section 6.3, pp. 91-95",
+      "start_offset": 158052,
+      "end_offset": 163178,
+      "raw_sha256": "16de81b370496c7546d4c1a392c6310b29f41cc76b051e767cdf211a0b2a3f21",
+      "span_binding_state": "bound_existing"
+    },
+    {
+      "anchor_id": "mt-satisfaction",
+      "human_locator": "Chapter 7, Section 7.4, pp. 117-123",
+      "start_offset": 193351,
+      "end_offset": 202378,
+      "raw_sha256": "37394ba62eff7fd0598a5414bbf863b0f0c006172c6eab7b2fb02da4f861da82",
+      "span_binding_state": "bound_existing"
+    },
+    {
+      "anchor_id": "mt-sequent-calculus",
+      "human_locator": "Chapter 10, Section 10.1, pp. 162-163",
+      "start_offset": 259671,
+      "end_offset": 261613,
+      "raw_sha256": "6a3a1487fc0a86e24390e073f0cce517b6ee0e93d2b7927cdc9f7b45863d8248",
+      "span_binding_state": "bound_existing"
+    },
+    {
+      "anchor_id": "mt-sequent-soundness",
+      "human_locator": "Chapter 10, Section 10.12, pp. 182-188",
+      "start_offset": 282943,
+      "end_offset": 292557,
+      "raw_sha256": "0a2d927a3a90949f15a96960a13b1072c15f930a33639c341dfe83c299e38172",
+      "span_binding_state": "bound_existing"
+    }
+  ],
+  "required_fine_source_anchors": [
+    {
+      "requirement_id": "free-bound-occurrences-and-sentences",
+      "human_locator": "Section 6.8, Definitions 6.33-6.37, PDF pages 128-129 / printed pages 107-108",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "capture-avoiding-substitution-and-free-for",
+      "human_locator": "Section 6.9, Definitions 6.38-6.41, PDF pages 130-131 / printed pages 109-110",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "open-formula-satisfaction-and-assignment-update",
+      "human_locator": "Section 7.4, Definitions 7.7-7.11, PDF pages 139-141 / printed pages 118-120",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "sentence-satisfaction-assignment-independence",
+      "human_locator": "Section 7.5, Corollary 7.15 and Definitions 7.16-7.17, PDF page 148 / printed page 127",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "semantic-substitution",
+      "human_locator": "Proposition 7.23, PDF page 150 / printed page 129",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "closed-term-quantifier-instances",
+      "human_locator": "Proposition 7.31, PDF page 153 / printed page 132",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "closed-sequent-boundary",
+      "human_locator": "Section 10.1, Definition 10.1, PDF page 183 / printed page 162",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "lk-rule-inventory-and-side-conditions",
+      "human_locator": "Section 10.3, PDF pages 185-186 / printed pages 164-165",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    },
+    {
+      "requirement_id": "lk-validity-and-soundness",
+      "human_locator": "Definition 10.27 and Theorem 10.28, PDF page 204 / printed page 183; universal-right case at PDF page 208 / printed page 187",
+      "start_offset": null,
+      "end_offset": null,
+      "raw_sha256": null,
+      "span_binding_state": "missing"
+    }
+  ],
+  "rule_matrix": [
+    {
+      "matrix_id": "closed-sequent-boundary",
+      "source_facing_requirement": "Both sequent sides are sequences of closed sentences.",
+      "side_conditions": [
+        "The public theorem boundary is closed."
+      ],
+      "universal_lk_declarations": [
+        "Fml",
+        "Side",
+        "close",
+        "close_realize",
+        "close_sequent_realize",
+        "ClosedAll",
+        "ClosedAny",
+        "Deriv.closed_sound"
+      ],
+      "status": "unverified",
+      "reason": "The level-zero realization bridge is proved, but no admitted translation from every source sequent and rule derivation is retained."
+    },
+    {
+      "matrix_id": "identity",
+      "source_facing_requirement": "An identity initial sequent preserves the principal formula across both sides.",
+      "side_conditions": [],
+      "universal_lk_declarations": [
+        "Deriv.identity",
+        "Deriv.identity_sound"
+      ],
+      "status": "unverified",
+      "reason": "The candidate constructor includes surrounding contexts. The exact source rule shape and any dependence on structural weakening remain unbound."
+    },
+    {
+      "matrix_id": "bottom-left",
+      "source_facing_requirement": "Bottom in the antecedent closes the branch.",
+      "side_conditions": [],
+      "universal_lk_declarations": [
+        "Deriv.falsumLeft",
+        "Deriv.falsumLeft_sound"
+      ],
+      "status": "unverified",
+      "reason": "Kernel soundness is proved, but the fine-grained Section 10.3 source span is missing."
+    },
+    {
+      "matrix_id": "implication-left",
+      "source_facing_requirement": "Implication-left is justified by an antecedent case and a consequent case.",
+      "side_conditions": [
+        "The source context-sharing or context-splitting variant must be identified."
+      ],
+      "universal_lk_declarations": [
+        "Deriv.impLeft",
+        "Deriv.impLeft_sound"
+      ],
+      "status": "unverified",
+      "reason": "The candidate shares the same Gamma and Delta between both premises. No source-bound equivalence to another context discipline is recorded."
+    },
+    {
+      "matrix_id": "implication-right",
+      "source_facing_requirement": "Implication-right moves the antecedent formula into the premise and the consequent formula into the succedent.",
+      "side_conditions": [],
+      "universal_lk_declarations": [
+        "Deriv.impRight",
+        "Deriv.impRight_sound"
+      ],
+      "status": "unverified",
+      "reason": "Kernel soundness is proved, but the fine-grained Section 10.3 source span is missing."
+    },
+    {
+      "matrix_id": "universal-left",
+      "source_facing_requirement": "Universal-left uses a capture-avoiding term instance satisfying the source term condition.",
+      "side_conditions": [
+        "The source witness is a closed term relative to the active source language.",
+        "The term is free for the bound variable."
+      ],
+      "universal_lk_declarations": [
+        "inst0",
+        "inst0_realize",
+        "Deriv.allLeft",
+        "Deriv.allLeft_sound"
+      ],
+      "status": "unverified",
+      "reason": "Capture avoidance is kernel-checked. The correspondence between a source closed term and Term (Fin n) at internal levels is not source-bound."
+    },
+    {
+      "matrix_id": "universal-right",
+      "source_facing_requirement": "Universal-right uses an eigen symbol absent from the entire lower sequent.",
+      "side_conditions": [
+        "The eigen symbol is fresh from both lower-sequent sides.",
+        "Only the quantified body is opened at the fresh symbol."
+      ],
+      "universal_lk_declarations": [
+        "eigenExtend",
+        "eigenExtend_injective",
+        "wk",
+        "wkCtx",
+        "openLast",
+        "castSucc_ne_last",
+        "wkCtx_allRealize",
+        "wkCtx_anyRealize",
+        "openLast_realize",
+        "Deriv.allRight",
+        "Deriv.allRight_sound"
+      ],
+      "status": "unverified",
+      "reason": "Structural freshness and soundness are kernel-checked. Equivalence between the source fresh constant discipline and a new Fin level remains unadmitted."
+    },
+    {
+      "matrix_id": "existential-left",
+      "source_facing_requirement": "Existential-left requires an eigen symbol fresh from the lower sequent.",
+      "side_conditions": [
+        "The eigen symbol is absent from the entire lower sequent."
+      ],
+      "universal_lk_declarations": [],
+      "status": "missing",
+      "reason": "The candidate has only a rejection control and no existential-left rule constructor or soundness theorem."
+    },
+    {
+      "matrix_id": "existential-right",
+      "source_facing_requirement": "Existential-right uses a capture-avoiding term instance satisfying the source term condition.",
+      "side_conditions": [
+        "The source witness is a closed term relative to the active source language.",
+        "The term is free for the bound variable."
+      ],
+      "universal_lk_declarations": [],
+      "status": "missing",
+      "reason": "Deriv has no existential-right constructor or local soundness theorem."
+    },
+    {
+      "matrix_id": "structural-rules-and-cut",
+      "source_facing_requirement": "Any source exchange, weakening, contraction, or cut rules must be mapped explicitly or proved admissible.",
+      "side_conditions": [
+        "List order and context multiplicity must be preserved or justified."
+      ],
+      "universal_lk_declarations": [],
+      "status": "missing",
+      "reason": "No sequent-level structural rule constructors or admissibility theorems are present. wk and wkCtx relabel free variables and are not structural weakening."
+    },
+    {
+      "matrix_id": "other-connective-rules",
+      "source_facing_requirement": "Every source connective rule outside bottom, implication, and universal quantification must be implemented or explicitly excluded.",
+      "side_conditions": [
+        "The exact source rule inventory must be bound before an exclusion can be reviewed."
+      ],
+      "universal_lk_declarations": [],
+      "status": "missing",
+      "reason": "The candidate omits connective rules outside bottom, implication, and universal quantification; the exact source inventory is not yet bound."
+    },
+    {
+      "matrix_id": "candidate-soundness",
+      "source_facing_requirement": "Every implemented rule preserves the candidate two-sided realization semantics.",
+      "side_conditions": [
+        "All antecedent formulas realize under the explicit assignment.",
+        "At least one succedent formula realizes under the explicit assignment."
+      ],
+      "universal_lk_declarations": [
+        "Side.AllRealize",
+        "Side.AnyRealize",
+        "ValidIn",
+        "Deriv.sound",
+        "Deriv.closed_sound"
+      ],
+      "status": "exact",
+      "reason": "Lean proves this statement for the candidate inductive calculus. This exact kernel result does not establish that the candidate is the source calculus."
+    },
+    {
+      "matrix_id": "capture-and-freshness-controls",
+      "source_facing_requirement": "Known capture and eigenvariable reuse mutations must change validity in retained countermodels.",
+      "side_conditions": [
+        "Controls are evidence against specific unsound encodings, not completeness evidence."
+      ],
+      "universal_lk_declarations": [
+        "reused_old_variable_premise_valid",
+        "reused_old_variable_allRight_is_unsound",
+        "reused_old_variable_existsLeft_premise_valid",
+        "reused_old_variable_existsLeft_is_unsound",
+        "naive_capture_would_be_true",
+        "inst0_capture_avoiding_control"
+      ],
+      "status": "exact",
+      "reason": "The candidate's concrete Bool controls are kernel-checked for the stated mutations."
+    }
+  ],
+  "known_translation_risks": [
+    "The source-facing closed-sentence calculus is represented internally by open formulas indexed by Fin levels.",
+    "A source fresh constant is represented by Fin.last at a new free-variable level.",
+    "Universal-left accepts Term (Fin n) internally; its exact relation to the source closed-term condition is not admitted.",
+    "Implication-left uses shared contexts whose exact relation to the source rule variant is unverified.",
+    "Head-oriented List constructors have no recorded exchange or structural admissibility layer.",
+    "Existential rule constructors and all sequent-level structural rules are absent."
+  ],
+  "lean_cannot_establish": [
+    "Correctness of source locators or source-span interpretation",
+    "Fidelity of the candidate rule variants to the source calculus",
+    "Completeness of the source rule inventory",
+    "Authority or independence of a reviewer",
+    "Builder admission, statement freeze, Prover handoff, promotion, or open-problem progress"
+  ]
+}

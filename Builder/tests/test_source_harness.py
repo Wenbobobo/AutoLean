@@ -3,7 +3,7 @@ from __future__ import annotations
 import hashlib
 import json
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass, replace
+from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Barrier
@@ -113,7 +113,44 @@ def _entry_payload(
     }
 
 
-def _manifest(tmp_path: Path) -> ReferenceManifestV1:
+def _manifest(
+    tmp_path: Path,
+    *,
+    local_pdf_derived_text: bool = False,
+    parent_locator_authority: str | None = None,
+) -> ReferenceManifestV1:
+    derivation: dict[str, object] = {
+        "kind": "repository_text_extraction",
+        "parent_reference_id": _PARENT_ID,
+        "parent_sha256": _PARENT_SHA256,
+        "producer": "Official repository",
+        "method": "repository_provided_text_bitstream",
+        "tool_name": None,
+        "tool_version": None,
+        "provenance_url": "https://example.invalid/record",
+        "parent_locator_authority": parent_locator_authority or "human_declared",
+    }
+    text_entry = _entry_payload(
+        reference_id=_TEXT_ID,
+        data=_TEXT_BYTES,
+        media_type="text/plain",
+        extension=".txt",
+        artifact_kind="derived_text",
+        derivation=derivation,
+    )
+    if local_pdf_derived_text:
+        text_entry["download_url"] = None
+        text_entry["acquisition_policy"] = "local_derivation_only"
+        derivation.update(
+            {
+                "kind": "local_pdf_text_extraction",
+                "producer": "AutoLean local reference cache",
+                "method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+                "tool_name": "pypdf",
+                "tool_version": "6.10.0",
+                "parent_locator_authority": parent_locator_authority or "manifest_bound",
+            }
+        )
     payload = {
         "schema_version": "autolean.reference-manifest.v1",
         "entries": [
@@ -125,24 +162,7 @@ def _manifest(tmp_path: Path) -> ReferenceManifestV1:
                 artifact_kind="source_document",
                 derivation=None,
             ),
-            _entry_payload(
-                reference_id=_TEXT_ID,
-                data=_TEXT_BYTES,
-                media_type="text/plain",
-                extension=".txt",
-                artifact_kind="derived_text",
-                derivation={
-                    "kind": "repository_text_extraction",
-                    "parent_reference_id": _PARENT_ID,
-                    "parent_sha256": _PARENT_SHA256,
-                    "producer": "Official repository",
-                    "method": "repository_provided_text_bitstream",
-                    "tool_name": None,
-                    "tool_version": None,
-                    "provenance_url": "https://example.invalid/record",
-                    "parent_locator_authority": "human_declared",
-                },
-            ),
+            text_entry,
         ],
     }
     path = tmp_path / "manifest.json"
@@ -150,7 +170,7 @@ def _manifest(tmp_path: Path) -> ReferenceManifestV1:
     return ReferenceManifestV1.load(path)
 
 
-def _cache(tmp_path: Path) -> ReferenceCache:
+def _cache(tmp_path: Path, *, local_pdf_derived_text: bool = False) -> ReferenceCache:
     data_by_id = {_PARENT_ID: _PARENT_BYTES, _TEXT_ID: _TEXT_BYTES}
 
     def download(entry: ReferenceEntryV1, destination: BinaryIO) -> DownloadObservation:
@@ -162,13 +182,18 @@ def _cache(tmp_path: Path) -> ReferenceCache:
         )
 
     cache = ReferenceCache(
-        _manifest(tmp_path),
+        _manifest(tmp_path, local_pdf_derived_text=local_pdf_derived_text),
         tmp_path / "cache",
         confinement_root=tmp_path,
         downloader=download,
     )
     cache.operator_fetch(_PARENT_ID)
-    cache.operator_fetch(_TEXT_ID)
+    if local_pdf_derived_text:
+        extracted_text = tmp_path / "local-pypdf-extract.txt"
+        extracted_text.write_bytes(_TEXT_BYTES)
+        cache.operator_import_local(_TEXT_ID, extracted_text)
+    else:
+        cache.operator_fetch(_TEXT_ID)
     return cache
 
 
@@ -237,6 +262,8 @@ def _request(
     excerpt: str = _EXCERPT,
     start_offset: int = _EXCERPT_START,
     end_offset: int = _EXCERPT_END,
+    chapter_locator: str = "chapter:60",
+    page_locator: str = "pdf:page:517",
 ) -> StatementDraftRequest:
     return StatementDraftRequest(
         contract_key="geometry.curvature-skew",
@@ -245,8 +272,8 @@ def _request(
         spans=(
             ChapterSourceSpan(
                 span_key="curvature-definition",
-                human_declared_chapter_locator="chapter:60",
-                human_declared_page_locator="pdf:page:517",
+                human_declared_chapter_locator=chapter_locator,
+                human_declared_page_locator=page_locator,
                 permitted_excerpt=excerpt,
                 source_analyst_id="source-analyst",
                 verified_artifact_sha256=artifact_sha256,
@@ -304,6 +331,80 @@ def test_verified_text_byte_span_builds_only_a_parent_bound_draft(tmp_path: Path
         },
     )
     assert packet.contract.rights.allowed_endpoint_classes == (EndpointClassV1.LOCAL,)
+
+
+def test_v1_packet_canonical_hash_uses_the_original_payload_shape(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    packet = _harness(tmp_path, cache).prepare_draft(_TEXT_ID, _request())
+    expected_payload = {
+        "schema_version": "autolean.statement-draft-packet.v1",
+        "preparation_id": packet.preparation_id.model_dump(mode="json"),
+        "contract": packet.contract.model_dump(mode="json", exclude_none=False),
+        "reference_id": packet.reference_id,
+        "manifest_sha256": packet.manifest_sha256,
+        "artifact_sha256": packet.artifact_sha256,
+        "parent_reference_id": packet.parent_reference_id,
+        "parent_artifact_sha256": packet.parent_artifact_sha256,
+        "rights_record": packet.rights_record.model_dump(mode="json", exclude_none=False),
+        "spans": tuple(asdict(span) for span in packet.spans),
+        "pilot_admission": None,
+    }
+
+    assert packet.preparation_record().packet_sha256 == source_harness_module._canonical_sha256(
+        expected_payload
+    )
+
+
+def test_manifest_bound_local_pdf_text_enters_source_preparation(tmp_path: Path) -> None:
+    cache = _cache(tmp_path, local_pdf_derived_text=True)
+    harness = _harness(tmp_path, cache)
+
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+
+    assert packet.assert_binds(cache, harness.preparation_ledger).entry.sha256 == _TEXT_SHA256
+    assert packet.contract.source.metadata["derivation"]["kind"] == "local_pdf_text_extraction"
+    assert packet.contract.source.metadata["derivation"]["parent_locator_authority"] == (
+        "manifest_bound"
+    )
+
+
+@pytest.mark.parametrize(
+    ("chapter_locator", "page_locator"),
+    (("", "pdf:page:517"), ("chapter:60", "")),
+)
+def test_each_source_span_requires_human_declared_chapter_and_page_locator(
+    chapter_locator: str,
+    page_locator: str,
+) -> None:
+    with pytest.raises(SourceHarnessError, match="must be nonempty, trimmed text"):
+        _request(chapter_locator=chapter_locator, page_locator=page_locator)
+
+
+def test_repository_text_rejects_manifest_bound_parent_locator_authority(tmp_path: Path) -> None:
+    data_by_id = {_PARENT_ID: _PARENT_BYTES, _TEXT_ID: _TEXT_BYTES}
+
+    def download(entry: ReferenceEntryV1, destination: BinaryIO) -> DownloadObservation:
+        destination.write(data_by_id[entry.reference_id])
+        return DownloadObservation(
+            final_url=entry.download_url,
+            media_type=entry.media_type,
+            network_used=False,
+        )
+
+    cache = ReferenceCache(
+        _manifest(tmp_path, parent_locator_authority="manifest_bound"),
+        tmp_path / "cache",
+        confinement_root=tmp_path,
+        downloader=download,
+    )
+    cache.operator_fetch(_PARENT_ID)
+    cache.operator_fetch(_TEXT_ID)
+
+    with pytest.raises(
+        SourceHarnessError,
+        match="repository-derived text requires a human-declared parent locator policy",
+    ):
+        _harness(tmp_path, cache).prepare_draft(_TEXT_ID, _request())
 
 
 def test_private_source_claim_must_match_public_span_hash_and_locator(tmp_path: Path) -> None:
