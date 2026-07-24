@@ -35,22 +35,30 @@ runner reports success.
     proof-search, and recovery evidence.
 12. [HF incident containment](hf-incident-containment.md) records the recovery boundary
    without including recovered data, archive names, prompts, sessions, or credentials.
-13. [Phase 1 acceptance](phase-1-acceptance.md) defines the 12-week gates, the
-    [parallel execution plan](phase-1-parallel-execution.md) defines work packages and critical
-    paths, and the [current progress ledger](phase-1-progress.md) records executed evidence and
-    unrun gates.
-14. [Builder domain pilot](domain-pilot-selection.md) records the proposed connection-curvature
-    discovery graph, alternatives, rights boundary, and expert gates.
-15. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
+13. [Phase 1 acceptance](phase-1-acceptance.md) defines the non-waivable gates,
+    [the current route](phase-1-plan.md) resolves active sequencing,
+    [the parallel execution plan](phase-1-parallel-execution.md) assigns work packages, and
+    [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
+14. [Builder domain pilot](domain-pilot-selection.md) records the conditional model-theory
+    primary, curvature's reference-only boundary, backups, and selection gates.
+15. [Multi-agent self-calibration](self-calibration-decision.md) defines the independent
+    candidate, textbook/open-problem alignment, adversarial-review, and pinned-Library-spike
+    decision loop that precedes manual Builder calibration.
+16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
+    formal-work record, review surface, and later upstream staging boundary.
+17. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
    deliberately narrow evidence boundary.
-16. [Operations and release](operations-release.md) defines evidence collection and the conditions
-    that block a release candidate.
-17. [Continuous integration](ci.md) defines the offline Windows/Linux gate and separates its
-    manual readiness preflight from authoritative Lean/OCI evidence.
-18. [Public repository release](public-release.md) defines the tracked-tree, license, and
-    restricted-payload checks required before changing GitHub visibility.
-19. [Open questions](open-questions.md) records decisions that require an operator,
+18. [Operations and release](operations-release.md) defines evidence collection and the conditions
+   that block a release candidate.
+19. [Continuous integration](ci.md) defines the offline Windows/Linux gate and separates its
+   manual readiness preflight from authoritative Lean/OCI evidence.
+20. [Public repository release](public-release.md) defines the tracked-tree, license, and
+   restricted-payload checks required before changing GitHub visibility.
+21. [Open questions](open-questions.md) records decisions that require an operator,
    mathematical reviewer, or project owner.
+22. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
+    the local Archon-talk evidence, Danus/Reap audit boundaries, and the resulting isolated
+    experiments without treating external performance claims as AutoLean results.
 
 The source audits that informed these decisions live in [audits/](audits/):
 [Archon](audits/archon-audit.md), [AutoArchon](audits/autoarchon-audit.md), and

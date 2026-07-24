@@ -282,6 +282,75 @@ def test_manifest_requires_typed_parent_digest_and_provenance(tmp_path: Path) ->
         _manifest(tmp_path, payload=payload)
 
 
+def test_manifest_requires_a_pinned_local_pdf_text_recipe(tmp_path: Path) -> None:
+    payload = _manifest_payload()
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    derived = entries[1]
+    assert isinstance(derived, dict)
+    derivation = derived["derivation"]
+    assert isinstance(derivation, dict)
+    derived.update(
+        {
+            "download_url": None,
+            "acquisition_policy": "local_derivation_only",
+        }
+    )
+    derivation.update(
+        {
+            "kind": "local_pdf_text_extraction",
+            "method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+            "tool_name": "pypdf",
+            "tool_version": "6.10.0",
+            "parent_locator_authority": "manifest_bound",
+        }
+    )
+
+    manifest = _manifest(tmp_path, payload=payload)
+    assert manifest.require(_TEXT_ID).download_url is None
+
+    derivation["tool_version"] = None
+    with pytest.raises(ReferenceCacheError, match="pinned tool version"):
+        _manifest(tmp_path, payload=payload)
+
+
+def test_operator_import_local_requires_the_manifested_bytes(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    bootstrap = tmp_path / "bootstrap.pdf"
+    bootstrap.write_bytes(_PARENT_BYTES)
+
+    result = cache.operator_import_local(_PARENT_ID, bootstrap)
+
+    assert result.network_used is False
+    assert result.verified.cache_path.read_bytes() == _PARENT_BYTES
+    bootstrap.write_bytes(b"tampered bootstrap")
+    with pytest.raises(ReferenceCacheError, match=r"size mismatch|hash mismatch"):
+        cache.operator_import_local(_PARENT_ID, bootstrap, refresh=True)
+
+
+def test_verify_utf8_span_digest_binds_private_source_bytes(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    cache.operator_fetch(_TEXT_ID)
+    start = _TEXT_BYTES.index(b"Curvature")
+    end = start + len(b"Curvature is alternating.")
+
+    verified = cache.verify_utf8_span_digest(
+        _TEXT_ID,
+        start_offset=start,
+        end_offset=end,
+        expected_sha256=hashlib.sha256(_TEXT_BYTES[start:end]).hexdigest(),
+    )
+
+    assert verified.entry.reference_id == _TEXT_ID
+    with pytest.raises(ReferenceCacheError, match="declared digest"):
+        cache.verify_utf8_span_digest(
+            _TEXT_ID,
+            start_offset=start,
+            end_offset=end,
+            expected_sha256="0" * 64,
+        )
+
+
 def test_cache_rejects_symlink_child_escape(tmp_path: Path) -> None:
     cache_root = tmp_path / "cache"
     cache_root.mkdir()
@@ -353,3 +422,9 @@ def test_cli_manifest_sha_binding_matches_the_tracked_manifest() -> None:
         expected_sha256=reference_cache_cli._EXPECTED_MANIFEST_SHA256,
     )
     assert manifest.manifest_sha256 == reference_cache_cli._EXPECTED_MANIFEST_SHA256
+
+
+def test_pdf_text_serialization_uses_the_versioned_form_feed_boundary() -> None:
+    assert reference_cache_cli._serialize_pdf_pages(("first\n", None, "third")) == (
+        b"first\n\f\fthird"
+    )

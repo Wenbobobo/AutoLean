@@ -6,24 +6,20 @@ fail() {
   exit 2
 }
 
-[ "$#" -eq 8 ] || fail "expected the frozen wrapper argument profile"
+[ "$#" -ge 4 ] || fail "expected the frozen wrapper argument profile"
 [ "$1" = "--protocol" ] || fail "missing protocol argument"
-[ "$2" = "autolean.oci-lean-wrapper.v1" ] || fail "unsupported protocol"
-[ "$3" = "--candidate" ] || fail "missing candidate argument"
-[ "$4" = "/input/Candidate.lean" ] || fail "candidate path is not frozen"
-[ "$5" = "--declaration" ] || fail "missing declaration argument"
-declaration=$6
-[ "$7" = "--type-format" ] || fail "missing type-format argument"
-[ "$8" = "autolean.lean-pp-expr.v1" ] || fail "unsupported type format"
+[ "$2" = "autolean.oci-lean-wrapper.v2" ] || fail "unsupported protocol"
+[ "$3" = "--phase" ] || fail "missing phase argument"
+phase=$4
 
-case "$declaration" in
-  ""|*[!A-Za-z0-9_.]*) fail "declaration uses unsupported characters" ;;
-  .*|*..*|*.) fail "declaration is not a canonical dotted name" ;;
+# These files are supplied by the digest-pinned image, never by a host mount.  The query helper
+# serializes the values into the structured record; the host compares them to an execution claim
+# established from image-publish evidence.
+wrapper_sha256=$(sha256sum /opt/autolean/bin/autolean-lean-wrapper | awk '{print $1}')
+query_helper_sha256=$(sha256sum /opt/autolean/lib/AutoleanLeanQuery.lean | awk '{print $1}')
+case "$wrapper_sha256:$query_helper_sha256" in
+  *[!0-9a-f:]*|*:|:*|*::* ) fail "image-owned verifier hashes are malformed" ;;
 esac
-
-candidate=/input/Candidate.lean
-[ -f "$candidate" ] || fail "candidate is unavailable"
-[ ! -L "$candidate" ] || fail "candidate must not be a symbolic link"
 
 scratch=$(mktemp -d /tmp/autolean-lean-wrapper.XXXXXX)
 cleanup() {
@@ -31,29 +27,65 @@ cleanup() {
 }
 trap cleanup EXIT HUP INT TERM
 
-# Candidate diagnostics never share the wrapper's stdout. In particular, #eval output cannot
-# manufacture a wrapper JSON record. The environment query runs only after kernel elaboration.
-if ! LEAN_PATH=/opt/lean/lib/lean lean \
-  -R /input \
-  -o "$scratch/Candidate.olean" \
-  "$candidate" \
-  >"$scratch/compiler.stdout" 2>"$scratch/compiler.stderr"
-then
-  sed -n '1,200p' "$scratch/compiler.stderr" >&2
-  exit 20
-fi
+case "$phase" in
+  compile)
+    [ "$#" -eq 8 ] || fail "expected the frozen compile argument profile"
+    [ "$5" = "--candidate" ] || fail "missing candidate argument"
+    [ "$6" = "/input/Candidate.lean" ] || fail "candidate path is not frozen"
+    [ "$7" = "--output" ] || fail "missing output argument"
+    [ "$8" = "/output/Candidate.olean" ] || fail "compiled output path is not frozen"
+    candidate=/input/Candidate.lean
+    [ -f "$candidate" ] || fail "candidate is unavailable"
+    [ ! -L "$candidate" ] || fail "candidate must not be a symbolic link"
+    [ -d /output ] || fail "compiled output directory is unavailable"
+    [ ! -L /output ] || fail "compiled output directory must not be a symbolic link"
 
-if ! LEAN_PATH="$scratch:/opt/lean/lib/lean" lean --run \
-  /opt/autolean/lib/AutoleanLeanQuery.lean \
-  "$declaration" \
-  >"$scratch/query.stdout" 2>"$scratch/query.stderr"
-then
-  sed -n '1,200p' "$scratch/query.stderr" >&2
-  exit 21
-fi
+    # Compile-time Lean code is untrusted. Its stdout is never parsed as verifier evidence, and
+    # this container must terminate before the host seals Candidate.olean for a new query
+    # container. The candidate can write only /tmp and the dedicated /output bind.
+    if ! LEAN_PATH=/opt/lean/lib/lean lean \
+      -R /input \
+      -o /output/Candidate.olean \
+      "$candidate" \
+      >"$scratch/compiler.stdout" 2>"$scratch/compiler.stderr"
+    then
+      sed -n '1,200p' "$scratch/compiler.stderr" >&2
+      exit 20
+    fi
+    ;;
+  query)
+    [ "$#" -eq 10 ] || fail "expected the frozen query argument profile"
+    [ "$5" = "--compiled" ] || fail "missing compiled candidate argument"
+    [ "$6" = "/compiled/Candidate.olean" ] || fail "compiled candidate path is not frozen"
+    [ "$7" = "--declaration" ] || fail "missing declaration argument"
+    declaration=$8
+    [ "$9" = "--type-format" ] || fail "missing type-format argument"
+    [ "${10}" = "autolean.lean-pp-expr.v1" ] || fail "unsupported type format"
+    case "$declaration" in
+      ""|*[!A-Za-z0-9_.]*) fail "declaration uses unsupported characters" ;;
+      .*|*..*|*.) fail "declaration is not a canonical dotted name" ;;
+    esac
+    [ -f /compiled/Candidate.olean ] || fail "compiled candidate is unavailable"
+    [ ! -L /compiled/Candidate.olean ] || fail "compiled candidate must not be a symbolic link"
 
-# The helper is image-owned. The host parser independently requires one canonical JSON object with
-# the exact schema and environment bindings; wrapper stdout contains no candidate diagnostics.
-result_lines=$(wc -l <"$scratch/query.stdout")
-[ "$result_lines" -eq 1 ] || fail "query helper did not emit exactly one record"
-cat "$scratch/query.stdout"
+    # Trusted image modules are resolved before the directory that contains only the sealed
+    # Candidate.olean. No path writable by candidate compilation exists in this container.
+    if ! LEAN_PATH="/opt/lean/lib/lean:/compiled" lean --run \
+      /opt/autolean/lib/AutoleanLeanQuery.lean \
+      "$declaration" \
+      "$wrapper_sha256" \
+      "$query_helper_sha256" \
+      >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+    then
+      sed -n '1,200p' "$scratch/query.stderr" >&2
+      exit 21
+    fi
+
+    result_lines=$(wc -l <"$scratch/query.stdout")
+    [ "$result_lines" -eq 1 ] || fail "query helper did not emit exactly one record"
+    cat "$scratch/query.stdout"
+    ;;
+  *)
+    fail "unsupported phase"
+    ;;
+esac

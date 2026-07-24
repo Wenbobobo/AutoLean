@@ -8,8 +8,10 @@ its proof is tied to that exact revision and environment, its verifier report pa
 and its semantic review is recorded separately.
 
 All milestones below are release gates, not claims of completed work. A passing FATE task is
-proof-search evidence only. The 20-node project DAG fixture is the complementary evidence for
-multi-file, dependency, and lease behavior.
+proof-search evidence only; FATE is not AutoLean's research north star or a pilot-selection
+mechanism. The 20-node project DAG fixture is the complementary evidence for multi-file,
+dependency, and lease behavior. The active ordering of discovery work is maintained in
+[the current route](phase-1-plan.md), which does not relax any acceptance gate here.
 
 ## Week-by-week route
 
@@ -126,11 +128,19 @@ and inventory self-check pass.
 
 ## Phase 2 bridge
 
-Phase 2 begins with a 4--6 week Builder discovery program, not mass ingestion. Calibrate fidelity
-against 50--100 human-formalized statements while evaluating chapter-scale candidates in weak
-areas such as stochastic analysis/SDE, PDE/modern analysis, or Riemannian/geometric analysis.
-The first pilot needs clear rights, active expert participation, 20--40 nodes, roughly 70--80%
-existing prerequisites, non-vacuity tests, and no duplication of an active formalization project.
+Phase 2 begins with a Builder discovery program, not mass ingestion. Its first step is
+multi-agent self-calibration: independently align the candidate boundary with permitted textbook
+interpretation and an open-problem dependency, adversarially review it, and choose between the
+closed-only and structural/open-formula candidates through a pinned `Library/` compile spike.
+Manual human Builder calibration follows that selection; no fixed count, successful compile, or
+agent agreement is claimed in advance. The current conditional primary is first-order
+model-theory sequent-calculus soundness; the Cea-type and van Kampen slices are backups. Curvature
+is reference only while mathlib PR #36036 remains an active moving dependency.
+
+The first frozen pilot needs clear rights, active expert participation, a scope that records its
+closed/open-formula boundary, non-vacuity tests, and no duplication of an active formalization
+project. The independent `Library/` project holds the main formal-work record and any later
+upstream staging; it does not replace the Builder source/contract ledger or independent verifier.
 
 Builder outputs frozen contracts and downstream-staging bundles only. Prover receives those same
 standardized bundles; it does not reinterpret textbooks or repair statements. The open-problem

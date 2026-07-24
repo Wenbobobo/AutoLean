@@ -1,0 +1,287 @@
+{
+  "schema_version": "autolean.builder-self-calibration-round.v1",
+  "round_id": "round-01-model-theory-boundary",
+  "state": "incomplete",
+  "pilot_manifest_sha256": "aee141516d7773b1f66677d5a846d4160d59b810bbbe2a2677f1ebba930df3a0",
+  "graph_id": "first-order-soundness-conditional",
+  "target_node_id": "mt-soundness-target",
+  "textbook": {
+    "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+    "artifact_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+    "parent_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+    "parent_artifact_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+    "anchor_ids": [
+      "mt-terms-formulas",
+      "mt-satisfaction",
+      "mt-sequent-calculus",
+      "mt-sequent-soundness"
+    ],
+    "model_egress": "forbidden",
+    "reference_manifest_sha256": "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+    "rights_binding_sha256": "db6642a4704ab656cf6808f41e7309ab5517fb4cfa382b897b9009083defbcbd"
+  },
+  "candidates": [
+    {
+      "candidate_id": "model-theory-closed-only",
+      "revision": "round-01-closed-only-v1",
+      "kind": "closed_only",
+      "boundary_summary": "Soundness for a deliberately small sequent calculus over closed first-order sentences, with semantic evaluation that does not introduce an external valuation context.",
+      "required_mechanisms": [
+        "closed formulas",
+        "derivation induction",
+        "semantics of closed sentences"
+      ],
+      "explicit_out_of_scope": [
+        "open formulas",
+        "explicit variable contexts",
+        "freshness-sensitive eigenvariable rules"
+      ],
+      "integrity_checksum_sha256": "018c7cbcb321ebc6b07e061bc8bfb7b415a8c60a0db9b21c261c1fdd57e33def"
+    },
+    {
+      "candidate_id": "model-theory-structural-open-formula",
+      "revision": "round-01-structural-open-formula-v1",
+      "kind": "structural_open_formula",
+      "boundary_summary": "Soundness for a sequent calculus over open formulas, with finite variable contexts, valuations, substitution, weakening, and freshness represented in the formal boundary.",
+      "required_mechanisms": [
+        "finite variable contexts",
+        "valuation update",
+        "substitution lemma",
+        "structural rules",
+        "freshness discipline"
+      ],
+      "explicit_out_of_scope": [
+        "completeness",
+        "compactness",
+        "a claim that the full textbook calculus has been captured"
+      ],
+      "integrity_checksum_sha256": "dd5e6b59c6683eb8adc844cb783cc149a3f0d9a0afafd84c5e7942ef06d35181"
+    }
+  ],
+  "role_reports": [
+    {
+      "report_id": "round-01-closed-architect",
+      "role": "formal_architect",
+      "candidate_id": "model-theory-closed-only",
+      "candidate_revision": "round-01-closed-only-v1",
+      "candidate_integrity_checksum_sha256": "018c7cbcb321ebc6b07e061bc8bfb7b415a8c60a0db9b21c261c1fdd57e33def",
+      "reviewer_id": "agent:round-01-closed-architect",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "round-01-closed-architect-group",
+      "identity_binding": {
+        "assurance": "untrusted_self_reported",
+        "external_receipt": null
+      },
+      "evidence_sha256": "a607f197bdfdb4b55fc4168413dc3625e4c0b783c57431c3f5277b5a5a1cce28",
+      "state": "recorded",
+      "finding": "The closed-only boundary is mechanically smaller, but it is faithful only for a calculus whose rules never require free-variable side conditions.",
+      "authoring_mode": "independent_write_once",
+      "integrity_checksum_sha256": "ef7a50191dbec862c9dccd4f00059b52f30755fc8d21b7a4b6a2fb54223bf172"
+    },
+    {
+      "report_id": "round-01-closed-adversarial",
+      "role": "adversarial_reviewer",
+      "candidate_id": "model-theory-closed-only",
+      "candidate_revision": "round-01-closed-only-v1",
+      "candidate_integrity_checksum_sha256": "018c7cbcb321ebc6b07e061bc8bfb7b415a8c60a0db9b21c261c1fdd57e33def",
+      "reviewer_id": "agent:round-01-closed-adversarial",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "round-01-closed-adversarial-group",
+      "identity_binding": {
+        "assurance": "untrusted_self_reported",
+        "external_receipt": null
+      },
+      "evidence_sha256": "478d2f948dedd21c45684dec8f83194ba70994048d5c542673668a6cc74f76aa",
+      "state": "recorded",
+      "finding": "A closed-sentence encoding must reject any hidden eigenvariable or valuation-update rule; otherwise it silently narrows the advertised textbook statement.",
+      "authoring_mode": "independent_write_once",
+      "integrity_checksum_sha256": "195fe89ef5006510abd289fd03a23331c9e3c280fe6c326ffc01449d12e9fafd"
+    },
+    {
+      "report_id": "round-01-structural-architect",
+      "role": "formal_architect",
+      "candidate_id": "model-theory-structural-open-formula",
+      "candidate_revision": "round-01-structural-open-formula-v1",
+      "candidate_integrity_checksum_sha256": "dd5e6b59c6683eb8adc844cb783cc149a3f0d9a0afafd84c5e7942ef06d35181",
+      "reviewer_id": "agent:round-01-structural-architect",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "round-01-structural-architect-group",
+      "identity_binding": {
+        "assurance": "untrusted_self_reported",
+        "external_receipt": null
+      },
+      "evidence_sha256": "3b59a60c811ee3a703af9a3050fcbaf390800a32cb973b7af68c49cfb76af07b",
+      "state": "recorded",
+      "finding": "The structural boundary keeps the valuation and freshness obligations visible, at the cost of a larger syntax and substitution adapter.",
+      "authoring_mode": "independent_write_once",
+      "integrity_checksum_sha256": "43aee4de1eb8d1a5bb306c622e34cc6800d2f841c88e0a0201bb45a60a4ffcad"
+    },
+    {
+      "report_id": "round-01-structural-adversarial",
+      "role": "adversarial_reviewer",
+      "candidate_id": "model-theory-structural-open-formula",
+      "candidate_revision": "round-01-structural-open-formula-v1",
+      "candidate_integrity_checksum_sha256": "dd5e6b59c6683eb8adc844cb783cc149a3f0d9a0afafd84c5e7942ef06d35181",
+      "reviewer_id": "agent:round-01-structural-adversarial",
+      "reviewer_kind": "automated_agent",
+      "independence_group": "round-01-structural-adversarial-group",
+      "identity_binding": {
+        "assurance": "untrusted_self_reported",
+        "external_receipt": null
+      },
+      "evidence_sha256": "af25f428a88ea43472bf2c2c95d53e42511d37ffc95c762b9715fe9f15fd0805",
+      "state": "recorded",
+      "finding": "The structural candidate must demonstrate capture-avoiding substitution, weakening, and every eigenvariable side condition before it can be called sound.",
+      "authoring_mode": "independent_write_once",
+      "integrity_checksum_sha256": "707e9360d1007f588720265b843ee5d8d37b9ca01aee6f45715ffbe8f22edce9"
+    }
+  ],
+  "blockers": [
+    {
+      "blocker_id": "round-01-source-interpreter-missing",
+      "kind": "role_report_missing",
+      "affected_role": "source_interpreter",
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "0ef71968a679a1d6020fa66f8a6fb3e1f9ee0ac3ddc6587d80aa0e6e5fe07c28",
+      "resolution_required": "Retain an independently authored source-interpreter report that binds the selected anchors and all hidden hypotheses.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-research-alignment-missing",
+      "kind": "role_report_missing",
+      "affected_role": "research_alignment",
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "81be321e2b23272943d4d997dc054a5408156427203044d2c8e6cfdd3f94f6e4",
+      "resolution_required": "Retain an independently authored research-alignment report with an explicit non-claim boundary.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-library-steward-missing",
+      "kind": "role_report_missing",
+      "affected_role": "library_steward",
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "ba7fada248c89b8b750924b0674dbad9723208271976c69fcea9e7611a4b0724",
+      "resolution_required": "Retain a Library-steward report and an immutable compile-spike packet under the pinned lock.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-library-spike-not-run",
+      "kind": "library_compile_spike_not_run",
+      "affected_role": null,
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "5ce62ad52335d633ed1b02109f3ceac45175cc7a4f5e968274d29a2ea59db834",
+      "resolution_required": "Retain the completed partial-pass compile receipt as history; it cannot select a candidate until the active quantifier/freshness gap is resolved.",
+      "state": "resolved"
+    },
+    {
+      "blocker_id": "round-01-quantifier-freshness-gap",
+      "kind": "candidate_scope_gap",
+      "affected_role": null,
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769",
+      "resolution_required": "Choose and implement a calculus-level quantifier/eigenvariable freshness bridge with capture avoidance and weakening; the tracked partial API-compatibility spike cannot substitute for it.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-source-entry-review-pending",
+      "kind": "source_scope_review_pending",
+      "affected_role": null,
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "a610c4f1d8a50eb5dabfde489367d8f4737f7578f87d019ec8961a5a2813a980",
+      "resolution_required": "Review the declared Chapter 6 entry boundary and its earlier dependency scope before a statement draft is considered.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-mathlib-census-pending",
+      "kind": "mathlib_census_pending",
+      "affected_role": null,
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "83d01ac9a40baa4e8cb277a603cb132fcf670ef73d4b052020bfb50b301d4d41",
+      "resolution_required": "Replay and review the bounded Mathlib API census at the pinned Library revision.",
+      "state": "active"
+    },
+    {
+      "blocker_id": "round-01-human-review-not-requested",
+      "kind": "human_or_expert_review_not_requested",
+      "affected_role": null,
+      "affected_candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+      "evidence_sha256": "257103f3fcda4e9ed264e04b6964764cb769426d6c924cc4ae75e7c50eba31e8",
+      "resolution_required": "Do not represent agent reports as human or expert review; request later review only through the Builder fidelity workflow.",
+      "state": "active"
+    }
+  ],
+  "open_problem_alignment": {
+    "alignment_id": "round-01-model-theory-alignment",
+    "research_direction": "Reusable formal foundations for theorem statements that may later appear in open-problem dependency graphs.",
+    "dependency_rationale": "A sound proof-calculus boundary is infrastructure for checking formal derivations; it neither encodes nor resolves an open problem.",
+    "non_claim": "no_open_problem_claim",
+    "solves_open_problem": false,
+    "claims_novelty": false
+  },
+  "library_lock": {
+    "lock_id": "autolean-library-v428-lock",
+    "lean_toolchain": "leanprover/lean4:v4.28.0",
+    "toolchain_sha256": "26df5f74b79af0cd9e298b6583993699a54938d047ba1919428da80d3ae80c6e",
+    "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+    "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89"
+  },
+  "compile_spike": {
+    "packet_id": "round-01-model-theory-compile-spike",
+    "candidate_ids": ["model-theory-closed-only", "model-theory-structural-open-formula"],
+    "state": "partial_passed_with_gap",
+    "blocker_ids": ["round-01-quantifier-freshness-gap"],
+    "receipt": {
+      "receipt_id": "round-01-model-theory-library-receipt",
+      "evidence": {
+        "evidence_id": "round-01-model-theory-build-report",
+        "status": "partial_passed_with_gap",
+        "library_input_tree_sha256": "1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795",
+        "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
+        "toolchain_sha256": "26df5f74b79af0cd9e298b6583993699a54938d047ba1919428da80d3ae80c6e",
+        "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+        "dependency_tree_schema": "autolean.library-dependency-tree.v1",
+        "dependency_tree_sha256": "43f889366a4c5dc6daaed5b56cf3704e82e491ff90f2044602a187d7da2bfe62",
+        "dependency_manifest_sha256": "7f83b557c145abc56ec83619871c305f4bb6b5abff54b1d6fd52dd837c4f6423",
+        "dependency_entry_count": 116924,
+        "dependency_directory_count": 3644,
+        "dependency_regular_file_count": 113277,
+        "dependency_symlink_count": 3,
+        "dependency_total_file_bytes": 6482481367,
+        "target_modules": [
+          "AutoLeanLibrary",
+          "AutoLeanLibrary.Fixtures.Dag.Certificate",
+          "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
+        ],
+        "exit_status": 0,
+        "build_report_sha256": "9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769",
+        "tracked_preselection_receipt": {
+          "record_kind": "preselection_compile_spike",
+          "packet_id": "round-01-model-theory-compile-spike",
+          "receipt_id": "round-01-model-theory-compile-spike-wsl-v2",
+          "packet_path": "records/staging/round-01-model-theory-compile-spike/packet.v1.json",
+          "packet_sha256": "a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5",
+          "packet_content_sha256": "3b4e9ccc608e4c8f998ed03c8ee3fd4afe07a62a09b1937e5306d3752bb51493",
+          "receipt_path": "records/staging/round-01-model-theory-compile-spike/compile-receipt.v2.json",
+          "receipt_sha256": "7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f",
+          "receipt_schema": "autolean.library-compile-receipt.v2",
+          "source_tree_schema": "autolean.library-build-input-tree.v2",
+          "verification_script_sha256": "7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29"
+        },
+        "integrity_checksum_sha256": "820256f5f193cd5fc07680bc06fd32e916067b88751148e57363d0f9c46a6dc5"
+      },
+      "assurance": "untrusted_self_reported",
+      "external_run_receipt": null
+    },
+    "integrity_checksum_sha256": "675e63265ff33b156357b4e893916a9ae7d8649c6fa8197a07dc060bdc0ff9c9"
+  },
+  "disposition": "gap",
+  "selected_candidate_id": null,
+  "authority_boundary": {
+    "issue_admission_receipt": "forbidden",
+    "builder_freeze": "forbidden",
+    "prover_handoff": "forbidden",
+    "model_egress": "forbidden",
+    "promotion": "forbidden"
+  },
+  "integrity_checksum_sha256": "ec37a860bc7b4f803d93da5d8d221b9675ac1dfc7e0d5cb59aac12bf67d1385e"
+}

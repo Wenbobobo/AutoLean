@@ -43,7 +43,7 @@ from autolean_contracts import (
     MathematicalGraphV1,
     MathematicalSpecificationV1,
     OciVerificationArtifactV1,
-    OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ProofSubmissionV1,
     ReleaseTierV1,
@@ -180,7 +180,7 @@ def _bundle(
         environment=LeanEnvironmentV1(
             lean_version="simulated-lean-not-executed",
             mathlib_revision="simulated-mathlib-not-executed",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
+            verifier_execution_policy=OciVerifierExecutionPolicyV2(
                 worker_image_digest="sha256:" + ("0" * 64),
             ),
             environment_hash=digest_text(

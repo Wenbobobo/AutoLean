@@ -24,6 +24,9 @@ from autolean_contracts import (
 )
 
 from autolean_prover.errors import ValidationError
+from autolean_prover.execution.lean_runner import (
+    OCI_EXECUTION_AUTHORITY_LEASE_PENDING_GATEWAY,
+)
 from autolean_prover.verification import VerificationObservation
 from autolean_prover.verification_attestation import (
     EvidenceArtifactSink,
@@ -130,6 +133,7 @@ def attest_oci_observation_via_gateway(
 ) -> VerificationReportV1:
     """Prepare verifier evidence and request a lease-bound gateway attestation."""
 
+    _validate_authoritative_execution(observation, lease=lease)
     unsigned = prepare_oci_verification_evidence(
         observation,
         bundle=bundle,
@@ -159,6 +163,32 @@ def attest_oci_observation_via_gateway(
         ) from error
     _validate_gateway_response(request, attestation)
     return unsigned.model_copy(update={"verifier_attestation": attestation})
+
+
+def _validate_authoritative_execution(
+    observation: VerificationObservation,
+    *,
+    lease: VerificationSigningLeaseBindingV1,
+) -> None:
+    execution = observation.oci_execution_evidence
+    if (
+        execution is None
+        or execution.authority_status != OCI_EXECUTION_AUTHORITY_LEASE_PENDING_GATEWAY
+    ):
+        raise ValidationError(
+            "verification_gateway_execution_authority",
+            "gateway signing requires lease-bound OCI execution with observed wrapper identity",
+        )
+    if (
+        execution.lease_worker_id != lease.worker_id
+        or execution.lease_fencing_token != lease.fencing_token
+        or execution.lease_expires_at is None
+        or execution.lease_expires_at.astimezone(UTC) != lease.expires_at.astimezone(UTC)
+    ):
+        raise ValidationError(
+            "verification_gateway_execution_lease",
+            "OCI execution lease differs from the lease presented to the signing gateway",
+        )
 
 
 def _validate_gateway_response(

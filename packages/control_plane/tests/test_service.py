@@ -26,7 +26,7 @@ from autolean_contracts import (
     LeanEnvironmentV1,
     MathematicalGraphV1,
     MathematicalSpecificationV1,
-    OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ProofSubmissionV1,
     ReleaseTierV1,
@@ -59,10 +59,13 @@ from autolean_control_plane import (
     ControlPlane,
     DashboardProjection,
     EventStore,
+    Idempotency,
     Lease,
     LeaseStore,
+    NewEvent,
     VerificationOutcome,
     export_dashboard_projection,
+    request_hash,
 )
 from autolean_control_plane.errors import (
     IdempotencyConflict,
@@ -158,7 +161,7 @@ def _bundle(
         environment=LeanEnvironmentV1(
             lean_version="v4.28.0",
             mathlib_revision="fixture-mathlib",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
+            verifier_execution_policy=OciVerifierExecutionPolicyV2(
                 worker_image_digest="sha256:" + ("1" * 64),
             ),
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "fixture-environment"),
@@ -299,6 +302,65 @@ def test_control_plane_requires_events_and_leases_to_share_one_database(tmp_path
             artifacts=ArtifactStore(tmp_path / "artifacts"),
             attestation_verifier=_attestation_verifier(),
         )
+
+
+def test_fenced_events_persist_the_leased_task_bundle_binding_and_reject_cross_task_replays(
+    tmp_path: Path,
+) -> None:
+    database = tmp_path / "control.db"
+    store = EventStore(database)
+    leases = LeaseStore(database)
+    lease_a = leases.claim("bundle-a", "worker-a", ttl_seconds=60)
+    idempotency = Idempotency(
+        scope="fenced-test",
+        key="one-command",
+        request_hash=request_hash({"task_id": "bundle-a", "proof_id": "proof-a"}),
+    )
+    event = NewEvent("proof.submitted", payload={"bundle_id": "bundle-a"})
+
+    committed = store.append_fenced(
+        "proof",
+        "proof-a",
+        task_id="bundle-a",
+        lease=lease_a,
+        expected_sequence=0,
+        events=(event,),
+        idempotency=idempotency,
+    )
+    replayed = store.append_fenced(
+        "proof",
+        "proof-a",
+        task_id="bundle-a",
+        lease=lease_a,
+        expected_sequence=0,
+        events=(event,),
+        idempotency=idempotency,
+    )
+    assert replayed == committed
+    assert store.read_stream("proof", "proof-a")[0].payload["bundle_id"] == "bundle-a"
+
+    with pytest.raises(ValueError, match="bundle_id must match task_id"):
+        store.append_fenced(
+            "proof",
+            "proof-cross-payload",
+            task_id="bundle-a",
+            lease=lease_a,
+            expected_sequence=0,
+            events=(NewEvent("proof.submitted", payload={"bundle_id": "bundle-b"}),),
+        )
+
+    lease_b = leases.claim("bundle-b", "worker-b", ttl_seconds=60)
+    with pytest.raises(IdempotencyConflict, match="requested fenced task"):
+        store.append_fenced(
+            "proof",
+            "proof-cross-task",
+            task_id="bundle-b",
+            lease=lease_b,
+            expected_sequence=0,
+            events=(NewEvent("proof.submitted", payload={"bundle_id": "bundle-b"}),),
+            idempotency=idempotency,
+        )
+    assert store.count_events(entity_type="proof") == 1
 
 
 def test_control_plane_rejects_unreviewed_bundle_by_default(tmp_path: Path) -> None:
@@ -501,6 +563,12 @@ def test_projection_exports_only_summaries_not_proof_or_source_text(tmp_path: Pa
     assert claim_event["task_id"] == bundle.bundle_id.value
     assert node["status"] == "running"
     assert snapshot["overview"]["active_runs"] == 1
+    phase_feedback = snapshot["phase_feedback"][0]
+    assert (
+        phase_feedback["builder_fidelity"]["contract_hash"] == bundle.contract.semantic_hash().value
+    )
+    assert phase_feedback["prover_verification"]["state"] == "candidate_pending_verification"
+    assert phase_feedback["promotion_state"] == "not_a_promotion"
     path = export_dashboard_projection(tmp_path / "projection.json", plane.events.read_all())
     assert json.loads(path.read_text(encoding="utf-8"))["runs"][0]["status"] == "candidate"
 
@@ -636,6 +704,267 @@ def test_projection_rejected_verification_is_fail_closed() -> None:
     assert snapshot["events"][0]["task_id"] == "bundle-a"
 
 
+def test_phase_feedback_replays_evidence_without_scoring_or_auto_promotion() -> None:
+    bundle_id = "bundle-phase"
+
+    def event(
+        position: int,
+        event_type: str,
+        payload: dict[str, object],
+        *,
+        entity_type: str = "task",
+        entity_id: str | None = None,
+    ) -> StoredEvent:
+        return StoredEvent(
+            global_position=position,
+            event_id=f"event-{position}",
+            entity_type=entity_type,
+            entity_id=entity_id or bundle_id,
+            entity_sequence=position,
+            event_type=event_type,
+            payload=payload,
+            metadata={},
+            recorded_at=f"2026-07-24T12:00:0{position}Z",
+        )
+
+    registered = event(
+        1,
+        "task.registered",
+        {
+            "bundle_id": bundle_id,
+            "contract_id": "contract-phase",
+            "revision": 2,
+            "contract_hash": "a" * 64,
+            "bundle_hash": "b" * 64,
+            "builder_attestation": {
+                "purpose": "builder-freeze",
+                "key_id": "builder-key",
+                "payload_hash": "2" * 64,
+                "evidence_identity": "builder-evidence",
+                "expires_at": "2026-07-25T12:00:00Z",
+            },
+            "fidelity_evidence_artifact": {"digest": "c" * 64},
+            "graph_nodes": [
+                {
+                    "id": "math-root",
+                    "label": "Root prerequisite",
+                    "graph": "mathematical",
+                    "status": "frozen",
+                    "revision": 2,
+                    "kind": "lemma",
+                    "dependencies": [],
+                },
+                {
+                    "id": "math-middle",
+                    "label": "Middle consequence",
+                    "graph": "mathematical",
+                    "status": "frozen",
+                    "revision": 2,
+                    "kind": "theorem",
+                    "dependencies": ["math-root"],
+                },
+                {
+                    "id": "math-leaf",
+                    "label": "Open-problem boundary",
+                    "graph": "mathematical",
+                    "status": "frozen",
+                    "revision": 2,
+                    "kind": "theorem",
+                    "dependencies": ["math-middle"],
+                },
+            ],
+        },
+    )
+    events = (
+        registered,
+        event(
+            2,
+            "proof.submitted",
+            {
+                "bundle_id": bundle_id,
+                "proof_id": "proof-accepted",
+                "proof_artifact": {"digest": "d" * 64},
+            },
+            entity_type="proof",
+            entity_id="proof-accepted",
+        ),
+        event(
+            3,
+            "verification.accepted",
+            {
+                "bundle_id": bundle_id,
+                "proof_id": "proof-accepted",
+                "accepted": True,
+                "verification_artifact": {"digest": "e" * 64},
+            },
+            entity_type="verification",
+            entity_id="proof-accepted",
+        ),
+        event(
+            4,
+            "proof.submitted",
+            {
+                "bundle_id": bundle_id,
+                "proof_id": "proof-pending",
+                "proof_artifact": {"digest": "f" * 64},
+            },
+            entity_type="proof",
+            entity_id="proof-pending",
+        ),
+        event(
+            5,
+            "gap.reported",
+            {
+                "bundle_id": bundle_id,
+                "report_id": "gap-1",
+                "gap_artifact": {"digest": "0" * 64},
+            },
+            entity_type="gap",
+            entity_id="gap-1",
+        ),
+        event(
+            6,
+            "contract_change.requested",
+            {
+                "bundle_id": bundle_id,
+                "request_id": "request-1",
+                "request_artifact": {"digest": "1" * 64},
+            },
+            entity_type="contract_change_request",
+            entity_id="request-1",
+        ),
+        event(
+            7,
+            "task.claimed",
+            {},
+            entity_id="bundle-other",
+        ),
+    )
+
+    snapshot = DashboardProjection(events).snapshot()
+    feedback = snapshot["phase_feedback"]
+
+    assert len(feedback) == 1
+    item = feedback[0]
+    assert item["schema_version"] == "phase-feedback.v1"
+    assert item["promotion_state"] == "not_a_promotion"
+    assert item["builder_fidelity"]["state"] == "frozen_attested_with_evidence"
+    assert item["builder_fidelity"]["evidence_digest"] == "c" * 64
+    assert item["prover_verification"] == {
+        "state": "mixed_candidates",
+        "submitted_proof_ids": ["proof-accepted", "proof-pending"],
+        "pending_proof_ids": ["proof-pending"],
+        "accepted_proof_ids": ["proof-accepted"],
+        "rejected_proof_ids": [],
+    }
+    assert [review["id"] for review in item["unresolved_human_review_assumptions"]] == [
+        "gap-1",
+        "request-1",
+    ]
+    assert all(
+        review["state"] == "unresolved" for review in item["unresolved_human_review_assumptions"]
+    )
+    assert item["mathematical_dependency_node_count"] == 3
+    assert item["dependency_leverage_exact_node_limit"] == 512
+    assert item["dependency_leverage_mode"] == "exact_transitive"
+    leverage = item["mathematical_dependency_leverage"]
+    assert [node["source_node_id"] for node in leverage] == [
+        "math-root",
+        "math-middle",
+        "math-leaf",
+    ]
+    assert [node["transitive_dependents"] for node in leverage] == [2, 1, 0]
+    assert [milestone["phase"] for milestone in item["milestones"]] == [
+        "builder_fidelity",
+        "prover_candidate",
+        "prover_verification",
+        "prover_candidate",
+        "human_review",
+        "human_review",
+    ]
+    assert item["replay"] == {
+        "first_relevant_event_sequence": 1,
+        "last_relevant_event_sequence": 6,
+        "last_relevant_event_id": "event-6",
+        "last_relevant_event_recorded_at": "2026-07-24T12:00:06Z",
+        "relevant_event_count": 6,
+        "relevant_event_sequences": [1, 2, 3, 4, 5, 6],
+        "replay_head_event_sequence": 7,
+        "replay_head_event_id": "event-7",
+        "replay_head_recorded_at": "2026-07-24T12:00:07Z",
+        "events_observed_after_last_relevant": 1,
+        "last_relevant_event_is_replay_head": False,
+        "freshness_scope": "bounded_to_replayed_events",
+    }
+    serialized = json.dumps(item).lower()
+    assert "score" not in serialized
+    assert "fate" not in serialized
+
+
+def test_phase_feedback_large_math_graph_uses_direct_only_leverage_without_transitive_walks(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    node_count = 513
+    bundle_id = "bundle-large-leverage"
+
+    def unexpected_transitive_walk(*_args: object, **_kwargs: object) -> int:
+        raise AssertionError("large graphs must not compute transitive dependency reach")
+
+    monkeypatch.setattr(
+        DashboardProjection,
+        "_transitive_dependents",
+        staticmethod(unexpected_transitive_walk),
+    )
+    graph_nodes = [
+        {
+            "id": f"math-{index:03d}",
+            "label": f"Mathematical node {index}",
+            "graph": "mathematical",
+            "status": "frozen",
+            "revision": 1,
+            "kind": "lemma",
+            "dependencies": [] if index == 0 else [f"math-{index - 1:03d}"],
+        }
+        for index in range(node_count)
+    ]
+    registered = StoredEvent(
+        global_position=1,
+        event_id="large-registration",
+        entity_type="task",
+        entity_id=bundle_id,
+        entity_sequence=1,
+        event_type="task.registered",
+        payload={
+            "bundle_id": bundle_id,
+            "contract_id": "contract-large-leverage",
+            "revision": 1,
+            "contract_hash": "a" * 64,
+            "bundle_hash": "b" * 64,
+            "builder_attestation": {
+                "purpose": "builder-freeze",
+                "key_id": "builder-key",
+                "payload_hash": "c" * 64,
+                "evidence_identity": "builder-evidence",
+                "expires_at": "2026-07-25T12:00:00Z",
+            },
+            "graph_nodes": graph_nodes,
+        },
+        metadata={},
+        recorded_at="2026-07-24T12:00:00Z",
+    )
+
+    feedback = DashboardProjection((registered,)).snapshot()["phase_feedback"][0]
+    leverage = feedback["mathematical_dependency_leverage"]
+
+    assert feedback["mathematical_dependency_node_count"] == node_count
+    assert feedback["dependency_leverage_exact_node_limit"] == 512
+    assert feedback["dependency_leverage_mode"] == "direct_only_over_limit"
+    assert len(leverage) == node_count
+    assert all(item["transitive_dependents"] is None for item in leverage)
+    assert all(item["direct_dependents"] == 1 for item in leverage[:-1])
+    assert leverage[-1]["direct_dependents"] == 0
+
+
 @pytest.mark.parametrize(
     ("event_type", "accepted"),
     [
@@ -667,6 +996,41 @@ def test_projection_rejects_malformed_or_inconsistent_verification(
     )
 
     with pytest.raises(ProjectionError, match="verification"):
+        DashboardProjection((event,)).snapshot()
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "error"),
+    [
+        ("promotion_state", "promotion-authorized", "promotion authority"),
+        ("execution_authority_class", "production", "production authority"),
+    ],
+)
+def test_projection_rejects_local_verification_claiming_promotion_authority(
+    field: str,
+    value: str,
+    error: str,
+) -> None:
+    payload: dict[str, object] = {
+        "bundle_id": "bundle-a",
+        "proof_id": "proof-1",
+        "accepted": True,
+        "reasons": [],
+        field: value,
+    }
+    event = StoredEvent(
+        global_position=1,
+        event_id="verification-forged-promotion",
+        entity_type="verification",
+        entity_id="proof-1",
+        entity_sequence=1,
+        event_type="verification.accepted",
+        payload=payload,
+        metadata={},
+        recorded_at="2026-07-23T12:00:00Z",
+    )
+
+    with pytest.raises(ProjectionError, match=error):
         DashboardProjection((event,)).snapshot()
 
 
@@ -1110,7 +1474,7 @@ def test_verification_reads_only_canonical_typed_evidence_artifacts(tmp_path: Pa
             )
         }
     )
-    with pytest.raises(InvalidTransition, match="invalid V1 schema"):
+    with pytest.raises(InvalidTransition, match="unsupported schema"):
         plane.verify_submission(
             bundle.bundle_id.value,
             lease=claim.lease,

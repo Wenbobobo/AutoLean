@@ -28,7 +28,7 @@ from autolean_contracts import (
     MathematicalGraphV1,
     MathematicalSpecificationV1,
     OciVerificationArtifactV1,
-    OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ProofSubmissionV1,
     ReleaseTierV1,
@@ -171,7 +171,7 @@ def _bundle(
         environment=LeanEnvironmentV1(
             lean_version="v4.28.0",
             mathlib_revision="project-fixture-mathlib",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
+            verifier_execution_policy=OciVerifierExecutionPolicyV2(
                 worker_image_digest="sha256:" + ("2" * 64),
             ),
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "project-fixture-environment"),

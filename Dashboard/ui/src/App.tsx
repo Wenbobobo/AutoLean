@@ -13,7 +13,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 import { api } from "./api";
-import { displayText } from "./display";
+import { displayText, phaseStateLabel } from "./display";
+import { feedbackTone, leverageMetric, leverageWindow } from "./feedbackModel";
 import { GraphView } from "./GraphView";
 import { summarizeGrid, type GraphScope } from "./gridModel";
 import {
@@ -27,6 +28,7 @@ import type {
   EventView,
   GraphNode,
   Overview,
+  PhaseFeedback,
   RunSummary,
   WorkRecordCategory
 } from "./types";
@@ -83,6 +85,7 @@ export default function App() {
   const [runs, setRuns] = useState<RunSummary[]>([]);
   const [artifacts, setArtifacts] = useState<ArtifactSummary[]>([]);
   const [events, setEvents] = useState<EventView[]>([]);
+  const [phaseFeedback, setPhaseFeedback] = useState<PhaseFeedback[]>([]);
   const [query, setQuery] = useState("");
   const [focusedNodeId, setFocusedNodeId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -98,6 +101,7 @@ export default function App() {
       setRuns(snapshot.runs);
       setArtifacts(snapshot.artifacts);
       setEvents(snapshot.events);
+      setPhaseFeedback(snapshot.phase_feedback);
       setError(null);
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : "Projection unavailable");
@@ -321,6 +325,107 @@ export default function App() {
 
         {view === "evidence" && (
           <div className="content-stack">
+            <section className="feedback-grid-section" aria-label="Phase feedback">
+              <div className="section-heading feedback-section-heading">
+                <div><p className="eyebrow">Phase feedback</p><h2>Fidelity, verification, and dependency reach</h2></div>
+                <span className="feedback-count">{formatNumber(phaseFeedback.length)} task{phaseFeedback.length === 1 ? "" : "s"}</span>
+              </div>
+              <div className="feedback-grid-list">
+                {phaseFeedback.map((feedback) => {
+                  const leverage = leverageWindow(feedback.mathematical_dependency_leverage);
+                  const leverageRows = leverage.rows.map((row) => ({
+                    row,
+                    metric: leverageMetric(row, feedback.dependency_leverage_mode)
+                  }));
+                  const maxReach = Math.max(
+                    1,
+                    ...leverageRows.map(({ metric }) => metric.value)
+                  );
+                  const exactTransitive = feedback.dependency_leverage_mode === "exact_transitive";
+                  const tone = feedbackTone(feedback);
+                  return (
+                    <article className="feedback-grid-row" key={feedback.task_id}>
+                      <div className="feedback-task-heading">
+                        <span className={`health-signal tone-${tone}`} aria-hidden="true" />
+                        <div>
+                          <p className="eyebrow">Frozen task</p>
+                          <h3>{displayText(feedback.task_id, 128)}</h3>
+                        </div>
+                        <span className="feedback-sequence">#{feedback.replay.last_relevant_event_sequence}</span>
+                      </div>
+                      <div className="phase-signal-rail">
+                        <div>
+                          <span>Builder fidelity</span>
+                          <strong>{phaseStateLabel(feedback.builder_fidelity.state)}</strong>
+                          <small>r{feedback.builder_fidelity.revision} · {displayText(feedback.builder_fidelity.contract_id, 80)}</small>
+                        </div>
+                        <div>
+                          <span>Prover verification</span>
+                          <strong>{phaseStateLabel(feedback.prover_verification.state)}</strong>
+                          <small>{formatNumber(feedback.prover_verification.submitted_proof_ids.length)} candidate{feedback.prover_verification.submitted_proof_ids.length === 1 ? "" : "s"}</small>
+                        </div>
+                        <div>
+                          <span>Human review</span>
+                          <strong>{formatNumber(feedback.unresolved_human_review_assumptions.length)} open</strong>
+                          <small>{feedback.unresolved_human_review_assumptions.map((item) => phaseStateLabel(item.kind)).join(" · ") || "No open inputs"}</small>
+                        </div>
+                        <div>
+                          <span>Promotion</span>
+                          <strong>{phaseStateLabel(feedback.promotion_state)}</strong>
+                          <small>Replay head #{feedback.replay.replay_head_event_sequence}</small>
+                        </div>
+                      </div>
+                      <div className="feedback-detail-grid">
+                        <div className="leverage-grid">
+                          <div className="feedback-detail-heading">
+                            <span>{exactTransitive ? "Transitive dependency reach" : "Direct dependency reach"}</span>
+                            <small>
+                              {`${exactTransitive
+                                ? `Exact transitive; ${feedback.mathematical_dependency_node_count} nodes`
+                                : `Direct only; ${feedback.mathematical_dependency_node_count} nodes exceeds exact limit ${feedback.dependency_leverage_exact_node_limit}`} · ${leverage.isDegraded
+                                ? `Top ${leverage.rows.length} of ${feedback.mathematical_dependency_leverage.length}; ${leverage.omittedCount} omitted`
+                                : `${leverage.rows.length} node${leverage.rows.length === 1 ? "" : "s"}`}`}
+                            </small>
+                          </div>
+                          <div className="leverage-list">
+                            {leverageRows.map(({ row, metric }) => (
+                              <div className="leverage-row" key={row.node_id}>
+                                <div>
+                                  <strong>{displayText(row.label, 112)}</strong>
+                                  <span>{displayText(row.source_node_id, 96)}</span>
+                                </div>
+                                <span className="leverage-bar" aria-label={`${metric.value} ${metric.label} dependents`}>
+                                  <span style={{ width: `${(metric.value / maxReach) * 100}%` }} />
+                                </span>
+                                <span className="leverage-count">
+                                  {metric.label === "transitive"
+                                    ? `${metric.value}T · ${row.direct_dependents}D`
+                                    : `${metric.value} direct`}
+                                </span>
+                              </div>
+                            ))}
+                            {leverage.rows.length === 0 && <div className="feedback-empty">No mathematical dependencies recorded</div>}
+                          </div>
+                        </div>
+                        <div className="feedback-trail">
+                          <div className="feedback-detail-heading"><span>Replay evidence</span><small>{feedback.replay.relevant_event_count} linked events</small></div>
+                          <div className="milestone-list">
+                            {feedback.milestones.map((milestone) => (
+                              <div className="milestone-row" key={milestone.source_event_id}>
+                                <span className="health-signal tone-nominal" aria-hidden="true" />
+                                <div><strong>{displayText(milestone.phase.replaceAll("_", " "), 64)}</strong><span>{displayText(milestone.state, 48)} · #{milestone.source_event_sequence}</span></div>
+                                <time>{formatTime(milestone.occurred_at)}</time>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+                {phaseFeedback.length === 0 && <div className="feedback-empty">No replay-linked phase feedback</div>}
+              </div>
+            </section>
             <section className="section-band">
               <div className="section-heading"><div><p className="eyebrow">Contract state</p><h2>Statement revisions</h2></div></div>
               <div className="table-wrap">

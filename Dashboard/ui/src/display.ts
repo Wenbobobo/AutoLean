@@ -17,6 +17,10 @@ export function displayText(value: string, limit = 256): string {
   return truncate(value.replace(INVISIBLE_OR_CONTROL, " ").replace(/\s+/g, " ").trim(), limit);
 }
 
+export function phaseStateLabel(value: string, limit = 64): string {
+  return displayText(value.replaceAll("_", " "), limit);
+}
+
 /** ECharts rich-text syntax must not be sourced from an event projection. */
 export function graphText(value: string, limit = 56): string {
   return displayText(value.replace(ECHARTS_FORMAT_CONTROL, " "), limit);

@@ -1,3 +1,9 @@
+from autolean_prover.execution.authority import (
+    ExecutionClaimValidator,
+    FrozenTaskBundleInput,
+    ImageOwnedVerifierIdentity,
+    OciExecutionClaim,
+)
 from autolean_prover.execution.base import ExecutionHarness, ProcessRequest, ProcessResult
 from autolean_prover.execution.lean_runner import (
     ElaboratedTypeEvidence,
@@ -18,10 +24,14 @@ from autolean_prover.execution.workspace import (
 __all__ = [
     "CleanSubprocessHarness",
     "ElaboratedTypeEvidence",
+    "ExecutionClaimValidator",
     "ExecutionHarness",
+    "FrozenTaskBundleInput",
+    "ImageOwnedVerifierIdentity",
     "LeanRunEvidence",
     "LeanRunner",
     "MaterializedWorkspace",
+    "OciExecutionClaim",
     "OciExecutionEvidence",
     "OciLeanRunner",
     "OciWorkerHarness",

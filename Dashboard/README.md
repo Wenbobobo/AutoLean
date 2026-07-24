@@ -27,6 +27,13 @@ worker fencing tokens, or heartbeat timestamps. Consequently, the UI neither dra
 mathematical-to-formal-to-execution links nor claims lease freshness. Adding those signals
 requires an explicitly reviewed projection-schema revision, not a UI-side heuristic.
 
+`GET /api/phase-feedback` exposes replay-derived milestone and evidence feedback for current
+frozen bundles. It keeps Builder fidelity, proof-candidate verification, unresolved
+human-review inputs, and within-bundle mathematical dependent reachability separate. The
+contract has no scalar progress score and carries `promotion_state=not_a_promotion`.
+Its freshness fields bind the task observation to exact relevant event sequences and the
+export's replay head; they do not prove that an exported file is caught up to a live event store.
+
 The current canvas is an operational slice, not an unbounded graph browser. It flags views
 above 96 visible nodes as dense; large portfolios should export reviewed aggregates or
 bounded dependency neighborhoods until zooming, clustering, and virtualization have their
@@ -42,6 +49,10 @@ For deterministic UI development, set `AUTOLEAN_DASHBOARD_PROJECTION` to
 `Dashboard/api/tests/fixtures/grid-demo.v1.json` before launching the API. The fixture is
 synthetic, schema-validated, answer-free, and deliberately labels its model runs as `fake`; it is
 not runtime or proof evidence.
+
+If the default API port is already occupied, set
+`AUTOLEAN_DASHBOARD_API_URL=http://127.0.0.1:<port>` for the Vite process. The
+browser continues to use the same-origin `/api` proxy.
 
 `AUTOLEAN_DASHBOARD_PROJECTION` may point only to the control plane's atomically
 exported projection file. The reader rejects symlinks, non-regular files, malformed

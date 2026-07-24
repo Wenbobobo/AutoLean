@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
+import subprocess
 from pathlib import Path
 
 import pytest
@@ -56,22 +59,87 @@ def test_archive_staging_copies_bytes_and_rechecks_digest(
 def test_direct_canary_command_freezes_the_oci_isolation_profile(tmp_path: Path) -> None:
     candidate = tmp_path / "Candidate.lean"
     candidate.write_text("theorem fixture : True := by trivial\n", encoding="utf-8")
+    output = tmp_path / "output"
+    output.mkdir()
+    compiled = tmp_path / "Candidate.olean"
+    compiled.write_bytes(b"compiled")
     image = "autolean/lean-worker@sha256:" + "a" * 64
 
-    command = oci_worker_canary._wrapper_command(image, candidate)
+    compile_command = oci_worker_canary._compile_command(
+        image,
+        candidate,
+        output,
+        "autolean-test-compile",
+    )
+    query_command = oci_worker_canary._query_command(
+        image,
+        compiled,
+        "autolean-test-query",
+    )
 
-    assert command[:3] == ["docker", "run", "--rm"]
-    assert command[3:5] == ["--network", "none"]
-    assert "--read-only" in command
-    assert command[command.index("--cap-drop") :][:2] == ["--cap-drop", "ALL"]
-    assert command[command.index("--security-opt") :][:2] == [
-        "--security-opt",
-        "no-new-privileges",
-    ]
-    assert "/tmp:rw,noexec,nosuid,size=256m" in command
-    assert image in command
-    assert "/bin/sh" not in command
-    assert "True" not in command
+    for command in (compile_command, query_command):
+        assert command[:3] == ["docker", "run", "--name"]
+        assert command[command.index("--network") :][:2] == ["--network", "none"]
+        assert "--read-only" in command
+        assert command[command.index("--cap-drop") :][:2] == ["--cap-drop", "ALL"]
+        assert command[command.index("--security-opt") :][:2] == [
+            "--security-opt",
+            "no-new-privileges",
+        ]
+        assert "/tmp:rw,noexec,nosuid,size=256m" in command
+        assert image in command
+        assert "/bin/sh" not in command
+        assert "True" not in command
+        assert not any("dst=/work" in argument for argument in command)
+    assert any(
+        "dst=/output" in argument and "readonly" not in argument for argument in compile_command
+    )
+    assert any(
+        "dst=/compiled/Candidate.olean" in argument and "readonly" in argument
+        for argument in query_command
+    )
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits are authoritative on Linux")
+def test_direct_canary_limits_cross_uid_output_access_to_compile_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = tmp_path / "Candidate.lean"
+    candidate.write_text("theorem fixture : True := by trivial\n", encoding="utf-8")
+    observed: dict[str, int] = {}
+    output_root: Path | None = None
+
+    def fake_run_phase(
+        command: list[str],
+        container_name: str,
+    ) -> subprocess.CompletedProcess[str]:
+        del container_name
+        nonlocal output_root
+        phase = command[command.index("--phase") + 1]
+        if phase == "compile":
+            mount = next(value for value in command if "dst=/output" in value)
+            source = next(
+                field.removeprefix("src=") for field in mount.split(",") if field.startswith("src=")
+            )
+            output_root = Path(source)
+            observed["parent"] = stat.S_IMODE(output_root.parent.stat().st_mode)
+            observed["compile"] = stat.S_IMODE(output_root.stat().st_mode)
+            (output_root / "Candidate.olean").write_bytes(b"canary-olean")
+        else:
+            assert output_root is not None
+            observed["query"] = stat.S_IMODE(output_root.stat().st_mode)
+        return subprocess.CompletedProcess(command, 0, "{}", "")
+
+    monkeypatch.setattr(oci_worker_canary, "_run_phase", fake_run_phase)
+
+    result = oci_worker_canary._direct(
+        "autolean/lean-worker@sha256:" + ("a" * 64),
+        candidate,
+    )
+
+    assert result.returncode == 0
+    assert observed == {"parent": 0o700, "compile": 0o733, "query": 0o700}
 
 
 def test_real_canary_bundle_binds_image_type_and_pure_lean_boundary() -> None:
@@ -83,6 +151,11 @@ def test_real_canary_bundle_binds_image_type_and_pure_lean_boundary() -> None:
     assert bundle.contract.formal.elaborated_type == "\u2200 (n : Nat), @Eq.{1} Nat n n"
     assert bundle.contract.formal.imports_allowlist == ()
     assert bundle.contract.formal.environment.mathlib_revision == "none-pure-lean-v4.28.0"
+    assert bundle.contract.revision == 2
+    assert bundle.graphs.mathematical.revision == 2
+    assert bundle.graphs.formal.revision == 2
+    assert bundle.graphs.execution.revision == 2
+    assert bundle.contract.formal.environment.verifier_execution_policy.schema_version == "2.0"
     assert (
         bundle.contract.formal.environment.verifier_execution_policy.worker_image_digest == digest
     )

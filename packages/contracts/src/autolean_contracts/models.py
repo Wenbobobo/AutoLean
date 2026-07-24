@@ -1,10 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 from datetime import datetime
 from enum import StrEnum
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import Field, model_validator
 
@@ -253,10 +254,95 @@ class OciVerifierExecutionPolicyV1(ContractModel):
         )
 
 
+class OciVerifierExecutionPolicyV2(ContractModel):
+    """The explicit two-phase OCI policy for newly revised Lean environments.
+
+    V2 separates untrusted compilation from the trusted query wrapper. It is intentionally a
+    sibling of V1 rather than a mutation or subclass: choosing V2 changes the contract hash and
+    therefore requires a new statement-contract revision.
+    """
+
+    schema_version: Literal["2.0"] = "2.0"
+    worker_image_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    wrapper_protocol: Literal["autolean.oci-lean-wrapper.v2"] = "autolean.oci-lean-wrapper.v2"
+    wrapper_executable: Literal["/opt/autolean/bin/autolean-lean-wrapper"] = (
+        "/opt/autolean/bin/autolean-lean-wrapper"
+    )
+    candidate_path: Literal["/input/Candidate.lean"] = "/input/Candidate.lean"
+    compiler_output_path: Literal["/output/Candidate.olean"] = "/output/Candidate.olean"
+    compiled_candidate_path: Literal["/compiled/Candidate.olean"] = "/compiled/Candidate.olean"
+    handoff_protocol: Literal["autolean.oci-compile-query-handoff.v1"] = (
+        "autolean.oci-compile-query-handoff.v1"
+    )
+    type_format: Literal["autolean.lean-pp-expr.v1"] = "autolean.lean-pp-expr.v1"
+    network_mode: Literal["none"] = "none"
+    read_only_root: Literal[True] = True
+    drop_all_capabilities: Literal[True] = True
+    no_new_privileges: Literal[True] = True
+    runtime_user_mode: Literal["host-non-root"] = "host-non-root"
+    source_mount_path: Literal["/source"] = "/source"
+    dependencies_mount_path: Literal["/deps"] = "/deps"
+    source_mount_read_only: Literal[True] = True
+    dependencies_mount_read_only: Literal[True] = True
+    candidate_mount_read_only: Literal[True] = True
+    workdir: Literal["/work"] = "/work"
+
+    def command_policy_hash(self) -> DigestV1:
+        """Return the frozen hash of the V2 wrapper and OCI isolation policy."""
+
+        return digest_model(
+            HashKindV1.VERIFICATION_COMMAND,
+            self,
+            exclude={"worker_image_digest"},
+        )
+
+    def compile_wrapper_argv(self) -> tuple[str, ...]:
+        """Render the untrusted compilation phase command."""
+
+        return (
+            self.wrapper_executable,
+            "--protocol",
+            self.wrapper_protocol,
+            "--phase",
+            "compile",
+            "--candidate",
+            self.candidate_path,
+            "--output",
+            self.compiler_output_path,
+        )
+
+    def wrapper_argv(self, expected_declaration: str) -> tuple[str, ...]:
+        """Render the trusted query phase command."""
+
+        if not expected_declaration or expected_declaration != expected_declaration.strip():
+            raise ValueError("expected declaration must be a nonempty canonical identifier")
+        if "\x00" in expected_declaration or "\n" in expected_declaration:
+            raise ValueError("expected declaration contains a control character")
+        return (
+            self.wrapper_executable,
+            "--protocol",
+            self.wrapper_protocol,
+            "--phase",
+            "query",
+            "--compiled",
+            self.compiled_candidate_path,
+            "--declaration",
+            expected_declaration,
+            "--type-format",
+            self.type_format,
+        )
+
+
+OciVerifierExecutionPolicy = Annotated[
+    OciVerifierExecutionPolicyV1 | OciVerifierExecutionPolicyV2,
+    Field(discriminator="schema_version"),
+]
+
+
 class LeanEnvironmentV1(ContractModel):
     lean_version: str = Field(min_length=1)
     mathlib_revision: str = Field(min_length=1)
-    verifier_execution_policy: OciVerifierExecutionPolicyV1
+    verifier_execution_policy: OciVerifierExecutionPolicy
     lake_manifest_hash: DigestV1 | None = None
     environment_hash: DigestV1
 
@@ -1048,6 +1134,92 @@ class OciVerificationArtifactV1(ContractModel):
         return self
 
 
+class OciExecutionAuthorityV1(ContractModel):
+    """Lease and image-owned verifier identity observed for one authoritative OCI run."""
+
+    schema_version: Literal["autolean.oci-execution-authority.v1"] = (
+        "autolean.oci-execution-authority.v1"
+    )
+    status: Literal["lease-bound-pending-gateway"] = "lease-bound-pending-gateway"
+    execution_claim_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+    worker_id: str = Field(
+        min_length=1,
+        max_length=256,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._:-]{0,255}$",
+    )
+    fencing_token: int = Field(gt=0)
+    expires_at: datetime
+    wrapper_identity_hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+    @model_validator(mode="after")
+    def validate_expiry(self) -> OciExecutionAuthorityV1:
+        if self.expires_at.tzinfo is None:
+            raise ValueError("OCI execution authority lease expiry must be timezone-aware")
+        return self
+
+
+class OciVerificationArtifactV2(ContractModel):
+    """OCI evidence that binds an observed run to a fenced lease and approved verifier."""
+
+    schema_version: Literal["autolean.oci-execution-evidence.v2"] = (
+        "autolean.oci-execution-evidence.v2"
+    )
+    worker_image_digest: str = Field(pattern=r"^sha256:[0-9a-f]{64}$")
+    wrapper_protocol: str = Field(
+        min_length=1,
+        max_length=128,
+        pattern=r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$",
+    )
+    command_policy_hash: DigestV1
+    command_hash: DigestV1
+    compile_command_hash: DigestV1
+    query_command_hash: DigestV1
+    sealed_candidate_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    handoff_protocol: Literal["autolean.oci-compile-query-handoff.v1"] = (
+        "autolean.oci-compile-query-handoff.v1"
+    )
+    candidate_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    trusted_statement_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    bundle_manifest_sha256: str = Field(pattern=r"^[0-9a-f]{64}$")
+    execution_authority: OciExecutionAuthorityV1
+
+    @model_validator(mode="after")
+    def validate_hashes(self) -> OciVerificationArtifactV2:
+        require_digest_kind(
+            self.command_policy_hash,
+            HashKindV1.VERIFICATION_COMMAND,
+            "command_policy_hash",
+        )
+        require_digest_kind(self.command_hash, HashKindV1.VERIFICATION_COMMAND, "command_hash")
+        require_digest_kind(
+            self.compile_command_hash,
+            HashKindV1.VERIFICATION_COMMAND,
+            "compile_command_hash",
+        )
+        require_digest_kind(
+            self.query_command_hash,
+            HashKindV1.VERIFICATION_COMMAND,
+            "query_command_hash",
+        )
+        transcript_hash = hashlib.sha256(
+            json.dumps(
+                {
+                    "schema_version": "autolean.oci-command-transcript.v2",
+                    "handoff_protocol": self.handoff_protocol,
+                    "compile_command_hash": self.compile_command_hash.value,
+                    "query_command_hash": self.query_command_hash.value,
+                    "sealed_candidate_sha256": self.sealed_candidate_sha256,
+                },
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()
+        if self.command_hash.value != transcript_hash:
+            raise ValueError("command_hash does not bind the OCI compile/query handoff")
+        return self
+
+
 class VerificationEvidenceArtifactV1(ContractModel):
     """Canonical content-addressed verifier artifact accepted by the control plane.
 
@@ -1077,6 +1249,49 @@ class VerificationEvidenceArtifactV1(ContractModel):
 
     @model_validator(mode="after")
     def validate_hashes(self) -> VerificationEvidenceArtifactV1:
+        require_digest_kind(self.bundle_hash, HashKindV1.BUNDLE, "bundle_hash")
+        require_digest_kind(self.contract_hash, HashKindV1.CONTRACT, "contract_hash")
+        require_digest_kind(
+            self.proof_boundary_hash,
+            HashKindV1.PROOF_BOUNDARY,
+            "proof_boundary_hash",
+        )
+        require_digest_kind(
+            self.dependency_manifest_hash,
+            HashKindV1.DEPENDENCY_MANIFEST,
+            "dependency_manifest_hash",
+        )
+        require_digest_kind(
+            self.verification_observation_hash,
+            HashKindV1.VERIFICATION_REPORT,
+            "verification_observation_hash",
+        )
+        return self
+
+
+class VerificationEvidenceArtifactV2(ContractModel):
+    """Canonical verifier artifact required for lease-bound gateway promotion."""
+
+    schema_version: Literal["autolean.verification-evidence-artifact.v2"] = (
+        "autolean.verification-evidence-artifact.v2"
+    )
+    evidence_id: StableIdentifierV1
+    bundle_id: StableIdentifierV1
+    bundle_hash: DigestV1
+    contract_id: StableIdentifierV1
+    revision: int = Field(ge=1)
+    contract_hash: DigestV1
+    proof_id: StableIdentifierV1
+    proof_boundary_hash: DigestV1
+    proof_submission_artifact_digest: str = Field(pattern=r"^[0-9a-f]{64}$")
+    dependency_manifest_hash: DigestV1
+    verification_report_id: StableIdentifierV1
+    verification_observation_hash: DigestV1
+    environment: VerificationArtifactEnvironmentV1
+    oci: OciVerificationArtifactV2
+
+    @model_validator(mode="after")
+    def validate_hashes(self) -> VerificationEvidenceArtifactV2:
         require_digest_kind(self.bundle_hash, HashKindV1.BUNDLE, "bundle_hash")
         require_digest_kind(self.contract_hash, HashKindV1.CONTRACT, "contract_hash")
         require_digest_kind(

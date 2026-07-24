@@ -17,6 +17,7 @@ from .models import (
     EventView,
     GraphNode,
     Overview,
+    PhaseFeedback,
     RunSummary,
     StatementRevision,
     WorkRecord,
@@ -193,6 +194,22 @@ def create_app(reader: ProjectionReader | None = None) -> FastAPI:
             for item in items
             if item.kind != "mission"
         ]
+
+    @app.get(
+        "/api/phase-feedback",
+        response_model=list[PhaseFeedback],
+        dependencies=[Depends(authorize)],
+    )
+    def phase_feedback(
+        task_id: str | None = Query(default=None, min_length=1, max_length=256),
+        limit: int = Query(default=100, ge=1, le=100),
+    ) -> list[PhaseFeedback]:
+        """Return replay-linked research feedback; it carries no promotion authority."""
+
+        items = current_snapshot().phase_feedback
+        if task_id is not None:
+            items = tuple(item for item in items if item.task_id == task_id)
+        return list(items[:limit])
 
     @app.get("/api/runs", response_model=list[RunSummary], dependencies=[Depends(authorize)])
     def runs(limit: int = Query(default=100, ge=1, le=1000)) -> list[RunSummary]:

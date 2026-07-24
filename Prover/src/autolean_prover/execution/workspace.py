@@ -11,6 +11,7 @@ from pathlib import Path, PurePosixPath
 from autolean_contracts import FormalizationTaskBundleV1
 
 from autolean_prover.errors import ExecutionPolicyError, ValidationError
+from autolean_prover.execution.authority import FrozenTaskBundleInput
 
 _SAFE_RELATIVE = re.compile(r"^[A-Za-z0-9_.-]+(?:/[A-Za-z0-9_.-]+)*$")
 
@@ -33,12 +34,16 @@ class ProtectedFile:
 class MaterializedWorkspace:
     root: Path
     bundle: FormalizationTaskBundleV1
+    task_input: FrozenTaskBundleInput
     protected_files: tuple[ProtectedFile, ...]
     allowed_write_paths: frozenset[str]
     proof_path: Path
     candidate_path: Path
 
     def validate_integrity(self) -> None:
+        self.task_input.validate()
+        if self.task_input.bundle is not self.bundle:
+            raise WorkspaceIntegrityError("workspace bundle is not its frozen execution input")
         for protected in self.protected_files:
             path = self._resolve(protected.path)
             if not path.is_file():
@@ -155,6 +160,8 @@ class WorkspaceMaterializer:
         bundle: FormalizationTaskBundleV1,
         root: str | Path,
     ) -> MaterializedWorkspace:
+        task_input = FrozenTaskBundleInput.from_bundle(bundle)
+        task_input.validate()
         destination = Path(root).resolve()
         if destination.exists() and any(destination.iterdir()):
             raise ExecutionPolicyError("attempt workspace must be empty before materialization")
@@ -181,6 +188,7 @@ class WorkspaceMaterializer:
         return MaterializedWorkspace(
             root=destination,
             bundle=bundle,
+            task_input=task_input,
             protected_files=tuple(protected),
             allowed_write_paths=frozenset(boundary.allowed_write_paths),
             proof_path=proof_path,

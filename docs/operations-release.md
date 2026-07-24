@@ -29,6 +29,13 @@ verifier-owned elaborated-type comparison and required canaries, this checkout i
 release candidate. A host Lean installation, a static adapter test, or a successful FATE-Eval run
 cannot substitute for that evidence.
 
+Ignored local observations, including `Library/evidence/` compile reports and
+`release-evidence/oci-worker/` test-only canaries, are useful diagnostics but are not committed
+release evidence or production attestations. A later release decision must bind a clean source
+commit, canonical build inputs, immutable artifact references, an authoritative mathlib-capable
+OCI verification record, and the required deployed authority evidence. A partial Library spike or
+test-only gateway receipt never closes a Builder semantic gate or a promotion gate.
+
 Other hard blockers are:
 
 - no retained 1,000-job **OS-process** kill/restart/replay report proving no loss, duplicate

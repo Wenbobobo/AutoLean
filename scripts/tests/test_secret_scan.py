@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import subprocess
 from pathlib import Path, PurePosixPath
 
-from scripts.secret_scan import report, scan_paths, scan_repository
+import pytest
+
+from scripts.secret_scan import SecretScanError, report, scan_paths, scan_repository
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
@@ -41,6 +44,21 @@ def test_protected_and_generated_trees_are_not_read(tmp_path: Path) -> None:
 
     assert result.files_scanned == 0
     assert result.findings == ()
+
+
+def test_repository_scan_rejects_staged_secret_hidden_by_worktree(tmp_path: Path) -> None:
+    subprocess.run(("git", "init", "--quiet"), cwd=tmp_path, check=True)
+    candidate = tmp_path / "config.txt"
+    staged_token = "github_" + "pat_" + "ThisCredentialMustRemainStaged123456"
+    candidate.write_text(
+        f"token = {staged_token}\n",
+        encoding="utf-8",
+    )
+    subprocess.run(("git", "add", "config.txt"), cwd=tmp_path, check=True)
+    candidate.write_text("safe worktree bytes\n", encoding="utf-8")
+
+    with pytest.raises(SecretScanError, match="index and worktree differ"):
+        scan_repository(tmp_path)
 
 
 def test_current_repository_has_no_candidate_secrets() -> None:

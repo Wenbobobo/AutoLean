@@ -18,9 +18,18 @@ databases, raw JSONL/logs, key material, symlinks, files above 5 MiB, and enviro
 than `.env.example`. It explicitly rejects role-benchmark raw-output CAS directories and private
 raw-artifact manifests, even when a file is force-added outside the normal ignored paths. JSON
 containing a non-null `permitted_excerpt` is also rejected because fidelity artifacts with
-verbatim source text are private evidence. It also
+verbatim source text are private evidence. It also rejects the exact repository path prefixes
+`docs/meeting/` and `tmp/`, including force-added files. Prefix matching is case-insensitive and
+normalizes `/` and `\\` separators, but is component-bounded: `docs/meetingsafe/`,
+`docs/meeting-notes/`, and `tmpfile/` are not blocked by this rule. It also
 requires the root Apache-2.0 license and matching metadata in every Python workspace package and
 the Dashboard UI.
+
+These two boundaries are enforced from the Git candidate inventory, not merely through
+`.git/info/exclude` or `.gitignore`; `git add -f` cannot make their contents release-ready.
+Before reading any tracked candidate from the worktree, both public-readiness and secret scans
+require the Git index and worktree to agree. Run the release audit after staging the intended
+tree. This prevents a staged blob or symlink from being hidden behind different worktree bytes.
 
 This is a repository-tree policy, not a forensic content scanner. The secret scanner and provider
 policy run separately, and an operator must still inspect the reachable Git history and Git-host

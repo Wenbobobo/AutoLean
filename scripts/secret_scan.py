@@ -91,6 +91,34 @@ class SecretScanError(RuntimeError):
     """Repository file discovery or safe reading failed."""
 
 
+def _require_index_worktree_alignment(root: Path) -> None:
+    """Ensure worktree reads describe the exact bytes currently staged in Git."""
+    try:
+        completed = subprocess.run(
+            (
+                "git",
+                "-C",
+                str(root),
+                "diff",
+                "--quiet",
+                "--no-ext-diff",
+                "--",
+            ),
+            check=False,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        )
+    except OSError as error:
+        raise SecretScanError("git is required for index/worktree comparison") from error
+    if completed.returncode == 1:
+        raise SecretScanError(
+            "git index and worktree differ; stage or restore tracked changes before secret scan"
+        )
+    if completed.returncode != 0:
+        raise SecretScanError("git index/worktree comparison failed")
+
+
 def _normalized_relative_path(value: str) -> PurePosixPath:
     normalized = value.replace("\\", "/")
     path = PurePosixPath(normalized)
@@ -184,7 +212,9 @@ def scan_paths(root: Path, paths: tuple[PurePosixPath, ...]) -> ScanResult:
 
 
 def scan_repository(root: Path) -> ScanResult:
-    return scan_paths(root, discover_repository_files(root.resolve()))
+    resolved = root.resolve()
+    _require_index_worktree_alignment(resolved)
+    return scan_paths(resolved, discover_repository_files(resolved))
 
 
 def report(result: ScanResult) -> str:

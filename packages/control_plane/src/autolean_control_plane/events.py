@@ -571,10 +571,12 @@ class EventStore:
         self._validate_append_request(entity_type, entity_id, expected_sequence, events)
         if not task_id.strip():
             raise ValueError("task_id must not be empty")
+        self._validate_fenced_task_binding(task_id=task_id, events=events)
 
         with self.write_transaction() as connection:
             existing = self._existing_idempotency(connection, idempotency)
             if existing is not None:
+                self._assert_fenced_replay_task_binding(task_id=task_id, events=existing)
                 return existing
             self._assert_current_fence(connection, task_id=task_id, lease=lease)
             return self._append_locked(
@@ -603,6 +605,33 @@ class EventStore:
             raise ValueError("at least one event is required")
         if any(not event.event_type.strip() for event in events):
             raise ValueError("event_type must not be empty")
+
+    @staticmethod
+    def _validate_fenced_task_binding(*, task_id: str, events: Sequence[NewEvent]) -> None:
+        """Require the leased task identity in every immutable fenced-event payload.
+
+        ``task_id`` is an authorization input, while ``bundle_id`` is preserved in the
+        append-only payload read by downstream projections. Requiring equality before an
+        idempotency lookup prevents a caller from replaying a valid command under another task.
+        """
+
+        for event in events:
+            bundle_id = event.payload.get("bundle_id")
+            if not isinstance(bundle_id, str) or not bundle_id:
+                raise ValueError("fenced event payload must include a non-empty bundle_id")
+            if bundle_id != task_id:
+                raise ValueError("fenced event payload bundle_id must match task_id")
+
+    @staticmethod
+    def _assert_fenced_replay_task_binding(*, task_id: str, events: Sequence[StoredEvent]) -> None:
+        """Fail closed when an idempotency record belongs to a different fenced task."""
+
+        for event in events:
+            bundle_id = event.payload.get("bundle_id")
+            if not isinstance(bundle_id, str) or bundle_id != task_id:
+                raise IdempotencyConflict(
+                    "idempotency replay does not belong to the requested fenced task"
+                )
 
     def _append_locked(
         self,

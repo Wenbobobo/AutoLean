@@ -9,6 +9,7 @@ separate while preserving the exact payload that the control plane will later ve
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from collections.abc import Mapping
 from datetime import datetime
@@ -20,11 +21,15 @@ from autolean_contracts import (
     DigestV1,
     FormalizationTaskBundleV1,
     HashKindV1,
+    OciExecutionAuthorityV1,
     OciVerificationArtifactV1,
+    OciVerificationArtifactV2,
+    OciVerifierExecutionPolicyV2,
     ProofSubmissionV1,
     StableIdentifierV1,
     VerificationArtifactEnvironmentV1,
     VerificationEvidenceArtifactV1,
+    VerificationEvidenceArtifactV2,
     VerificationEvidenceV1,
     VerificationReportV1,
     proof_dependency_manifest_hash,
@@ -34,6 +39,10 @@ from autolean_contracts import (
 
 from autolean_prover.errors import ValidationError
 from autolean_prover.execution import OciExecutionEvidence
+from autolean_prover.execution.lean_runner import (
+    OCI_EXECUTION_AUTHORITY_LEASE_PENDING_GATEWAY,
+    OCI_EXECUTION_AUTHORITY_LEASE_UNOBSERVED,
+)
 from autolean_prover.verification import VerificationObservation
 
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -260,6 +269,18 @@ def _validate_execution_binding(
     environment = bundle.contract.formal.environment
     boundary = bundle.proof_boundary
     policy = environment.verifier_execution_policy
+    if not isinstance(policy, OciVerifierExecutionPolicyV2):
+        raise ValidationError(
+            "oci_execution_policy_version_unsupported",
+            "attestation requires an explicit V2 execution policy; V1 contracts must remain "
+            "loadable but cannot produce new evidence",
+        )
+    if execution.authority_status == OCI_EXECUTION_AUTHORITY_LEASE_UNOBSERVED:
+        raise ValidationError(
+            "oci_wrapper_identity_unobserved",
+            "lease-bound OCI execution cannot produce attestation evidence without "
+            "wrapper identity",
+        )
     if execution.worker_image_digest != policy.worker_image_digest:
         raise ValidationError(
             "oci_worker_image_policy_mismatch",
@@ -269,6 +290,35 @@ def _validate_execution_binding(
         raise ValidationError(
             "oci_wrapper_policy_mismatch",
             "OCI execution record has a wrapper protocol outside the frozen verifier policy",
+        )
+    if (
+        execution.schema_version != "autolean.oci-execution-evidence.v2"
+        or execution.handoff_protocol != policy.handoff_protocol
+        or execution.query_command_hash is None
+        or execution.sealed_candidate_sha256 is None
+    ):
+        raise ValidationError(
+            "oci_compile_query_evidence_missing",
+            "OCI execution record does not establish the isolated compile/query handoff",
+        )
+    expected_command_transcript_hash = hashlib.sha256(
+        json.dumps(
+            {
+                "schema_version": "autolean.oci-command-transcript.v2",
+                "handoff_protocol": execution.handoff_protocol,
+                "compile_command_hash": execution.compile_command_hash,
+                "query_command_hash": execution.query_command_hash,
+                "sealed_candidate_sha256": execution.sealed_candidate_sha256,
+            },
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    if execution.command_hash != expected_command_transcript_hash:
+        raise ValidationError(
+            "oci_command_transcript_mismatch",
+            "OCI execution record command transcript does not bind both phases and handoff bytes",
         )
     if execution.command_policy_hash != policy.command_policy_hash().value:
         raise ValidationError(
@@ -339,39 +389,96 @@ def _evidence_artifact_payload(
     """Serialize only non-secret execution facts that the signature later binds."""
 
     environment = bundle.contract.formal.environment
-    artifact = VerificationEvidenceArtifactV1(
-        evidence_id=evidence_id,
-        bundle_id=bundle.bundle_id,
-        bundle_hash=bundle.handoff_hash(),
-        contract_id=bundle.contract.contract_id,
-        revision=bundle.contract.revision,
-        contract_hash=bundle.contract.semantic_hash(),
-        proof_id=submission.proof_id,
-        proof_boundary_hash=bundle.proof_boundary.boundary_hash,
-        proof_submission_artifact_digest=proof_submission_artifact_digest,
-        dependency_manifest_hash=proof_dependency_manifest_hash(submission),
-        verification_report_id=report.report_id,
-        verification_observation_hash=observation_hash,
-        environment=VerificationArtifactEnvironmentV1(
+    common: dict[str, object] = {
+        "evidence_id": evidence_id,
+        "bundle_id": bundle.bundle_id,
+        "bundle_hash": bundle.handoff_hash(),
+        "contract_id": bundle.contract.contract_id,
+        "revision": bundle.contract.revision,
+        "contract_hash": bundle.contract.semantic_hash(),
+        "proof_id": submission.proof_id,
+        "proof_boundary_hash": bundle.proof_boundary.boundary_hash,
+        "proof_submission_artifact_digest": proof_submission_artifact_digest,
+        "dependency_manifest_hash": proof_dependency_manifest_hash(submission),
+        "verification_report_id": report.report_id,
+        "verification_observation_hash": observation_hash,
+        "environment": VerificationArtifactEnvironmentV1(
             environment_hash=environment.environment_hash,
             lean_version=execution.lean_version,
             mathlib_revision=execution.mathlib_revision,
             lake_manifest_hash=environment.lake_manifest_hash,
         ),
-        oci=OciVerificationArtifactV1(
-            worker_image_digest=execution.worker_image_digest,
-            wrapper_protocol=execution.wrapper_protocol,
-            command_policy_hash=DigestV1(
-                kind=HashKindV1.VERIFICATION_COMMAND,
-                value=execution.command_policy_hash,
-            ),
-            command_hash=DigestV1(
-                kind=HashKindV1.VERIFICATION_COMMAND,
-                value=execution.command_hash,
-            ),
-            candidate_sha256=execution.candidate_sha256,
-            trusted_statement_sha256=execution.trusted_statement_sha256,
-            bundle_manifest_sha256=execution.bundle_manifest_sha256,
+    }
+    oci_common: dict[str, object] = {
+        "worker_image_digest": execution.worker_image_digest,
+        "wrapper_protocol": execution.wrapper_protocol,
+        "command_policy_hash": DigestV1(
+            kind=HashKindV1.VERIFICATION_COMMAND,
+            value=execution.command_policy_hash,
         ),
-    )
+        "command_hash": DigestV1(
+            kind=HashKindV1.VERIFICATION_COMMAND,
+            value=execution.command_hash,
+        ),
+        "candidate_sha256": execution.candidate_sha256,
+        "trusted_statement_sha256": execution.trusted_statement_sha256,
+        "bundle_manifest_sha256": execution.bundle_manifest_sha256,
+    }
+    artifact: VerificationEvidenceArtifactV1 | VerificationEvidenceArtifactV2
+    if execution.authority_status == OCI_EXECUTION_AUTHORITY_LEASE_PENDING_GATEWAY:
+        if execution.query_command_hash is None or execution.sealed_candidate_sha256 is None:
+            raise ValidationError(
+                "oci_execution_authority_incomplete",
+                "authoritative OCI evidence lacks compile/query handoff bindings",
+            )
+        artifact = VerificationEvidenceArtifactV2.model_validate(
+            {
+                **common,
+                "oci": OciVerificationArtifactV2.model_validate(
+                    {
+                        **oci_common,
+                        "compile_command_hash": DigestV1(
+                            kind=HashKindV1.VERIFICATION_COMMAND,
+                            value=execution.compile_command_hash,
+                        ),
+                        "query_command_hash": DigestV1(
+                            kind=HashKindV1.VERIFICATION_COMMAND,
+                            value=execution.query_command_hash,
+                        ),
+                        "sealed_candidate_sha256": execution.sealed_candidate_sha256,
+                        "handoff_protocol": execution.handoff_protocol,
+                        "execution_authority": _execution_authority(execution),
+                    }
+                ),
+            }
+        )
+    else:
+        artifact = VerificationEvidenceArtifactV1.model_validate(
+            {
+                **common,
+                "oci": OciVerificationArtifactV1.model_validate(oci_common),
+            }
+        )
     return artifact.model_dump(mode="json")
+
+
+def _execution_authority(execution: OciExecutionEvidence) -> OciExecutionAuthorityV1:
+    if (
+        execution.authority_status != OCI_EXECUTION_AUTHORITY_LEASE_PENDING_GATEWAY
+        or execution.execution_claim_hash is None
+        or execution.lease_worker_id is None
+        or execution.lease_fencing_token is None
+        or execution.lease_expires_at is None
+        or execution.wrapper_identity_hash is None
+    ):
+        raise ValidationError(
+            "oci_execution_authority_incomplete",
+            "authoritative OCI evidence lacks its claim, lease, or wrapper identity binding",
+        )
+    return OciExecutionAuthorityV1(
+        execution_claim_hash=execution.execution_claim_hash,
+        worker_id=execution.lease_worker_id,
+        fencing_token=execution.lease_fencing_token,
+        expires_at=execution.lease_expires_at,
+        wrapper_identity_hash=execution.wrapper_identity_hash,
+    )

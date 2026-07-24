@@ -26,6 +26,8 @@ def main() -> None:
     ):
         run(("mypy", "-p", package))
     run(("mypy", "benchmarks", "scripts"))
+    run(("mypy", "Library", "--explicit-package-bases"))
+    run((sys.executable, "Library/scripts/verify.py", "check"))
     run(("pytest", "-q"))
     run((sys.executable, "-m", "scripts.secret_scan"))
     run((sys.executable, "-m", "scripts.provider_policy_guard"))

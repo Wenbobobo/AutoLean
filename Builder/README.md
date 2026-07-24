@@ -49,7 +49,22 @@ can still be parsed. The supported bridge and control-plane admission gate rejec
 handoff must carry both the preparation ID and digest.
 
 See [the Harness protocol](../docs/builder-fidelity-harness.md) for the automatic-versus-expert
-decision boundary and the remaining reviewer-authentication requirement. The proposed first
-chapter-scale calibration is the rights-gated
-[connection-curvature pilot](../docs/domain-pilot-selection.md). Source bytes remain in the ignored
-local cache; only provenance and hash metadata are tracked.
+decision boundary and the remaining reviewer-authentication requirement. The versioned
+[`self-calibration pilot manifest`](pilots/self-calibration/pilot-manifest.v1.json) keeps source,
+current-mathlib, counterexample, and human-review gates separate from statement contracts. The
+connection-curvature graph is reference-only because an active upstream overlap blocks admission;
+its three alternatives remain conditional until their individual gates pass. Source bytes remain
+in the ignored local cache; only provenance and hash metadata are tracked.
+
+The adjacent [`self-calibration rounds`](pilots/self-calibration/README.md) are a narrower,
+public-safe design record: they bind candidate revisions, source anchors, rights-evidence
+metadata, role reports, blockers, and the pinned Library lock. Self-reported role independence
+and SHA-256 checksums are explicitly untrusted until a future external identity/run verifier
+accepts them. They cannot issue a pilot-admission receipt, freeze a Builder contract, authorize
+model egress, hand off work to Prover, or promote a Library asset.
+
+When a round records a `partial_passed_with_gap` Library preselection spike, it references the
+tracked public-safe packet and compile receipt by repository-relative path and content digest.
+Loading that round revalidates the exact Library v2 build-input closure, pinned environment,
+targets, canonical build report, packet backlink, open gap, and `not_selected` state. This is API
+compatibility evidence only; it cannot select a candidate or replace Builder fidelity review.

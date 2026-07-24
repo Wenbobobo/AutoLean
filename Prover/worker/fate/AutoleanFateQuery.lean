@@ -38,7 +38,7 @@ private def query (declarationText : String) : IO Json := do
   let renderedType ← canonicalType environment declaration
   let axioms ← observedAxioms environment declaration
   return Json.mkObj [
-    ("schema_version", Json.str "autolean.fate-oci-lean-wrapper.v1"),
+    ("schema_version", Json.str "autolean.fate-oci-lean-wrapper.v2"),
     ("declaration", Json.str declarationText),
     ("canonical_type", Json.str renderedType),
     ("lean_version", Json.str "v4.28.0"),

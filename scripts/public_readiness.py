@@ -29,6 +29,10 @@ FORBIDDEN_COMPONENTS = frozenset(
         "vendor",
     }
 )
+FORBIDDEN_PATH_PREFIXES = (
+    ("docs", "meeting"),
+    ("tmp",),
+)
 FORBIDDEN_NAMES = frozenset(
     {
         "raw-artifact-manifest.json",
@@ -116,7 +120,26 @@ def _tracked_and_candidate_paths(root: Path) -> tuple[Path, ...]:
     return tuple(sorted(candidates, key=lambda path: path.as_posix()))
 
 
+def _require_index_worktree_alignment(root: Path) -> None:
+    """Ensure worktree reads describe the exact bytes currently staged in Git."""
+    completed = subprocess.run(
+        ("git", "diff", "--quiet", "--no-ext-diff", "--"),
+        cwd=root,
+        check=False,
+        stdin=subprocess.DEVNULL,
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
+    if completed.returncode == 1:
+        raise PublicReadinessError(
+            "git index and worktree differ; stage or restore tracked changes before release audit"
+        )
+    if completed.returncode != 0:
+        raise PublicReadinessError("git index/worktree comparison failed")
+
+
 def candidate_files(root: Path) -> tuple[CandidateFile, ...]:
+    _require_index_worktree_alignment(root)
     records: list[CandidateFile] = []
     for relative in _tracked_and_candidate_paths(root):
         absolute = root / relative
@@ -158,17 +181,33 @@ def _json_contains_private_source_excerpt(path: Path) -> bool:
     return _contains_non_null_private_source_excerpt(value)
 
 
+def _normalized_path_parts(path: PurePosixPath) -> tuple[str, ...]:
+    """Return case-insensitive path components independent of host separators."""
+    return tuple(
+        part.casefold() for part in str(path).replace("\\", "/").split("/") if part not in {"", "."}
+    )
+
+
+def _has_forbidden_path_prefix(parts: tuple[str, ...]) -> bool:
+    return any(
+        len(parts) >= len(prefix) and parts[: len(prefix)] == prefix
+        for prefix in FORBIDDEN_PATH_PREFIXES
+    )
+
+
 def audit_candidates(files: tuple[CandidateFile, ...]) -> tuple[Finding, ...]:
     findings: list[Finding] = []
     for candidate in files:
         path = candidate.path
-        lowered_parts = tuple(part.casefold() for part in path.parts)
+        lowered_parts = _normalized_path_parts(path)
         lowered_name = path.name.casefold()
         rendered_path = path.as_posix()
         if candidate.is_symlink:
             findings.append(Finding(path=rendered_path, rule="symlink_not_public_release_input"))
         if candidate.contains_private_source_excerpt:
             findings.append(Finding(path=rendered_path, rule="private_source_excerpt"))
+        if _has_forbidden_path_prefix(lowered_parts):
+            findings.append(Finding(path=rendered_path, rule="operator_only_path_prefix"))
         if any(part in FORBIDDEN_COMPONENTS for part in lowered_parts):
             findings.append(Finding(path=rendered_path, rule="local_or_restricted_directory"))
         if lowered_name in FORBIDDEN_NAMES or lowered_name.endswith(".raw-artifact-manifest.json"):

@@ -32,26 +32,33 @@ private def observedAxioms (env : Environment) (declaration : Name) : IO (Array 
   let axioms ← Core.CoreM.toIO' (collectAxioms declaration) context state
   return Array.qsort axioms fun left right => left.toString < right.toString
 
-private def query (declarationText : String) : IO Json := do
+private def query (declarationText wrapperSha256 queryHelperSha256 : String) : IO Json := do
   let environment ← importModules #[{ module := `Candidate }] canonicalOptions
   let declaration := declarationText.toName
   let renderedType ← canonicalType environment declaration
   let axioms ← observedAxioms environment declaration
   return Json.mkObj [
-    ("schema_version", Json.str "autolean.oci-lean-wrapper.v1"),
+    ("schema_version", Json.str "autolean.oci-lean-wrapper.v2"),
     ("declaration", Json.str declarationText),
     ("canonical_type", Json.str renderedType),
     ("lean_version", Json.str "v4.28.0"),
     ("mathlib_revision", Json.str "none-pure-lean-v4.28.0"),
     ("lake_manifest_hash", Json.null),
-    ("observed_axioms", Json.arr <| axioms.map fun name => Json.str name.toString)
+    ("observed_axioms", Json.arr <| axioms.map fun name => Json.str name.toString),
+    ("image_identity", Json.mkObj [
+      ("schema_version", Json.str "autolean.image-owned-verifier-identity.v2"),
+      ("wrapper_path", Json.str "/opt/autolean/bin/autolean-lean-wrapper"),
+      ("wrapper_sha256", Json.str wrapperSha256),
+      ("query_helper_path", Json.str "/opt/autolean/lib/AutoleanLeanQuery.lean"),
+      ("query_helper_sha256", Json.str queryHelperSha256)
+    ])
   ]
 
 def main (arguments : List String) : IO UInt32 := do
   try
-    let [declaration] := arguments
-      | throw <| IO.userError "expected exactly one declaration argument"
-    IO.println (← query declaration).compress
+    let [declaration, wrapperSha256, queryHelperSha256] := arguments
+      | throw <| IO.userError "expected declaration and image-owned identity arguments"
+    IO.println (← query declaration wrapperSha256 queryHelperSha256).compress
     return (0 : UInt32)
   catch error =>
     IO.eprintln s!"autolean-lean-query: {error}"

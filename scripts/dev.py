@@ -23,6 +23,8 @@ def main() -> None:
             "check",
             "ci",
             "format",
+            "library-check",
+            "library-build",
             "dashboard",
             "public-ready",
             "references",
@@ -41,6 +43,8 @@ def main() -> None:
         "bootstrap": ("uv", "sync", "--all-packages", "--all-groups"),
         "test": ("uv", "run", "pytest"),
         "format": ("uv", "run", "ruff", "format", "."),
+        "library-check": ("uv", "run", "python", "Library/scripts/verify.py", "check"),
+        "library-build": ("uv", "run", "python", "Library/scripts/verify.py", "build"),
         "ci": ("uv", "run", "--frozen", "python", "scripts/ci.py"),
         "dashboard": (
             "uv",
@@ -85,6 +89,8 @@ def main() -> None:
         ):
             run(("uv", "run", "mypy", "-p", package))
         run(("uv", "run", "mypy", "benchmarks", "scripts"))
+        run(("uv", "run", "mypy", "Library", "--explicit-package-bases"))
+        run(("uv", "run", "python", "Library/scripts/verify.py", "check"))
         run(("uv", "run", "pytest"))
         return
     run(commands[args.task])

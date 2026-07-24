@@ -23,6 +23,7 @@ from autolean_contracts import (
     ProofSubmissionV1,
     StableIdentifierV1,
     VerificationEvidenceArtifactV1,
+    VerificationEvidenceArtifactV2,
     VerificationReportV1,
     VerificationSigningContextV1,
     VerificationSigningLeaseBindingV1,
@@ -92,6 +93,8 @@ class VerificationOutcome:
     accepted: bool
     reasons: tuple[str, ...]
     event: StoredEvent
+    promotion_state: Literal["not_a_promotion"] = "not_a_promotion"
+    execution_authority_class: Literal["test-only-local"] = "test-only-local"
 
 
 class ControlPlane:
@@ -170,7 +173,19 @@ class ControlPlane:
         if not isinstance(accepted, bool):
             raise InvalidTransition("corrupt verification event acceptance flag")
         reasons = ControlPlane._required_texts(event.payload, "reasons")
-        return VerificationOutcome(accepted=accepted, reasons=reasons, event=event)
+        promotion_state = event.payload.get("promotion_state", "not_a_promotion")
+        if promotion_state != "not_a_promotion":
+            raise InvalidTransition("local verification event claims promotion authority")
+        authority_class = event.payload.get("execution_authority_class", "test-only-local")
+        if authority_class != "test-only-local":
+            raise InvalidTransition("local verification event claims a production authority")
+        return VerificationOutcome(
+            accepted=accepted,
+            reasons=reasons,
+            event=event,
+            promotion_state="not_a_promotion",
+            execution_authority_class="test-only-local",
+        )
 
     @staticmethod
     def _lease_identity(lease: Lease) -> dict[str, object]:
@@ -550,6 +565,8 @@ class ControlPlane:
                 "proof_boundary_hash": report.proof_boundary_hash.value,
                 "accepted": not reasons,
                 "reasons": list(reasons),
+                "promotion_state": "not_a_promotion",
+                "execution_authority_class": "test-only-local",
                 "verifier_attestation": self._attestation_summary(verifier_attestation),
                 "verification_artifact": self._artifact_payload(
                     artifact, kind="verification_report"
@@ -578,7 +595,13 @@ class ControlPlane:
                 "verification attestation was replayed or proof already has a terminal "
                 "verification verdict"
             ) from error
-        return VerificationOutcome(accepted=not reasons, reasons=tuple(reasons), event=events[0])
+        return VerificationOutcome(
+            accepted=not reasons,
+            reasons=tuple(reasons),
+            event=events[0],
+            promotion_state="not_a_promotion",
+            execution_authority_class="test-only-local",
+        )
 
     @overload
     def get_binding(self, bundle_id: str, *, required: Literal[True] = True) -> TaskBinding: ...
@@ -812,6 +835,7 @@ class ControlPlane:
             fencing_token=lease.fencing_token,
             expires_at=lease.expires_at,
         )
+        gateway_attested = False
         try:
             self.attestation_verifier.verify(
                 attestation,
@@ -845,6 +869,7 @@ class ControlPlane:
             except AttestationError as legacy_error:
                 raise InvalidTransition("verification attestation was rejected") from legacy_error
         else:
+            gateway_attested = True
             if attestation.expires_at > lease.expires_at:
                 raise InvalidTransition("verifier gateway attestation outlives its fenced lease")
         artifact = self._read_verification_evidence_artifact(evidence.evidence_artifact_digest)
@@ -853,6 +878,8 @@ class ControlPlane:
             report,
             proof_submission_artifact_digest=proof_artifact_digest,
             expected_dependency_hash=expected_dependency_hash,
+            lease=lease,
+            require_authoritative=gateway_attested,
             artifact=artifact,
         )
         return attestation
@@ -892,7 +919,7 @@ class ControlPlane:
     def _read_verification_evidence_artifact(
         self,
         digest: str,
-    ) -> VerificationEvidenceArtifactV1:
+    ) -> VerificationEvidenceArtifactV1 | VerificationEvidenceArtifactV2:
         """Load one canonical, content-addressed verifier evidence record.
 
         Artifact existence alone is insufficient: a signer must not be able to point at arbitrary
@@ -902,12 +929,20 @@ class ControlPlane:
         """
 
         raw = self._read_canonical_json_artifact(digest, label="verifier evidence")
+        schema_version = raw.get("schema_version")
+        artifact_type = (
+            VerificationEvidenceArtifactV1
+            if schema_version == "autolean.verification-evidence-artifact.v1"
+            else VerificationEvidenceArtifactV2
+            if schema_version == "autolean.verification-evidence-artifact.v2"
+            else None
+        )
+        if artifact_type is None:
+            raise InvalidTransition("verifier evidence artifact has an unsupported schema")
         try:
-            artifact = VerificationEvidenceArtifactV1.model_validate(raw)
+            artifact = artifact_type.model_validate(raw)
         except ValueError as error:
-            raise InvalidTransition(
-                "verifier evidence artifact has an invalid V1 schema"
-            ) from error
+            raise InvalidTransition("verifier evidence artifact has an invalid schema") from error
         serialized = canonical_json(artifact.model_dump(mode="json")).encode("utf-8")
         try:
             original = self.artifacts.get_bytes(digest)
@@ -959,13 +994,29 @@ class ControlPlane:
         *,
         proof_submission_artifact_digest: str,
         expected_dependency_hash: str,
-        artifact: VerificationEvidenceArtifactV1,
+        lease: Lease,
+        require_authoritative: bool,
+        artifact: VerificationEvidenceArtifactV1 | VerificationEvidenceArtifactV2,
     ) -> None:
         """Cross-bind the canonical artifact to report, frozen bundle, and submitted proof."""
 
         evidence = report.evidence
         if evidence is None:
             raise InvalidTransition("verifier-owned environment evidence is required")
+        if require_authoritative and not isinstance(artifact, VerificationEvidenceArtifactV2):
+            raise InvalidTransition(
+                "gateway-attested verification requires lease-bound V2 execution evidence"
+            )
+        if isinstance(artifact, VerificationEvidenceArtifactV2):
+            authority = artifact.oci.execution_authority
+            if (
+                authority.worker_id != lease.holder_id
+                or authority.fencing_token != lease.fencing_token
+                or authority.expires_at != lease.expires_at
+            ):
+                raise InvalidTransition(
+                    "verifier evidence artifact has a different execution lease"
+                )
         checks = (
             (
                 artifact.evidence_id == evidence.evidence_id,

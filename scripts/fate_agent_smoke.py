@@ -52,7 +52,7 @@ IMAGE_REPOSITORY_DIGEST: Final = (
 )
 IMAGE_DIGEST: Final = "sha256:d69da80fa5c1b9f921cda33bb37376114e9e15e7238eff513d8b6a340e55bcc0"
 IMAGE_ID: Final = "sha256:d69da80fa5c1b9f921cda33bb37376114e9e15e7238eff513d8b6a340e55bcc0"
-COMMAND_POLICY_ID: Final = "autolean.fate-readonly-mounted-mathlib-oci.v1"
+COMMAND_POLICY_ID: Final = "autolean.fate-readonly-mounted-mathlib-oci.v2"
 MINIMAL_WSL_PATH: Final = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin"
 EXPECTED_DEPENDENCIES: Final = (
     "Cli",
@@ -72,6 +72,17 @@ _SAFE_TASK = re.compile(r"^FATE-M-[1-9][0-9]*$")
 
 def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
+
+
+def _host_non_root_user() -> str:
+    getuid = getattr(os, "getuid", None)
+    getgid = getattr(os, "getgid", None)
+    if callable(getuid) and callable(getgid):
+        uid = getuid()
+        gid = getgid()
+        if uid > 0 and gid >= 0:
+            return f"{uid}:{gid}"
+    return "65532:65532"
 
 
 def _hash_file(path: Path, code: str) -> str:
@@ -171,18 +182,22 @@ def _command_policy(wrapper_sha256: str, helper_sha256: str) -> dict[str, object
         "policy_id": COMMAND_POLICY_ID,
         "image": IMAGE_REPOSITORY_DIGEST,
         "entrypoint": ["/bin/sh", "/verifier/autolean-fate-wrapper"],
+        "phases": ["compile", "host-seal", "query"],
+        "handoff_protocol": "autolean.oci-compile-query-handoff.v1",
         "wrapper_protocol": WRAPPER_PROTOCOL,
         "type_format": TYPE_FORMAT,
         "network": "none",
         "root_filesystem": "read_only",
         "mounts": {
             "candidate": "read_only",
+            "compile_output": "compile_only_write",
+            "sealed_candidate": "query_only_read",
             "dependencies": "read_only",
             "verifier": "read_only",
         },
         "cap_drop": ["ALL"],
         "security_opt": ["no-new-privileges"],
-        "user": "65532:65532",
+        "user": "host-non-root",
         "pids_limit": 512,
         "memory_bytes": 12 * 1024 * 1024 * 1024,
         "cpus": 4,
@@ -193,6 +208,97 @@ def _command_policy(wrapper_sha256: str, helper_sha256: str) -> dict[str, object
         "wrapper_sha256": wrapper_sha256,
         "query_helper_sha256": helper_sha256,
     }
+
+
+def _seal_candidate_olean(
+    compiler_output: Path,
+    sealed_directory: Path,
+    *,
+    max_bytes: int = 256 * 1024 * 1024,
+) -> tuple[Path, str]:
+    source = compiler_output / "Candidate.olean"
+    destination = sealed_directory / "Candidate.olean"
+    try:
+        source_metadata = source.lstat()
+    except OSError as error:
+        raise FateSmokeError("smoke_compiled_candidate_unavailable") from error
+    if source.is_symlink():
+        raise FateSmokeError("smoke_compiled_candidate_unavailable")
+    if not stat.S_ISREG(source_metadata.st_mode):
+        raise FateSmokeError("smoke_compiled_candidate_not_regular")
+    flags = os.O_RDONLY | getattr(os, "O_CLOEXEC", 0) | getattr(os, "O_NOFOLLOW", 0)
+    flags |= getattr(os, "O_NONBLOCK", 0)
+    try:
+        descriptor = os.open(source, flags)
+    except OSError as error:
+        raise FateSmokeError("smoke_compiled_candidate_unavailable") from error
+    digest = hashlib.sha256()
+    try:
+        before = os.fstat(descriptor)
+        if not stat.S_ISREG(before.st_mode):
+            raise FateSmokeError("smoke_compiled_candidate_not_regular")
+        if before.st_size <= 0 or before.st_size > max_bytes:
+            raise FateSmokeError("smoke_compiled_candidate_size")
+        output_flags = (
+            os.O_WRONLY
+            | os.O_CREAT
+            | os.O_EXCL
+            | getattr(os, "O_CLOEXEC", 0)
+            | getattr(os, "O_NOFOLLOW", 0)
+        )
+        output_descriptor = os.open(destination, output_flags, 0o444)
+        copied = 0
+        try:
+            while True:
+                block = os.read(descriptor, 1024 * 1024)
+                if not block:
+                    break
+                copied += len(block)
+                if copied > max_bytes:
+                    raise FateSmokeError("smoke_compiled_candidate_size")
+                digest.update(block)
+                view = memoryview(block)
+                while view:
+                    written = os.write(output_descriptor, view)
+                    if written <= 0:
+                        raise OSError("short Candidate.olean write")
+                    view = view[written:]
+            os.fsync(output_descriptor)
+        finally:
+            os.close(output_descriptor)
+        after = os.fstat(descriptor)
+        before_identity = (
+            before.st_dev,
+            before.st_ino,
+            before.st_size,
+            before.st_mtime_ns,
+            before.st_ctime_ns,
+        )
+        after_identity = (
+            after.st_dev,
+            after.st_ino,
+            after.st_size,
+            after.st_mtime_ns,
+            after.st_ctime_ns,
+        )
+        if copied != before.st_size or after_identity != before_identity:
+            destination.unlink(missing_ok=True)
+            raise FateSmokeError("smoke_compiled_candidate_raced")
+    except OSError as error:
+        destination.unlink(missing_ok=True)
+        raise FateSmokeError("smoke_compiled_candidate_copy_failed") from error
+    finally:
+        os.close(descriptor)
+    try:
+        destination.chmod(0o444)
+        metadata = destination.lstat()
+    except OSError as error:
+        destination.unlink(missing_ok=True)
+        raise FateSmokeError("smoke_compiled_candidate_copy_failed") from error
+    if not stat.S_ISREG(metadata.st_mode) or destination.is_symlink():
+        destination.unlink(missing_ok=True)
+        raise FateSmokeError("smoke_compiled_candidate_not_regular")
+    return destination, digest.hexdigest()
 
 
 def _minimal_environment() -> dict[str, str]:
@@ -262,6 +368,122 @@ class OciMountedMathlibCompiler:
         self._verifier_root = verifier_root
         self._command_policy_sha256 = command_policy_sha256
 
+    @staticmethod
+    def _ensure_container_stopped(
+        container_name: str,
+        *,
+        error_code: str,
+    ) -> None:
+        cleanup = subprocess.run(
+            ("/usr/bin/docker", "rm", "--force", container_name),
+            check=False,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=30,
+            env=_minimal_environment(),
+        )
+        if cleanup.returncode == 0:
+            return
+        listing = subprocess.run(
+            (
+                "/usr/bin/docker",
+                "container",
+                "ls",
+                "--all",
+                "--quiet",
+                "--filter",
+                f"name=^/{container_name}$",
+            ),
+            check=False,
+            stdin=subprocess.DEVNULL,
+            capture_output=True,
+            timeout=30,
+            env=_minimal_environment(),
+        )
+        if listing.returncode != 0 or listing.stdout.strip():
+            raise FateSmokeError(error_code)
+
+    @classmethod
+    def _run_container_phase(
+        cls,
+        argv: tuple[str, ...],
+        *,
+        container_name: str,
+        timeout_seconds: int,
+    ) -> tuple[subprocess.CompletedProcess[bytes] | None, subprocess.TimeoutExpired | None]:
+        try:
+            completed = subprocess.run(
+                argv,
+                check=False,
+                stdin=subprocess.DEVNULL,
+                capture_output=True,
+                timeout=timeout_seconds,
+                env=_minimal_environment(),
+            )
+        except subprocess.TimeoutExpired as error:
+            cls._ensure_container_stopped(
+                container_name,
+                error_code="smoke_timed_out_container_cleanup_failed",
+            )
+            return None, error
+        except OSError as error:
+            raise FateSmokeError("smoke_docker_command_unavailable") from error
+        cls._ensure_container_stopped(
+            container_name,
+            error_code="smoke_container_cleanup_unconfirmed",
+        )
+        return completed, None
+
+    def _phase_argv(
+        self,
+        *,
+        container_name: str,
+        mounts: tuple[str, ...],
+        wrapper_arguments: tuple[str, ...],
+    ) -> tuple[str, ...]:
+        mount_arguments = tuple(
+            argument
+            for mount in mounts
+            for argument in (
+                "--mount",
+                mount,
+            )
+        )
+        return (
+            "/usr/bin/docker",
+            "run",
+            "--name",
+            container_name,
+            "--rm",
+            "--network",
+            "none",
+            "--read-only",
+            "--cap-drop",
+            "ALL",
+            "--security-opt",
+            "no-new-privileges",
+            "--pids-limit",
+            "512",
+            "--memory",
+            "12g",
+            "--cpus",
+            "4",
+            "--tmpfs",
+            "/tmp:rw,noexec,nosuid,nodev,size=256m",
+            "--user",
+            _host_non_root_user(),
+            *mount_arguments,
+            "--workdir",
+            "/work",
+            "--entrypoint",
+            "/bin/sh",
+            IMAGE_REPOSITORY_DIGEST,
+            "/verifier/autolean-fate-wrapper",
+            "--protocol",
+            WRAPPER_PROTOCOL,
+            *wrapper_arguments,
+        )
+
     def compile(
         self,
         candidate: object,
@@ -275,24 +497,27 @@ class OciMountedMathlibCompiler:
         task_id = candidate.task.task_id
         if _SAFE_TASK.fullmatch(task_id) is None:
             raise FateSmokeError("smoke_candidate_task_invalid")
-        container_name = f"autolean-smoke-{task_id.lower()}-{secrets.token_hex(8)}"
-        command_commitment = _sha256(
-            _canonical_json(
-                {
-                    "command_policy_sha256": self._command_policy_sha256,
-                    "task_id": task_id,
-                    "candidate_sha256": candidate.candidate_sha256,
-                    "declaration": candidate.task.target.qualified_name,
-                }
-            )
-        )
+        attempt_name = f"autolean-smoke-{task_id.lower()}-{secrets.token_hex(8)}"
+        base_command_commitment: dict[str, object] = {
+            "command_policy_sha256": self._command_policy_sha256,
+            "task_id": task_id,
+            "candidate_sha256": candidate.candidate_sha256,
+            "declaration": candidate.task.target.qualified_name,
+            "wrapper_protocol": WRAPPER_PROTOCOL,
+            "handoff_protocol": "autolean.oci-compile-query-handoff.v1",
+        }
+        command_commitment = _sha256(_canonical_json(base_command_commitment))
         with tempfile.TemporaryDirectory(
             prefix=f"{task_id}-",
             dir=self._workspace_root,
         ) as temporary:
             workspace = Path(temporary)
-            workspace.chmod(0o755)
+            workspace.chmod(0o700)
             source = workspace / "Candidate.lean"
+            compiler_output = workspace / "compiler-output"
+            sealed_directory = workspace / "sealed"
+            compiler_output.mkdir(mode=0o700)
+            sealed_directory.mkdir(mode=0o700)
             descriptor = os.open(
                 source,
                 os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0),
@@ -306,91 +531,112 @@ class OciMountedMathlibCompiler:
             except OSError as error:
                 source.unlink(missing_ok=True)
                 raise FateSmokeError("smoke_candidate_write_failed") from error
-            argv = (
-                "/usr/bin/docker",
-                "run",
-                "--name",
-                container_name,
-                "--rm",
-                "--network",
-                "none",
-                "--read-only",
-                "--cap-drop",
-                "ALL",
-                "--security-opt",
-                "no-new-privileges",
-                "--pids-limit",
-                "512",
-                "--memory",
-                "12g",
-                "--cpus",
-                "4",
-                "--tmpfs",
-                "/tmp:rw,noexec,nosuid,nodev,size=256m",
-                "--user",
-                "65532:65532",
-                "--mount",
-                f"type=bind,src={source},dst=/input/Candidate.lean,readonly",
-                "--mount",
-                f"type=bind,src={self._packages_root},dst=/deps/packages,readonly",
-                "--mount",
-                f"type=bind,src={self._verifier_root},dst=/verifier,readonly",
-                "--workdir",
-                "/work",
-                "--entrypoint",
-                "/bin/sh",
-                IMAGE_REPOSITORY_DIGEST,
-                "/verifier/autolean-fate-wrapper",
-                "--protocol",
-                WRAPPER_PROTOCOL,
-                "--candidate",
-                "/input/Candidate.lean",
-                "--declaration",
-                candidate.task.target.qualified_name,
-                "--type-format",
-                TYPE_FORMAT,
+            compile_name = f"{attempt_name}-compile"
+            compile_argv = self._phase_argv(
+                container_name=compile_name,
+                mounts=(
+                    f"type=bind,src={source},dst=/input/Candidate.lean,readonly",
+                    f"type=bind,src={self._packages_root},dst=/deps/packages,readonly",
+                    f"type=bind,src={self._verifier_root},dst=/verifier,readonly",
+                    f"type=bind,src={compiler_output},dst=/output",
+                ),
+                wrapper_arguments=(
+                    "--phase",
+                    "compile",
+                    "--candidate",
+                    "/input/Candidate.lean",
+                    "--output",
+                    "/output/Candidate.olean",
+                ),
             )
             started = time.monotonic()
+            compiler_output.chmod(0o733)
             try:
-                completed = subprocess.run(
-                    argv,
-                    check=False,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    timeout=timeout_seconds,
-                    env=_minimal_environment(),
+                compile_result, compile_timeout = self._run_container_phase(
+                    compile_argv,
+                    container_name=compile_name,
+                    timeout_seconds=timeout_seconds,
                 )
-            except subprocess.TimeoutExpired as error:
-                elapsed = time.monotonic() - started
-                cleanup = subprocess.run(
-                    (
-                        "/usr/bin/docker",
-                        "rm",
-                        "--force",
-                        container_name,
-                    ),
-                    check=False,
-                    stdin=subprocess.DEVNULL,
-                    capture_output=True,
-                    timeout=30,
-                    env=_minimal_environment(),
-                )
-                if cleanup.returncode != 0:
-                    raise FateSmokeError("smoke_timed_out_container_cleanup_failed") from error
+            finally:
+                compiler_output.chmod(0o700)
+            if compile_timeout is not None:
                 return FateSmokeObservation(
                     returncode=None,
-                    stdout=error.stdout or b"",
-                    stderr=error.stderr or b"",
-                    elapsed_seconds=elapsed,
+                    stdout=b"",
+                    stderr=compile_timeout.stderr or b"",
+                    elapsed_seconds=time.monotonic() - started,
                     command_sha256=command_commitment,
                     timed_out=True,
                 )
-            except OSError as error:
-                raise FateSmokeError("smoke_docker_command_unavailable") from error
+            assert compile_result is not None
+            if compile_result.returncode != 0:
+                return FateSmokeObservation(
+                    returncode=compile_result.returncode,
+                    stdout=b"",
+                    stderr=compile_result.stderr,
+                    elapsed_seconds=time.monotonic() - started,
+                    command_sha256=command_commitment,
+                )
+            sealed_candidate, sealed_sha256 = _seal_candidate_olean(
+                compiler_output,
+                sealed_directory,
+            )
+            command_commitment = _sha256(
+                _canonical_json(
+                    {
+                        **base_command_commitment,
+                        "sealed_candidate_sha256": sealed_sha256,
+                    }
+                )
+            )
+            elapsed = time.monotonic() - started
+            remaining = max(1, timeout_seconds - int(elapsed))
+            query_name = f"{attempt_name}-query"
+            query_argv = self._phase_argv(
+                container_name=query_name,
+                mounts=(
+                    f"type=bind,src={sealed_candidate},dst=/compiled/Candidate.olean,readonly",
+                    f"type=bind,src={self._packages_root},dst=/deps/packages,readonly",
+                    f"type=bind,src={self._verifier_root},dst=/verifier,readonly",
+                ),
+                wrapper_arguments=(
+                    "--phase",
+                    "query",
+                    "--compiled",
+                    "/compiled/Candidate.olean",
+                    "--declaration",
+                    candidate.task.target.qualified_name,
+                    "--type-format",
+                    TYPE_FORMAT,
+                ),
+            )
+            query_result, query_timeout = self._run_container_phase(
+                query_argv,
+                container_name=query_name,
+                timeout_seconds=remaining,
+            )
+            if query_timeout is not None:
+                return FateSmokeObservation(
+                    returncode=None,
+                    stdout=b"",
+                    stderr=query_timeout.stderr or b"",
+                    elapsed_seconds=time.monotonic() - started,
+                    command_sha256=command_commitment,
+                    timed_out=True,
+                )
+            assert query_result is not None
+            if (
+                _hash_file(
+                    sealed_candidate,
+                    "smoke_sealed_candidate_unreadable",
+                )
+                != sealed_sha256
+            ):
+                raise FateSmokeError("smoke_sealed_candidate_changed")
             return FateSmokeObservation(
-                returncode=completed.returncode,
-                stdout=completed.stdout,
-                stderr=completed.stderr,
+                returncode=query_result.returncode,
+                stdout=query_result.stdout,
+                stderr=query_result.stderr,
                 elapsed_seconds=time.monotonic() - started,
                 command_sha256=command_commitment,
             )

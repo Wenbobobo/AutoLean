@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Final
 
 WSL_DISTRIBUTION: Final[str] = "Ubuntu-24.04"
-IMAGE_TAG: Final[str] = "autolean/lean-worker:4.28.0-pure-v1"
+IMAGE_TAG: Final[str] = "autolean/lean-worker:4.28.0-pure-v3"
 LEAN_ARCHIVE: Final[str] = "lean-4.28.0-linux.tar.zst"
 LEAN_ARCHIVE_URL: Final[str] = (
     "https://github.com/leanprover/lean4/releases/download/v4.28.0/lean-4.28.0-linux.tar.zst"
@@ -58,6 +58,21 @@ def _sha256(path: Path) -> str:
         for block in iter(lambda: handle.read(1024 * 1024), b""):
             digest.update(block)
     return digest.hexdigest()
+
+
+def _image_owned_verifier_identity(worker_root: Path) -> dict[str, str]:
+    payload = {
+        "schema_version": "autolean.image-owned-verifier-identity.v2",
+        "wrapper_path": "/opt/autolean/bin/autolean-lean-wrapper",
+        "wrapper_sha256": _sha256(worker_root / "autolean-lean-wrapper"),
+        "query_helper_path": "/opt/autolean/lib/AutoleanLeanQuery.lean",
+        "query_helper_sha256": _sha256(worker_root / "AutoleanLeanQuery.lean"),
+    }
+    canonical = json.dumps(payload, ensure_ascii=True, sort_keys=True, separators=(",", ":"))
+    return {
+        **payload,
+        "identity_sha256": hashlib.sha256(canonical.encode("utf-8")).hexdigest(),
+    }
 
 
 def _delegate_to_wsl(arguments: list[str], repo_root: Path) -> int:
@@ -164,6 +179,7 @@ def _build(repo_root: Path) -> dict[str, object]:
     )[0]
     image_id = inspected["Id"]
     repo_digests = sorted(inspected.get("RepoDigests") or [])
+    image_identity = _image_owned_verifier_identity(worker_root)
     record: dict[str, object] = {
         "schema_version": "autolean.oci-worker-build.v1",
         "image_tag": IMAGE_TAG,
@@ -172,8 +188,9 @@ def _build(repo_root: Path) -> dict[str, object]:
         "base_image_digest": BASE_IMAGE_DIGEST,
         "lean_archive_sha256": LEAN_ARCHIVE_SHA256,
         "dockerfile_sha256": _sha256(worker_root / "Dockerfile"),
-        "wrapper_sha256": _sha256(worker_root / "autolean-lean-wrapper"),
-        "query_helper_source_sha256": _sha256(worker_root / "AutoleanLeanQuery.lean"),
+        "wrapper_sha256": image_identity["wrapper_sha256"],
+        "query_helper_source_sha256": image_identity["query_helper_sha256"],
+        "image_owned_verifier_identity": image_identity,
     }
     evidence = repo_root / "release-evidence" / "oci-worker"
     evidence.mkdir(parents=True, exist_ok=True)
@@ -209,7 +226,16 @@ def _canary(repo_root: Path, image: str | None) -> None:
             raise RuntimeError("uv is unavailable in the WSL execution environment")
         uv = str(candidate)
     _run(
-        [uv, "sync", "--frozen", "--package", "autolean-prover", "--no-dev"],
+        [
+            uv,
+            "sync",
+            "--frozen",
+            "--package",
+            "autolean-prover",
+            "--package",
+            "autolean-control-plane",
+            "--no-dev",
+        ],
         cwd=repo_root,
         environment=environment,
     )

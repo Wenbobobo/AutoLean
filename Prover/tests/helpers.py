@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import UTC, datetime
+from typing import Literal
 
 from autolean_contracts import (
     AlignmentTargetV1,
@@ -16,6 +17,7 @@ from autolean_contracts import (
     MathematicalGraphV1,
     MathematicalSpecificationV1,
     OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ReleaseTierV1,
     RightsRecordV1,
@@ -36,7 +38,11 @@ def stable_id(key: str):
     return stable_identifier("prover-test", key)
 
 
-def frozen_bundle(*, external_egress: bool = False) -> FormalizationTaskBundleV1:
+def frozen_bundle(
+    *,
+    external_egress: bool = False,
+    execution_policy_version: Literal["1.0", "2.0"] = "2.0",
+) -> FormalizationTaskBundleV1:
     source_id = stable_id("source")
     span = SourceSpanV1(
         span_id=stable_id("span"),
@@ -76,8 +82,10 @@ def frozen_bundle(*, external_egress: bool = False) -> FormalizationTaskBundleV1
         environment=LeanEnvironmentV1(
             lean_version="v4.28.0",
             mathlib_revision="fixture-mathlib",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
-                worker_image_digest="sha256:" + "a" * 64,
+            verifier_execution_policy=(
+                OciVerifierExecutionPolicyV1(worker_image_digest="sha256:" + "a" * 64)
+                if execution_policy_version == "1.0"
+                else OciVerifierExecutionPolicyV2(worker_image_digest="sha256:" + "a" * 64)
             ),
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "fixture-environment"),
         ),

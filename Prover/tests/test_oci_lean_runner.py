@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
+import stat
 from collections.abc import Callable
 from pathlib import Path
 
@@ -42,15 +44,62 @@ class RecordingHarness:
         self.before_result = before_result
         self.reported_argv = reported_argv
         self.request: ProcessRequest | None = None
+        self.requests: list[ProcessRequest] = []
+        self.compiler_output: Path | None = None
+        self.compiler_output_mode_during_compile: int | None = None
+        self.compiler_output_mode_at_compile_cleanup: int | None = None
+        self.compiler_output_mode_at_query_start: int | None = None
 
     def execute(self, request: ProcessRequest) -> ProcessResult:
+        if len(request.argv) >= 2 and request.argv[1] == "rm":
+            if (
+                self.compiler_output is not None
+                and "compile" in request.argv[-1]
+                and os.name == "posix"
+            ):
+                self.compiler_output_mode_at_compile_cleanup = stat.S_IMODE(
+                    self.compiler_output.stat().st_mode
+                )
+            return ProcessResult(
+                argv=request.argv,
+                returncode=0,
+                stdout="",
+                stderr="",
+                duration_seconds=0.0,
+            )
         self.request = request
+        self.requests.append(request)
+        if "--phase" in request.argv:
+            phase = request.argv[request.argv.index("--phase") + 1]
+            if phase == "compile":
+                output_mount = next(
+                    request.argv[index + 1]
+                    for index, value in enumerate(request.argv[:-1])
+                    if value == "--mount" and "dst=/output" in request.argv[index + 1]
+                )
+                source = next(
+                    field.removeprefix("src=")
+                    for field in output_mount.split(",")
+                    if field.startswith("src=")
+                )
+                self.compiler_output = Path(source)
+                if os.name == "posix":
+                    self.compiler_output_mode_during_compile = stat.S_IMODE(
+                        self.compiler_output.stat().st_mode
+                    )
+                (self.compiler_output / "Candidate.olean").write_bytes(b"sealed-test-olean")
+            elif self.compiler_output is not None and os.name == "posix":
+                self.compiler_output_mode_at_query_start = stat.S_IMODE(
+                    self.compiler_output.stat().st_mode
+                )
+        else:
+            phase = "query"
         if self.before_result is not None:
             self.before_result(request)
         return ProcessResult(
             argv=request.argv if self.reported_argv is None else self.reported_argv,
             returncode=self.returncode,
-            stdout=self.stdout,
+            stdout=self.stdout if phase == "query" else "untrusted compile stdout",
             stderr="",
             duration_seconds=0.0,
             timed_out=self.timed_out,
@@ -63,7 +112,7 @@ def _wrapper_record(bundle, **overrides: object) -> str:
     canonical_type = bundle.contract.formal.elaborated_type
     assert canonical_type is not None
     payload: dict[str, object] = {
-        "schema_version": "autolean.oci-lean-wrapper.v1",
+        "schema_version": "autolean.oci-lean-wrapper.v2",
         "declaration": bundle.proof_boundary.expected_declaration,
         "canonical_type": canonical_type,
         "lean_version": environment.lean_version,
@@ -134,26 +183,56 @@ def test_oci_lean_runner_uses_fixed_wrapper_argv_and_emits_execution_evidence(tm
     evidence = runner.run(candidate, workspace=workspace)
 
     assert harness.request is not None
-    argv = harness.request.argv
-    image_index = argv.index(spec.image)
-    assert argv[image_index:] == (
+    assert len(harness.requests) == 2
+    compile_argv = harness.requests[0].argv
+    query_argv = harness.requests[1].argv
+    compile_image_index = compile_argv.index(spec.image)
+    assert compile_argv[compile_image_index:] == (
         spec.image,
         "/opt/autolean/bin/autolean-lean-wrapper",
         "--protocol",
-        "autolean.oci-lean-wrapper.v1",
+        "autolean.oci-lean-wrapper.v2",
+        "--phase",
+        "compile",
         "--candidate",
         "/input/Candidate.lean",
+        "--output",
+        "/output/Candidate.olean",
+    )
+    image_index = query_argv.index(spec.image)
+    assert query_argv[image_index:] == (
+        spec.image,
+        "/opt/autolean/bin/autolean-lean-wrapper",
+        "--protocol",
+        "autolean.oci-lean-wrapper.v2",
+        "--phase",
+        "query",
+        "--compiled",
+        "/compiled/Candidate.olean",
         "--declaration",
         bundle.proof_boundary.expected_declaration,
         "--type-format",
         "autolean.lean-pp-expr.v1",
     )
-    assert (argv[3], argv[4]) == ("--network", "none")
-    assert "--read-only" in argv
-    assert f"type=bind,src={candidate.resolve()},dst=/input/Candidate.lean,readonly" in argv
-    assert "/bin/sh" not in argv
-    assert "by\n  rfl" not in argv
-    assert bundle.proof_boundary.expected_elaborated_type_hash.value not in argv
+    for argv in (compile_argv, query_argv):
+        assert (argv[argv.index("--network")], argv[argv.index("--network") + 1]) == (
+            "--network",
+            "none",
+        )
+        assert "--read-only" in argv
+        assert "/bin/sh" not in argv
+        assert "by\n  rfl" not in argv
+        assert bundle.proof_boundary.expected_elaborated_type_hash.value not in argv
+        assert not any("dst=/work" in argument for argument in argv)
+    assert f"type=bind,src={candidate.resolve()},dst=/input/Candidate.lean,readonly" in compile_argv
+    assert any(
+        "dst=/output" in argument and "readonly" not in argument for argument in compile_argv
+    )
+    assert not any("dst=/input/Candidate.lean" in argument for argument in query_argv)
+    assert any(
+        "dst=/compiled/Candidate.olean" in argument and "readonly" in argument
+        for argument in query_argv
+    )
     assert evidence.elaborated_type_evidence is not None
     assert (
         evidence.elaborated_type_evidence.canonical_type == bundle.contract.formal.elaborated_type
@@ -162,9 +241,37 @@ def test_oci_lean_runner_uses_fixed_wrapper_argv_and_emits_execution_evidence(tm
     assert evidence.oci_execution_evidence is not None
     assert evidence.oci_execution_evidence.worker_image_digest == "sha256:" + "a" * 64
     assert (
+        evidence.oci_execution_evidence.compile_command_hash
+        == hashlib.sha256(
+            json.dumps(compile_argv, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+    assert (
+        evidence.oci_execution_evidence.query_command_hash
+        == hashlib.sha256(
+            json.dumps(query_argv, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()
+    )
+    assert (
+        evidence.oci_execution_evidence.sealed_candidate_sha256
+        == hashlib.sha256(b"sealed-test-olean").hexdigest()
+    )
+    transcript = {
+        "schema_version": "autolean.oci-command-transcript.v2",
+        "handoff_protocol": "autolean.oci-compile-query-handoff.v1",
+        "compile_command_hash": evidence.oci_execution_evidence.compile_command_hash,
+        "query_command_hash": evidence.oci_execution_evidence.query_command_hash,
+        "sealed_candidate_sha256": evidence.oci_execution_evidence.sealed_candidate_sha256,
+    }
+    assert (
         evidence.oci_execution_evidence.command_hash
         == hashlib.sha256(
-            json.dumps(argv, ensure_ascii=True, separators=(",", ":")).encode("utf-8")
+            json.dumps(
+                transcript,
+                ensure_ascii=True,
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
         ).hexdigest()
     )
     assert (
@@ -176,6 +283,23 @@ def test_oci_lean_runner_uses_fixed_wrapper_argv_and_emits_execution_evidence(tm
         for item in workspace.protected_files
         if item.path == bundle.proof_boundary.trusted_statement_path
     )
+    if os.name == "posix":
+        assert harness.compiler_output_mode_during_compile == 0o733
+        assert harness.compiler_output_mode_at_compile_cleanup == 0o733
+        assert harness.compiler_output_mode_at_query_start == 0o700
+
+
+def test_oci_lean_runner_rejects_v1_policy_before_container_execution(tmp_path: Path) -> None:
+    bundle = frozen_bundle(execution_policy_version="1.0")
+    workspace = WorkspaceMaterializer().materialize(bundle, tmp_path / "attempt")
+    candidate = _render_candidate(workspace)
+    harness = RecordingHarness(stdout=_wrapper_record(bundle))
+    runner, _spec, _source = _runner(tmp_path, workspace, harness)
+
+    with pytest.raises(ValidationError, match="oci_execution_policy_version_unsupported"):
+        runner.run(candidate, workspace=workspace)
+
+    assert harness.requests == []
 
 
 @pytest.mark.parametrize(
@@ -201,7 +325,7 @@ def test_oci_lean_runner_rejects_malformed_or_spoofed_wrapper_records(
     elif mode == "spoofed_type_hash":
         stdout = _wrapper_record(bundle, type_hash="f" * 64)
     elif mode == "duplicate_field":
-        prefix = '"schema_version":"autolean.oci-lean-wrapper.v1",'
+        prefix = '"schema_version":"autolean.oci-lean-wrapper.v2",'
         stdout = stdout.replace(prefix, prefix + prefix, 1)
     else:
         stdout = _wrapper_record(bundle, declaration="AutoLean.Test.other")
@@ -258,6 +382,82 @@ def test_oci_lean_runner_detects_candidate_tampering_after_worker_execution(tmp_
     runner, _spec, _source = _runner(tmp_path, workspace, harness)
 
     with pytest.raises(ValidationError, match="oci_candidate_changed"):
+        runner.run(candidate, workspace=workspace)
+
+
+def test_oci_lean_runner_rejects_a_non_regular_compiler_output(tmp_path) -> None:
+    bundle = frozen_bundle()
+    workspace = WorkspaceMaterializer().materialize(bundle, tmp_path / "attempt")
+    candidate = _render_candidate(workspace)
+
+    def replace_compiler_output(request: ProcessRequest) -> None:
+        if request.argv[request.argv.index("--phase") + 1] != "compile":
+            return
+        output_mount = next(
+            request.argv[index + 1]
+            for index, value in enumerate(request.argv[:-1])
+            if value == "--mount" and "dst=/output" in request.argv[index + 1]
+        )
+        output_root = Path(
+            next(
+                field.removeprefix("src=")
+                for field in output_mount.split(",")
+                if field.startswith("src=")
+            )
+        )
+        compiled = output_root / "Candidate.olean"
+        compiled.unlink()
+        compiled.mkdir()
+
+    harness = RecordingHarness(
+        stdout=_wrapper_record(bundle),
+        before_result=replace_compiler_output,
+    )
+    runner, _spec, _source = _runner(tmp_path, workspace, harness)
+
+    with pytest.raises(
+        ValidationError,
+        match=r"oci_compiled_candidate_(unavailable|not_regular)",
+    ):
+        runner.run(candidate, workspace=workspace)
+
+
+def test_oci_lean_runner_rejects_a_symlinked_compiler_output(tmp_path) -> None:
+    bundle = frozen_bundle()
+    workspace = WorkspaceMaterializer().materialize(bundle, tmp_path / "attempt")
+    candidate = _render_candidate(workspace)
+    outside = tmp_path / "outside.olean"
+    outside.write_bytes(b"not compiler output")
+
+    def replace_compiler_output(request: ProcessRequest) -> None:
+        if request.argv[request.argv.index("--phase") + 1] != "compile":
+            return
+        output_mount = next(
+            request.argv[index + 1]
+            for index, value in enumerate(request.argv[:-1])
+            if value == "--mount" and "dst=/output" in request.argv[index + 1]
+        )
+        output_root = Path(
+            next(
+                field.removeprefix("src=")
+                for field in output_mount.split(",")
+                if field.startswith("src=")
+            )
+        )
+        compiled = output_root / "Candidate.olean"
+        compiled.unlink()
+        try:
+            compiled.symlink_to(outside)
+        except OSError:
+            pytest.skip("symbolic links are unavailable on this Windows configuration")
+
+    harness = RecordingHarness(
+        stdout=_wrapper_record(bundle),
+        before_result=replace_compiler_output,
+    )
+    runner, _spec, _source = _runner(tmp_path, workspace, harness)
+
+    with pytest.raises(ValidationError, match="oci_compiled_candidate_unavailable"):
         runner.run(candidate, workspace=workspace)
 
 

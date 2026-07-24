@@ -20,6 +20,7 @@ from autolean_contracts import (
     MathematicalNodeV1,
     MathematicalSpecificationV1,
     OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ReleaseTierV1,
     RightsRecordV1,
@@ -113,6 +114,109 @@ def _event_with_payload(payload: dict[str, object]) -> EventEnvelopeV1:
         payload=payload,
         event_hash=digest_model(HashKindV1.EVENT, preimage),
     )
+
+
+def test_oci_v1_policy_round_trip_hash_and_argv_remain_frozen() -> None:
+    expected_json = (
+        '{"schema_version":"1.0","worker_image_digest":"sha256:'
+        + ("c" * 64)
+        + '","wrapper_protocol":"autolean.oci-lean-wrapper.v1",'
+        '"wrapper_executable":"/opt/autolean/bin/autolean-lean-wrapper",'
+        '"candidate_path":"/input/Candidate.lean",'
+        '"type_format":"autolean.lean-pp-expr.v1","network_mode":"none",'
+        '"read_only_root":true,"drop_all_capabilities":true,"no_new_privileges":true,'
+        '"source_mount_path":"/source","dependencies_mount_path":"/deps",'
+        '"source_mount_read_only":true,"dependencies_mount_read_only":true,'
+        '"candidate_mount_read_only":true,"workdir":"/work"}'
+    )
+    policy = OciVerifierExecutionPolicyV1.model_validate_json(expected_json)
+
+    assert policy.model_dump_json() == expected_json
+    assert policy.command_policy_hash().value == (
+        "409323e190d9cbd96e014de91bfa336ff5765cb3e1b5fafab238f8e43625bd2c"
+    )
+    assert policy.wrapper_argv("AutoLean.Test.fixture") == (
+        "/opt/autolean/bin/autolean-lean-wrapper",
+        "--protocol",
+        "autolean.oci-lean-wrapper.v1",
+        "--candidate",
+        "/input/Candidate.lean",
+        "--declaration",
+        "AutoLean.Test.fixture",
+        "--type-format",
+        "autolean.lean-pp-expr.v1",
+    )
+
+    environment_payload = _draft_contract().formal.environment.model_dump(mode="json")
+    environment_payload["verifier_execution_policy"] = policy.model_dump(mode="json")
+    restored = LeanEnvironmentV1.model_validate(environment_payload)
+    assert isinstance(restored.verifier_execution_policy, OciVerifierExecutionPolicyV1)
+    assert restored.verifier_execution_policy.model_dump_json() == expected_json
+
+
+def test_oci_v2_policy_has_distinct_hash_argv_and_requires_explicit_revision() -> None:
+    draft = _draft_contract()
+    old_hash = draft.semantic_hash()
+    old_policy = draft.formal.environment.verifier_execution_policy
+    assert isinstance(old_policy, OciVerifierExecutionPolicyV1)
+
+    policy = OciVerifierExecutionPolicyV2(worker_image_digest="sha256:" + "c" * 64)
+    assert policy.command_policy_hash().value == (
+        "886f0e1a56f35e30b04da9655984d7c2857bac4a625558a5eb5312d57e9a9bf7"
+    )
+    assert policy.compile_wrapper_argv() == (
+        "/opt/autolean/bin/autolean-lean-wrapper",
+        "--protocol",
+        "autolean.oci-lean-wrapper.v2",
+        "--phase",
+        "compile",
+        "--candidate",
+        "/input/Candidate.lean",
+        "--output",
+        "/output/Candidate.olean",
+    )
+    assert policy.wrapper_argv("AutoLean.Test.fixture") == (
+        "/opt/autolean/bin/autolean-lean-wrapper",
+        "--protocol",
+        "autolean.oci-lean-wrapper.v2",
+        "--phase",
+        "query",
+        "--compiled",
+        "/compiled/Candidate.olean",
+        "--declaration",
+        "AutoLean.Test.fixture",
+        "--type-format",
+        "autolean.lean-pp-expr.v1",
+    )
+
+    revised_environment = draft.formal.environment.model_copy(
+        update={"verifier_execution_policy": policy}
+    )
+    revised_formal = draft.formal.model_copy(update={"environment": revised_environment})
+    revised = draft.model_copy(update={"revision": 2, "formal": revised_formal})
+
+    assert revised.revision == 2
+    assert isinstance(
+        revised.formal.environment.verifier_execution_policy,
+        OciVerifierExecutionPolicyV2,
+    )
+    assert revised.semantic_hash() != old_hash
+    assert draft.revision == 1
+    assert draft.formal.environment.verifier_execution_policy is old_policy
+
+
+def test_lean_environment_discriminates_policy_versions_without_coercion() -> None:
+    environment_payload = _draft_contract().formal.environment.model_dump(mode="json")
+    legacy_policy = environment_payload["verifier_execution_policy"]
+    assert isinstance(legacy_policy, dict)
+    legacy_policy["runtime_user_mode"] = "host-non-root"
+
+    with pytest.raises(ValidationError, match="Extra inputs are not permitted"):
+        LeanEnvironmentV1.model_validate(environment_payload)
+
+    legacy_policy["schema_version"] = "2.0"
+    with pytest.raises(ValidationError):
+        LeanEnvironmentV1.model_validate(environment_payload)
 
 
 def test_nested_contract_containers_are_recursively_immutable_and_json_safe() -> None:

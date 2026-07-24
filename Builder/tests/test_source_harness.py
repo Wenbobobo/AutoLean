@@ -21,6 +21,7 @@ from autolean_builder import (
     FidelityHarnessError,
     MutationReviewVerdict,
     ObligationReviewVerdict,
+    PilotManifestV1,
     ReferenceCache,
     ReferenceEntryV1,
     ReferenceManifestV1,
@@ -36,6 +37,7 @@ from autolean_builder import (
     SourceToStatementHarness,
     StatementDraftRequest,
     TranslationTask,
+    load_pilot_manifest,
 )
 from autolean_contracts import (
     AxiomProfileV1,
@@ -48,7 +50,7 @@ from autolean_contracts import (
     MathematicalSpecificationV1,
     MutationKindV1,
     MutationProbeV1,
-    OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ReleaseTierV1,
     ReviewerRoleV1,
@@ -173,6 +175,7 @@ def _cache(tmp_path: Path) -> ReferenceCache:
 def _harness(
     tmp_path: Path,
     cache: ReferenceCache | None = None,
+    pilot_manifest: PilotManifestV1 | None = None,
 ) -> SourceToStatementHarness:
     return SourceToStatementHarness(
         cache or _cache(tmp_path),
@@ -180,6 +183,7 @@ def _harness(
             tmp_path / "source-preparations.db",
             confinement_root=tmp_path,
         ),
+        pilot_manifest=pilot_manifest,
     )
 
 
@@ -196,7 +200,7 @@ def _formal() -> FormalSpecificationV1:
         environment=LeanEnvironmentV1(
             lean_version="v4.28.0",
             mathlib_revision="8f9d9cff6bd728b17a24e163c9402775d9e6a365",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
+            verifier_execution_policy=OciVerifierExecutionPolicyV2(
                 worker_image_digest="sha256:" + "b" * 64,
             ),
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "source-harness-test"),
@@ -518,6 +522,24 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
 def test_raw_freeze_and_bridge_primitives_are_not_public_package_api() -> None:
     assert not hasattr(autolean_builder, "freeze_contract")
     assert not hasattr(autolean_builder, "bridge_frozen_contract")
+
+
+def test_blocked_pilot_reference_cannot_bypass_the_supported_draft_entry(
+    tmp_path: Path,
+) -> None:
+    manifest_path = (
+        Path(__file__).parents[2]
+        / "Builder"
+        / "pilots"
+        / "self-calibration"
+        / "pilot-manifest.v1.json"
+    )
+    payload = load_pilot_manifest(manifest_path).model_dump(mode="python")
+    payload["graphs"][0]["source"]["reference"]["reference_id"] = _TEXT_ID
+    manifest = PilotManifestV1.model_validate(payload)
+
+    with pytest.raises(SourceHarnessError, match="admission receipt is required"):
+        _harness(tmp_path, pilot_manifest=manifest).prepare_draft(_TEXT_ID, _request())
 
 
 def test_false_excerpt_is_rejected_against_exact_utf8_bytes(tmp_path: Path) -> None:

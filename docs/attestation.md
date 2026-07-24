@@ -51,7 +51,8 @@ contract value. The Prover must show that both hashes agree before it stores evi
 The control plane compares the environment, image, wrapper, command-policy, and
 dependency-manifest fields against the registered bundle and submitted proof before accepting a
 signature. It then reads the artifact bytes, rehashes them through the content-addressed store,
-rejects duplicate/non-standard/non-canonical JSON, validates the exact V1 artifact schema, and
+rejects duplicate/non-standard/non-canonical JSON, validates the exact artifact schema (V2 for
+lease-bound gateway promotion), and
 cross-binds the artifact to the report, frozen bundle, proof artifact, rendered candidate bytes,
 trusted statement bytes, and solver manifest. A missing or arbitrary artifact, bad signature,
 wrong purpose, unknown/revoked key, expiry, changed payload, or reused nonce fails closed.
@@ -64,9 +65,21 @@ transient observation; it cannot be promoted by `ControlPlane`.
 Prover-side bridge. The adapter recomputes the byte hash of the verifier-rendered candidate
 (including its fixed axiom-query suffix), checks OCI image/environment/statement/manifest bindings,
 stores a JSON-safe artifact through an injected content-addressed sink, then sends only its digest
-and the fenced verification context to a dedicated gateway. The gateway rechecks the live SQLite
-lease, submitted-proof event, registered task binding, and canonical evidence artifact before its
-authority signs. It never receives or stores a prompt,
+and the fenced verification context to a dedicated gateway. Lease-bound promotion requires the
+canonical V2 artifact. The gateway rechecks the live SQLite lease, submitted-proof event,
+registered task binding, and canonical V2 evidence artifact before invoking a mandatory
+`IndependentExecutionVerifier`. That verifier receives the exact signing request and parsed,
+canonical artifact, reruns the approved verifier path, and returns a hash-bound public receipt:
+its ID, verifier ID, check timestamp, request hash, evidence-artifact/evidence digests, execution
+claim hash, and receipt hash. The receipt must also carry an independent authentication envelope
+over that hash. Gateway construction requires an `IndependentExecutionTrustPolicyV1`, which
+allowlists verifier IDs and their authentication key IDs, verifies the envelope through an injected
+authenticator, and mechanically requires its key ID to differ from the gateway signing key ID. A
+malformed, mismatched, unauthenticated, untrusted, unavailable, or absent receipt is rejected
+before the gateway reserves a signing request. The gateway rechecks the lease after the independent
+run and both immediately before and after signing. Receipt time must be at or after request time
+and no later than either the current gateway clock or lease expiry; exact replay revalidates this
+persisted timestamp without rerunning Lean. It never receives or stores a prompt,
 proof source, workspace path, raw Lean stdout/stderr, or credential reference. It may attest a
 negative kernel result with valid execution evidence so that the control plane can record a
 verified rejection; an observation without OCI evidence remains non-promotable.
@@ -91,10 +104,13 @@ evidence identity, expiry); it stores no signing secret or raw evidence bytes.
 
 The gateway additionally maintains `verifier_signing_requests`. Request ID, request nonce,
 idempotency key, and canonical payload hash are unique. An exact idempotent retry returns the same
-public attestation; a different request cannot mint a second signature for the same payload.
-Failed or interrupted signing attempts remain consumed and fail closed. The ledger retains public
-digests, binding IDs, state, and the issued signature, never HMAC/KMS key material or exception
-text from a signer adapter.
+public attestation without rerunning the independent verifier, but only when the ledger retains a
+complete public receipt binding. A different request cannot mint a second signature for the same
+payload. Failed or interrupted signing attempts remain consumed and fail closed. The ledger retains
+the receipt ID/hash, public authentication-envelope fields, and public binding fields alongside
+digests, state, and the issued signature. A legacy issued row with no authenticated receipt fails
+closed. The ledger never retains HMAC/KMS key material, candidate bytes, raw output, or exception
+text from a verifier adapter.
 
 ## Operator Handling and Residual Risk
 
@@ -103,11 +119,16 @@ runtime objects. No key bytes belong in YAML, JSON, task bundles, artifacts, wor
 logs, prompts, endpoint configuration, or the gateway request/ledger. Their presence demonstrates
 protocol behavior, not independent authority.
 
-The implemented gateway is transport-neutral and has no production KMS or network listener.
-It validates identity, content, and lease binding; it does not by itself prove that Lean or OCI
-ran. A production ACL must admit only the isolated verifier workflow, and that workflow must
-produce independently retained execution evidence. Giving an ordinary proof-search worker access
-to a raw signing operation would invalidate the independence claim even though hashes still match.
+The implemented local gateway is test-only. It has no production KMS, network listener, or
+unforgeable capability boundary: Python callers can construct their own protocols and wrappers.
+Consequently every local `IndependentExecutionClassV1.PRODUCTION` construction and every attempted
+production `issue` raises `ProductionAuthorityUnavailable`, regardless of the supplied authenticator,
+allowlist, or verifier implementation. Production remains an interface placeholder until a separate
+remote mTLS/KMS service client exists. The local HMAC and real-worker canary are explicit fixtures;
+the canary performs a second digest-pinned Docker-wrapper run but still runs under one operator
+context. Every current `ControlPlane` verification event and reader is fixed to
+`execution_authority_class=test-only-local` and `promotion_state=not_a_promotion`; a conflicting
+promotion or production claim is rejected while proof evidence may still be locally accepted.
 Production promotion still requires an operator-authenticated mTLS/ACL boundary, a KMS/HSM
 sign/verify authority whose key material cannot be exported to workers or the control plane, key
 rotation/revocation policy, a pinned OCI-image policy, and independently retained verifier

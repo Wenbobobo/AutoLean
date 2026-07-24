@@ -17,10 +17,10 @@ ARG LEAN_ARCHIVE_SHA256=ceb3a3f844f7aebf63245e2b51c28d5b0ed38942c19f93cf3febd520
 
 LABEL org.opencontainers.image.title="AutoLean pure-Lean verifier worker" \
       org.opencontainers.image.description="Minimal Lean 4.28.0 verifier; no mathlib" \
-      org.opencontainers.image.version="4.28.0-pure-v1" \
+      org.opencontainers.image.version="4.28.0-pure-v3" \
       org.opencontainers.image.base.digest="sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90" \
       org.autolean.lean.archive.sha256="${LEAN_ARCHIVE_SHA256}" \
-      org.autolean.wrapper.protocol="autolean.oci-lean-wrapper.v1"
+      org.autolean.wrapper.protocol="autolean.oci-lean-wrapper.v2"
 
 # Docker extracts the zstd-compressed tar archive by content. The first stage verifies that exact
 # build-context byte stream; copying its marker makes the final image depend on that hard gate.

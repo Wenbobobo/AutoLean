@@ -1,11 +1,12 @@
 # Phase 1 Progress Ledger
 
-Snapshot: 2026-07-23
+Snapshot: 2026-07-24
 
 Decision: the local architecture has substantial adversarial evidence, but this branch is not a
 Phase 1 release candidate. The remaining blockers are authoritative mathlib-in-image execution,
-authenticated Builder/verifier authorities, authorized external-model evaluation, fixed
-regression/compare runs, and a human-calibrated Builder slice.
+deployed authenticated Builder/verifier authorities, authorized external-model evaluation, fixed
+regression/compare runs, the active model-theory quantifier/freshness gap, and later
+human-calibrated Builder statements.
 
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
@@ -15,72 +16,86 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 
 | Surface | Status | Recorded evidence | Boundary |
 | --- | --- | --- | --- |
-| Contract V1 and three graphs | Verified | Contract, hash, graph-separation, migration, and adversarial tests in the 415-test offline suite | Does not establish mathematical fidelity |
+| Contract V1 and three graphs | Verified | Contract, hash, graph-separation, migration, and adversarial offline suites | Does not establish mathematical fidelity |
 | Builder source-to-freeze path | Verified, local/synthetic | Official parent/text hashes, exact UTF-8 byte spans, append-only SQLite CAS preparation, two independent candidates, complete mutation suite, semantic/library review, and a real `prepare -> fidelity -> freeze` test | Reviewer and freezer IDs are unauthenticated strings; no production Builder signer |
 | Public/private source boundary | Verified | Public source-backed contracts retain span IDs, locators, offsets, and typed hashes but no verbatim excerpt; exact text remains in the ignored source cache and private fidelity artifact; public-readiness rejects JSON with non-null `permitted_excerpt` | Not a forensic scanner and not protection from a hostile local administrator |
 | Builder experience retrieval | Verified, synthetic | Content-addressed success/negative/gap records, rights/endpoint filters, deterministic ranking and budgets, poison-text rejection, and validated retrieval skill | Advisory context cannot satisfy a freeze gate |
 | Builder--Prover closure | Verified, synthetic | Fidelity artifact through freeze, signed bridge, claim, gap/change request, new-revision re-review, fake proof, and synthetic acceptance | No Lean or OCI execution in this fixture |
 | Event, lease, and artifact control plane | Verified, synthetic | SQLite WAL, command idempotency, fencing, append-only events, concurrent artifact create-if-absent, and immutable contract-revision projection | No power-loss or storage-device fault injection |
 | OS-process recovery | Verified, synthetic | 1,000 jobs; 1,000 expired leases/stale-fence rejections; 4,000 duplicate-delivery replays; 5,000 contiguous events; 4,000 artifact checks; no loss or duplicate terminal verdict. Report SHA `d80c2c0dbcbab22bfcbd0bea13f41e07c5f337a4a93d82203ef060e7765a2847` | No Lean, OCI, network, model, physical power loss, or mid-transaction kill |
-| Verifier evidence and signing gateway | Verified, synthetic | Lease/context/digest-bound request, evidence-artifact rehash and cross-binding, replay ledger, fail-closed outage, stale-fence rejection, and verifier execution-policy binding | Local HMAC is test-only; production mTLS/ACL and KMS/HSM custody are absent |
-| FATE source boundary | Verified | FATE v4.28.0 root and three submodule commits; 350-task manifest hash `3187bac80d3aeb2dac8f5da878fe21580a4c11540a0c7db3c14a34c2e0bdc748` | FATE is single-theorem evidence only |
+| Verifier evidence and signing gateway | Verified, local test-only | Lease/context/digest-bound request, evidence-artifact rehash and cross-binding, replay ledger, fail-closed outage, stale-fence rejection, and mandatory independently authenticated execution receipt before signing | Fixture HMAC proves the software boundary only; production mTLS/ACL and KMS/HSM custody are absent |
+| FATE source boundary | Verified | FATE v4.28.0 root and three submodule commits; 350-task manifest hash `3187bac80d3aeb2dac8f5da878fe21580a4c11540a0c7db3c14a34c2e0bdc748` | FATE is a bounded Prover fixture, not the research north star, a pilot-selection oracle, or multi-file library evidence |
 | `compile-canary-12` | Verified | Managed WSL runtime, Lean 4.28.0, mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; M 3/3, H 3/3, X 6/6; report SHA `87208dfc6d30c485c5a1efa85113f14334d86dd0c8544a1f2ac463d3b7aa90aa` | Original files contain `sorry`; `proof_search=false` |
 | `agent-smoke-8` | Verified, non-promotable | All eight fixed M cases attempted with one task-independent `aesop`; M-1 and M-3 compiled, type-queried, and passed the axiom policy; 2/8 total, no timeout; report SHA `c8c32f150562a9f4de9d6be84c812a6e7c6b760d624d43a1ad03b280144e5bb2` | No model Agent; mounted `.olean` tree is observed but not independently attested or image-built; no bundle/lease/signing request |
 | Role benchmark V3 | Verified, fake-only | Five roles, three repetitions, strict matrix/readiness/evaluator commitments, private raw CAS, public aggregate, replay, and two byte-identical forward runs. Report file SHA `06766d98d82c6a5400765c60423d4b225ab0b12d314535e414d765ccbd414f13` | Scripted fake output is not a model score or Lean/fidelity evidence |
 | External benchmark readiness | Blocked before egress | Refuses execution on `execution_authorization_missing_v1`, `external_executor_unavailable_v1`, and `production_role_evaluator_missing_v1` | API credentials are not yet requested |
 | Project DAG | Verified, synthetic | Fixed 20-node multi-file frontier, conflict, propagation, API-change, and integration-lease fixture | Does not compile a real multi-file Lean library |
 | Providers | Verified offline | Fake, Codex CLI, OpenAI Responses, and custom-compatible adapters; authorization/egress controls, stable failure taxonomy, and persistent circuit breaker | No paid/external run; no prohibited provider path |
-| OCI verifier | Verified, pure Lean | Non-root, digest-pinned image `sha256:d69da80fa5c1b9f921cda33bb37376114e9e15e7238eff513d8b6a340e55bcc0`; real Lean compile/query; statement replacement, wrong declaration/profile, stdout spoof, and axiom attacks rejected | No clean mathlib rebuild owned by the image |
-| Dashboard | Verified, loopback | Projection/API tests plus 11/11 UI tests, production build, desktop/mobile controlled-browser screenshots, XSS/display sanitization, stable three-lane graph layout, task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
-| Builder reference cache | Verified offline | McKay PDF: 94,902,360 bytes, SHA `1cd1660be5e63bf2d5198e7a7f7e912d3179c9cf3b5f2d972db6283e0b483ea4`; official extracted text: 1,194,775 bytes, SHA `3fdfa27690ce473d8b84c322dbd12779ce5ba76aa12ef8d07608db768894bd25`; manifest SHA `881d535d62661ad496f8385964151830688a78d10123b59ff8326cb8a3a5a907` | Local-only egress; no human-calibrated pilot statement yet |
-| HF recovery boundary | Incident open | Recovery work completed locally without migrating sessions, prompts, logs, or credentials | The API still reported `Garydesu/AutoArchon_Private` as `private=false`, `gated=false` on this snapshot; credential rotation is operator-owned |
-| Local and remote CI, inventory, and SBOM | Verified | 415 Python tests, Ruff format/check, all Mypy targets, 226-file secret/provider/public scans, 11 UI tests/build, reference replay, inventory SHA `4beb3113a106ccc687b0421e30feea6908f4a16bc406e765d970581831233039`, SPDX SHA `03d9645cf1c8e52f8a0acfb425ff9fa62a4653638fc5cd466030522fe0797917`; Draft PR code head `28d9d5e` passed Ubuntu/Windows Python+policy and UI in [run 30024075567](https://github.com/Wenbobobo/AutoLean/actions/runs/30024075567) | GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
+| OCI verifier | Verified, pure Lean test-only canary | Non-root image `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`; protocol V2 uses separate compile/query containers and binds both argv hashes plus the host-sealed `Candidate.olean` digest; statement replacement, wrong declaration/profile, stdout spoof, trusted-module shadow injection, persistent compile-time writer, and axiom attacks were rejected; an independent rerun produced an authenticated test-only execution receipt. Image-owned identity hash `81099458f107fc5a179e1d308b09ff0189424d8b4341dd47026cfbf01c3828e0`; policy-V2 canary SHA `8aa49896f153b763d5887a88b7ee646f0842e72d61f8c0379442332e8eb324b2` | The image deliberately contains no mathlib; FATE's matching two-phase path was code-tested but not rerun; the receipt and gateway are fixture-only, `promotion_attestation_created=false`, and no production KMS/mTLS evidence exists |
+| Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
+| Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
+| Builder self-calibration and pilot selection | Partial, blocked | Both model-theory semantic adapters compiled in the pinned Library lock. The tracked receipt v2 and self-calibration record bind canonical build-input SHA `1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795`, canonical report digest `9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769`, packet SHA `a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5`, receipt SHA `7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f`, verifier SHA `7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29`, dependency-tree SHA `43f889366a4c5dc6daaed5b56cf3704e82e491ff90f2044602a187d7da2bfe62`, and dependency-manifest SHA `7f83b557c145abc56ec83619871c305f4bb6b5abff54b1d6fd52dd837c4f6423`; the packet state is `partial_passed_with_gap` and `not_selected` | The adapters and observed-cache binding establish local API compatibility and byte-level replay detection only, not trusted clean-build provenance. The Builder self-calibration round deliberately remains incomplete/gap; quantifier/eigenvariable freshness, capture avoidance, weakening, source interpretation, and independent review remain open. No candidate is selected, frozen, handed to Prover, or promoted |
+| Builder reference cache | Verified offline | Four locked source/derived records, including locally extracted Open Logic Project *Sets, Logic, Computation*: source PDF SHA `39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9`, extracted text SHA `285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584`, manifest SHA `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab` | Retained only as local reference/provenance material; no human-calibrated pilot statement is recorded and model egress remains forbidden |
+| HF recovery boundary | Partially closed by operator confirmation | Operator confirmed deletion of the HF archive; no archive material is a migration source | This does not independently prove provider-side access state, credential rotation, or incident closure |
+| Local and remote CI, inventory, and SBOM | Verified in the recorded scope | Offline Python, formatting, type, secret/provider/public-readiness, Dashboard UI/build, reference-replay, inventory, and SPDX gates; Draft PR code head `28d9d5e` passed Ubuntu/Windows Python+policy and UI in [run 30024075567](https://github.com/Wenbobobo/AutoLean/actions/runs/30024075567) | GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
 
-## Week route
+## Current gated route
 
-| Weeks | State | What remains before the milestone is closed |
+| Gate | State | What remains before the gate can close |
 | --- | --- | --- |
-| 1--2 | Verified | Current Draft PR code passed the fixed local and Windows/Linux remote gates |
-| 3--4 | Partially verified | Build mathlib and verifier helper inside one pinned image; route FATE smoke through immutable bundle, lease, evidence artifact, and signing gateway |
-| 5--6 | Partially implemented | Add operator-authorized external executor and production role evaluators; measure Archon adapter; run fixed `regression-48` pass@1 |
-| 7--8 | Partially verified | Run compare-90 pass@1 and one-factor model/retrieval/specialist ablations; complete five human-reviewed Builder calibration statements |
-| 9--10 | Partially verified | Retain authoritative Linux OCI CI, add practical transaction/power-loss tests, and run compare-90 pass@4 |
-| 11--12 | Not run | Attempt FATE-350 pass@1, review the paper-version subset, close dependency/license audit, and make an explicit RC decision |
+| Local architecture baseline | Verified in the stated local/synthetic scopes | Retain the evidence boundaries; it does not close authoritative Lean/OCI, production authority, or semantic-fidelity gates |
+| Pilot self-calibration | Partial, blocked | Reconcile the retained partial-pass spike with source-interpreter, research-alignment, Library-steward, source-entry, Mathlib-census, and later human-review records; agreement is never a freeze |
+| Pinned Library selection spike | Partial passed with gap | Both adapter modules compiled under the committed lock, but implement and review the calculus-level quantifier/eigenvariable freshness bridge before selecting either boundary |
+| Manual Builder calibration | Deferred | Begin only after candidate selection, rights readiness, and domain review; retain normal fidelity/non-vacuity evidence |
+| Authoritative Prover path | Partially verified | Build mathlib and verifier helper inside one pinned image, then retain immutable bundle, lease, evidence, and signing observations |
+| Controlled model/benchmark evaluation | Blocked before egress | Obtain operator authorization, then run fixed suites and ablations as secondary diagnostics; no FATE result closes a Builder or Library gate |
+| Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
 
-## Builder discovery
+## Pilot discovery
 
-The primary 24-node discovery slice is now curvature of vector-bundle connections through a
-sharply bounded first Bianchi target. The earlier Levi-Civita proposal is revoked because current
-mathlib already has the connection/torsion/metric groundwork and active upstream Levi-Civita work.
-The backup remains abstract variational PDE and a Cea-type error bound.
+The conditional primary is first-order model-theory sequent-calculus soundness. Two independent
+candidates disagree over a closed-only conservative formulation versus explicit structural
+freshness and open-formula contexts. Both semantic adapters now compile in the pinned independent
+`Library/` project, but their retained packet is deliberately `partial_passed_with_gap`: it does
+not represent a calculus, a soundness theorem, a textbook-faithful statement, or a selection. The
+selection authority remains the resolved quantifier/freshness bridge and its independent review,
+not a model preference or a benchmark score. The backups are an abstract Cea-type variational-PDE
+bound and a van Kampen-style topology slice.
 
-The McKay textbook and repository-provided text are pinned and cached locally, never tracked.
-Admission still requires:
+Curvature is reference only: mathlib [PR #36036](https://github.com/leanprover-community/mathlib4/pull/36036)
+is an active, open connection/geodesics work-in-progress that includes curvature. No curvature
+mapping, source-to-contract calibration, or upstream duplication is current work.
 
-- a current mathlib overlap/maintainer check;
-- at least six of eight prerequisite mappings compiling at the pilot commit;
-- five human-calibrated statements passing the full fidelity and non-vacuity gate;
-- one qualified differential geometer; and
+Before manual Builder calibration, the active work requires:
+
+- independent candidate, adversarial, textbook, and open-problem-alignment records;
+- a pinned-Library compile spike that preserves the selected candidate's stated scope;
+- a complete gap record if neither candidate compiles without a representation redesign; and
 - an explicit rights decision before any non-local model egress.
 
-Failure of the overlap or prerequisite gates moves the pilot to the PDE backup. Failure of
-fidelity, expert, or rights gates pauses ingestion rather than weakening a theorem.
+Only after that selection may human source-to-contract calibration start. Failure of selection,
+fidelity, expert, or rights gates creates a gap, pauses ingestion, or selects a backup; it never
+weakens a theorem.
 
 ## Immediate execution order
 
-1. Review Draft PR #1 as an evidence checkpoint; do not merge or change repository visibility
-   until the external incident and release gates are explicitly resolved.
-2. Build a source-clean, mathlib-containing OCI verifier image and repeat `agent-smoke-8` through
-   bundle, lease, evidence artifact, and signing-gateway boundaries.
-3. Implement the authorized online executor and production role evaluators. Request an
+1. Complete the multi-agent self-calibration records: source interpretation, research alignment,
+   Library stewardship, source-entry review, and the bounded Mathlib API census.
+2. Design and test a calculus-level quantifier/eigenvariable freshness bridge with capture
+   avoidance and weakening. Retain its gap or review result; do not select a candidate merely
+   because the two semantic adapters compile.
+3. In parallel, build a source-clean, mathlib-containing OCI verifier image and repeat
+   `agent-smoke-8` through bundle, lease, evidence artifact, and signing-gateway boundaries.
+4. Implement the authorized online executor and production role evaluators. Request an
    operator-owned API secret reference only when readiness otherwise passes.
-4. Compile the eight existing curvature mappings and start five expert-reviewed source-to-contract
-   calibration statements; feed only frozen bundles to Prover.
-5. Run `regression-48` pass@1, then controlled role/model/retrieval ablations and compare-90.
-6. Deploy Builder/verifier authorities behind authenticated service boundaries before any result
-   is called promotable.
+5. After selection and rights/domain readiness, begin expert-reviewed source-to-contract
+   calibration; feed only frozen bundles to Prover.
+6. Run fixed regression/comparison work as controlled secondary diagnostics, then deploy
+   Builder/verifier authorities behind authenticated service boundaries before any result is
+   called promotable.
 
-Repository visibility may be changed after the external HF/credential incident is closed, GitHub
-history is reviewed, host secret scanning is enabled or independently substituted, and the
-current public-readiness/secret/provider gates pass. Public source code never authorizes source
+Repository visibility may be changed only after GitHub history is reviewed, host secret scanning is
+enabled or independently substituted, provider-side incident/credential gates are independently
+closed, and the current public-readiness/secret/provider gates pass. The operator-confirmed HF
+archive deletion does not satisfy those separate gates. Public source code never authorizes source
 document, recovered archive, raw model output, or credential publication.

@@ -2,7 +2,10 @@
 
 ## Current result
 
-The first real `agent-smoke-8` execution completed on 2026-07-23. It is a transparent,
+The first real `agent-smoke-8` execution completed on 2026-07-23 under the now-retired single-
+container wrapper V1. It is retained as historical, non-promotable evidence and is not evidence
+for the current V2 execution path. The V2 code has unit coverage but has not yet rerun all eight
+FATE cases. The historical run is a transparent,
 task-independent `aesop` baseline, not a model comparison and not evidence that an Agent ran.
 Lean proof search did execute inside each candidate; the report therefore records
 `proof_search_executed=true` and `model_or_agent_executed=false`.
@@ -44,10 +47,13 @@ For each selected task:
 2. The candidate, dependency tree, and verifier files are mounted read-only.
 3. Docker runs with `--network none`, a read-only root filesystem, all capabilities dropped,
    no-new-privileges, a numeric non-root user, and bounded CPU, memory, pids, and time.
-4. Candidate stdout is isolated from the verifier record.
-5. A separate Lean query returns the elaborated declaration type and `collectAxioms` result.
-6. The public report retains hashes of the type and wrapper record, not their source text.
-7. `sorryAx` and any axiom outside `Classical.choice`, `Quot.sound`, and `propext` are rejected.
+4. Under current V2, candidate compilation writes only to a dedicated output bind. After that
+   container is confirmed stopped, the host copies one regular non-link `Candidate.olean`.
+5. A new query container receives only that sealed file read-only; candidate stdout and sibling
+   shadow modules are not part of its filesystem.
+6. The Lean query returns the elaborated declaration type and `collectAxioms` result.
+7. The public report retains hashes of the type and wrapper record, not their source text.
+8. `sorryAx` and any axiom outside `Classical.choice`, `Quot.sound`, and `propext` are rejected.
 
 The protected prefix and suffix remain byte-identical, so neither the declaration name nor its
 type can be replaced with `True`. M, H, and X are always emitted as separate report sections.
@@ -91,8 +97,9 @@ dependency/verifier commitment match; it is never overwritten.
 
 1. Build mathlib from the locked Git sources inside a digest-pinned OCI image with network
    disabled during the build and publish its SBOM/provenance.
-2. Move the FATE wrapper and query helper into that image, then rerun altered-statement, stdout
-   spoof, missing-declaration, unknown-axiom, and dependency-drift canaries.
+2. Move the FATE wrapper and query helper into that image, retain the V2 compile/query container
+   split, then rerun altered-statement, stdout spoof, trusted-module-shadow, persistent-writer,
+   missing-declaration, unknown-axiom, and dependency-drift canaries.
 3. Express each task as an immutable bundle and route the observation through the existing
    verifier-evidence and lease/fencing boundary.
 4. Ask the signing gateway to attest only the resulting canonical evidence artifact.

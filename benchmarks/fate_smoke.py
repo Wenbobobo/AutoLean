@@ -37,8 +37,8 @@ EXPECTED_SPLIT_MANIFEST_SHA256: Final = (
 )
 STATIC_CANDIDATE_POLICY_ID: Final = "autolean.static-aesop-smoke.v1"
 _STATIC_PROOF_BODY: Final = "aesop"
-WRAPPER_SCHEMA: Final = "autolean.fate-oci-lean-wrapper.v1"
-WRAPPER_PROTOCOL: Final = "autolean.fate-oci-lean-wrapper.v1"
+WRAPPER_SCHEMA: Final = "autolean.fate-oci-lean-wrapper.v2"
+WRAPPER_PROTOCOL: Final = "autolean.fate-oci-lean-wrapper.v2"
 TYPE_FORMAT: Final = "autolean.lean-pp-expr.v1"
 EXPECTED_LEAN_VERSION: Final = "v4.28.0"
 EXPECTED_MATHLIB_REVISION: Final = "8f9d9cff6bd728b17a24e163c9402775d9e6a365"

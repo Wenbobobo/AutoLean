@@ -2,14 +2,20 @@ import assert from "node:assert/strict";
 import test from "node:test";
 
 import { resolveApiBase } from "../src/api.ts";
-import { displayText, graphText } from "../src/display.ts";
+import { displayText, graphText, phaseStateLabel } from "../src/display.ts";
+import {
+  feedbackTone,
+  LEVERAGE_DISPLAY_LIMIT,
+  leverageMetric,
+  leverageWindow
+} from "../src/feedbackModel.ts";
 import { buildGridModel, graphPresentation, healthForStatus, summarizeGrid } from "../src/gridModel.ts";
 import {
   buildNodeInspection,
   classifyWorkRecord,
   focusNode
 } from "../src/inspectionModel.ts";
-import type { GraphNode } from "../src/types.ts";
+import type { GraphNode, PhaseFeedback } from "../src/types.ts";
 
 test("display text removes spoofing controls while retaining ordinary literal text", () => {
   const rendered = displayText("<img src=x onerror=alert(1)>\u202e\nsummary", 96);
@@ -26,6 +32,13 @@ test("graph text removes ECharts formatter syntax and stays bounded", () => {
   assert.equal(rendered.length, 12);
 });
 
+test("phase states render as bounded human-readable labels", () => {
+  assert.equal(phaseStateLabel("frozen_attested_with_evidence"), "frozen attested with evidence");
+  assert.equal(phaseStateLabel("verified_candidate_available"), "verified candidate available");
+  assert.equal(phaseStateLabel("contract_change"), "contract change");
+  assert.equal(phaseStateLabel("unsafe_\u202elabel"), "unsafe label");
+});
+
 test("display limits reject values that cannot carry an ellipsis safely", () => {
   assert.throws(() => displayText("text", 3), RangeError);
 });
@@ -37,6 +50,63 @@ test("API base only permits the local credential-free boundary", () => {
   assert.throws(() => resolveApiBase("https://example.invalid"));
   assert.throws(() => resolveApiBase("http://user@127.0.0.1:8765"));
   assert.throws(() => resolveApiBase("http://127.0.0.1:8765/api"));
+});
+
+test("leverage rendering has a fixed degradation threshold for dense mathematical graphs", () => {
+  const rows: PhaseFeedback["mathematical_dependency_leverage"] = Array.from(
+    { length: LEVERAGE_DISPLAY_LIMIT + 3 },
+    (_, index) => ({
+      node_id: `node-${index}`,
+      source_node_id: `source-${index}`,
+      label: `Node ${index}`,
+      direct_dependents: index,
+      transitive_dependents: index + 1
+    })
+  );
+
+  const window = leverageWindow(rows);
+  assert.equal(window.rows.length, LEVERAGE_DISPLAY_LIMIT);
+  assert.equal(window.omittedCount, 3);
+  assert.equal(window.isDegraded, true);
+  assert.throws(() => leverageWindow(rows, 0), RangeError);
+});
+
+test("direct-only leverage cannot be rendered as transitive reach", () => {
+  const row: PhaseFeedback["mathematical_dependency_leverage"][number] = {
+    node_id: "node-direct",
+    source_node_id: "direct",
+    label: "Direct dependency",
+    direct_dependents: 3,
+    transitive_dependents: null
+  };
+
+  assert.deepEqual(leverageMetric(row, "direct_only_over_limit"), {
+    value: 3,
+    label: "direct"
+  });
+  assert.throws(() => leverageMetric(row, "exact_transitive"));
+});
+
+test("phase feedback tone preserves failed verification and unresolved review semantics", () => {
+  const base = {
+    prover_verification: { state: "verified_candidate_available" },
+    unresolved_human_review_assumptions: []
+  } as PhaseFeedback;
+  assert.equal(feedbackTone(base), "nominal");
+  assert.equal(
+    feedbackTone({
+      ...base,
+      unresolved_human_review_assumptions: [{ id: "gap-1" }]
+    } as PhaseFeedback),
+    "attention"
+  );
+  assert.equal(
+    feedbackTone({
+      ...base,
+      prover_verification: { state: "all_candidates_rejected" }
+    } as PhaseFeedback),
+    "critical"
+  );
 });
 
 const topologyFixture: GraphNode[] = [

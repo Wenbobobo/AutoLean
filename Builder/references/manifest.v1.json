@@ -68,6 +68,74 @@
         "parent_locator_authority": "human_declared"
       },
       "attribution": "McKay, Benjamin. Lectures on Differential Geometry. University College Cork, 2022. CC BY-SA 4.0."
+    },
+    {
+      "reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+      "title": "Sets, Logic, Computation",
+      "authors": [
+        "Open Logic Project"
+      ],
+      "version": "screen-2026-07-12",
+      "citation": "Open Logic Project. Sets, Logic, Computation. Screen PDF, 2026-07-12.",
+      "source_record_url": "https://slc.openlogicproject.org/slc-screen.pdf",
+      "download_url": "https://slc.openlogicproject.org/slc-screen.pdf",
+      "allowed_redirect_urls": [],
+      "media_type": "application/pdf",
+      "file_extension": ".pdf",
+      "size_bytes": 4914680,
+      "max_bytes": 5000000,
+      "sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+      "retrieved_at": "2026-07-24T02:25:06.000Z",
+      "license": {
+        "expression": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "evidence_url": "https://slc.openlogicproject.org/slc-screen.pdf"
+      },
+      "access_policy": "public_open_access",
+      "acquisition_policy": "operator_only",
+      "model_egress_policy": "local_only",
+      "artifact_kind": "source_document",
+      "derivation": null,
+      "attribution": "Open Logic Project. Sets, Logic, Computation. CC BY 4.0."
+    },
+    {
+      "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+      "title": "Sets, Logic, Computation (locally extracted text)",
+      "authors": [
+        "Open Logic Project"
+      ],
+      "version": "screen-2026-07-12-pypdf-6.10.0-text-v1",
+      "citation": "Locally extracted text companion to Open Logic Project. Sets, Logic, Computation. Screen PDF, 2026-07-12.",
+      "source_record_url": "https://slc.openlogicproject.org/slc-screen.pdf",
+      "download_url": null,
+      "allowed_redirect_urls": [],
+      "media_type": "text/plain",
+      "file_extension": ".txt",
+      "size_bytes": 625143,
+      "max_bytes": 1000000,
+      "sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+      "retrieved_at": "2026-07-24T02:25:06.000Z",
+      "license": {
+        "expression": "CC-BY-4.0",
+        "url": "https://creativecommons.org/licenses/by/4.0/",
+        "evidence_url": "https://slc.openlogicproject.org/slc-screen.pdf"
+      },
+      "access_policy": "public_open_access",
+      "acquisition_policy": "local_derivation_only",
+      "model_egress_policy": "local_only",
+      "artifact_kind": "derived_text",
+      "derivation": {
+        "kind": "local_pdf_text_extraction",
+        "parent_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+        "parent_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+        "producer": "AutoLean local reference cache",
+        "method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+        "tool_name": "pypdf",
+        "tool_version": "6.10.0",
+        "provenance_url": "https://slc.openlogicproject.org/slc-screen.pdf",
+        "parent_locator_authority": "manifest_bound"
+      },
+      "attribution": "Open Logic Project. Sets, Logic, Computation. CC BY 4.0."
     }
   ]
 }

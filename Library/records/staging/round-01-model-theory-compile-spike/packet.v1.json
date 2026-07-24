@@ -1,0 +1,64 @@
+{
+  "schema_version": "autolean.library-model-theory-compile-spike.v1",
+  "record_kind": "preselection_compile_spike",
+  "packet_id": "round-01-model-theory-compile-spike",
+  "record_state": "staging",
+  "state": "partial_passed_with_gap",
+  "candidate_selection_state": "not_selected",
+  "selected_candidate_id": null,
+  "environment": {
+    "lean_toolchain": "leanprover/lean4:v4.28.0",
+    "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+    "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
+    "build_target": "AutoLeanLibrary.Fixtures.ModelTheory.Packet"
+  },
+  "source_boundary": {
+    "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+    "source_artifact_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+    "anchor_ids": ["mt-terms-formulas", "mt-satisfaction"],
+    "model_egress": "forbidden"
+  },
+  "fixtures": [
+    {
+      "candidate_id": "model-theory-closed-only",
+      "module": "AutoLeanLibrary.Fixtures.ModelTheory.ClosedSentence",
+      "result": "compiled",
+      "verified_boundary": "Sentence realization and language-expansion transport have no free-variable assignment parameter."
+    },
+    {
+      "candidate_id": "model-theory-structural-open-formula",
+      "module": "AutoLeanLibrary.Fixtures.ModelTheory.OpenFormulaContext",
+      "result": "compiled",
+      "verified_boundary": "Formula substitution and free-variable relabeling retain an explicit assignment parameter."
+    }
+  ],
+  "gap": {
+    "gap_id": "mt-quantifier-freshness-bridge-not-implemented",
+    "state": "open",
+    "scope": "A calculus-level quantifier/eigenvariable rule with capture-avoidance, weakening, and freshness side conditions.",
+    "reason": "The two fixture adapters validate only Mathlib semantic interfaces. They do not choose a syntax, context representation, derivation system, or side-condition discipline.",
+    "prohibited_substitutes": [
+      "sorry",
+      "new_axiom",
+      "implicit_default_assignment",
+      "weakened_closed-only_claim"
+    ],
+    "required_before_selection": [
+      "replayable Mathlib API census at the pinned revision",
+      "explicit context and freshness representation",
+      "semantic review of the selected textbook statement",
+      "independent Builder fidelity review"
+    ]
+  },
+  "non_claims": [
+    "No sequent-calculus soundness theorem has been formalized.",
+    "No candidate has been selected, frozen, handed to Prover, or promoted.",
+    "A successful compile proves API compatibility in this lock, not textbook fidelity."
+  ],
+  "compile_receipt": {
+    "path": "records/staging/round-01-model-theory-compile-spike/compile-receipt.v2.json",
+    "sha256": "7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f"
+  },
+  "contains_absolute_paths": false,
+  "contains_source_text": false
+}

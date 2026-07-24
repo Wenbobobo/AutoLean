@@ -251,4 +251,9 @@ class TrustedLeanVerifier:
             return "verification did not start: " + "; ".join(reasons)
         state = "timed out" if evidence.timed_out else f"returned {evidence.returncode}"
         suffix = "; ".join(reasons) if reasons else "all local verifier gates passed"
-        return f"Lean worker {state}; {suffix}"
+        authority = (
+            "non-OCI"
+            if evidence.oci_execution_evidence is None
+            else evidence.oci_execution_evidence.authority_status
+        )
+        return f"Lean worker {state}; OCI authority={authority}; {suffix}"

@@ -53,7 +53,7 @@ from autolean_contracts import (
     MathematicalSpecificationV1,
     MutationKindV1,
     MutationProbeV1,
-    OciVerifierExecutionPolicyV1,
+    OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ReleaseTierV1,
     ReviewerRoleV1,
@@ -159,7 +159,7 @@ def _contract() -> StatementContractV1:
         environment=LeanEnvironmentV1(
             lean_version="v4.28.0",
             mathlib_revision="test-mathlib",
-            verifier_execution_policy=OciVerifierExecutionPolicyV1(
+            verifier_execution_policy=OciVerifierExecutionPolicyV2(
                 worker_image_digest="sha256:" + "b" * 64,
             ),
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "test-environment"),

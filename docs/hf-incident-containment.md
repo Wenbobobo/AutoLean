@@ -4,20 +4,21 @@
 
 The AutoArchon audit recorded that the dataset named AutoArchon_Private was publicly enumerable
 and ungated at the time of the audit. That is an incident record, not a current access-control
-assertion: this document does not re-query the service and must not be used as proof that the
-dataset is now private or deleted.
+assertion. On 2026-07-24 the operator confirmed that the HF archive was deleted. This repository
+does not independently re-query the service, so the confirmation must not be read as proof of a
+provider-side access state, complete incident remediation, or credential rotation.
 
 The relevant source evidence is [the AutoArchon audit](audits/autoarchon-audit.md). This document
 contains no itemized recovered inventory, decrypted content, prompt, session, passphrase,
 endpoint, credential, or checksum. It is deliberately safe to keep in the AutoLean repository.
 
 After that source audit, the operator explicitly authorized a quarantine-only recovery. The
-aggregate local reports record four verified encrypted archives, three decrypted non-session
-archives, and one session archive deliberately left encrypted. No decrypted archive was
-extracted. Header-only inspection counted 4,523 regular members totalling 230,761,442 bytes and
-280 symbolic links, so the material is explicitly unsafe for automatic extraction. These counts
-are recovery-boundary evidence only; they reveal no member paths or contents and authorize no
-migration.
+historical aggregate local reports recorded four verified encrypted archives, three decrypted
+non-session archives, and one session archive deliberately left encrypted. No decrypted archive
+was extracted. Header-only inspection counted 4,523 regular members totalling 230,761,442 bytes
+and 280 symbolic links, so the material was explicitly unsafe for automatic extraction. These
+counts are historical recovery-boundary evidence only; they reveal no member paths or contents,
+authorize no migration, and do not override the operator-confirmed deletion.
 
 ## Non-negotiable containment rule
 
@@ -53,12 +54,12 @@ decryption is not a migration approval.
 | --- | --- | --- |
 | Restrict or remove public dataset access | Provider-side access state and incident timestamp, retained outside public repo docs | Dataset owner |
 | Rotate potentially exposed credentials | Rotation record for OpenAI/Codex, HF, GitHub, custom endpoints, and any helper/service credential that could be present | Credential owners |
-| Preserve incident evidence | Immutable dataset/repository revision and platform audit/access records, stored in the incident system | Incident owner |
+| Preserve incident evidence | Immutable audit/access decision records, stored in the incident system without retaining prohibited archive payload | Incident owner |
 | Verify quarantine acquisition | Fixed revision, hash/size verification report, and no import/execution evidence | Recovery operator |
 | Classify content | Inventory classified as allowable schema/fixture/report versus prohibited sessions, secrets, prompts, logs, and unreviewed workspaces | Security reviewer |
 | Create proposed sanitized export | New clean repository or staging area, independently rebuilt fixtures, redacted schemas/reports only | Migration owner |
 | Review export | Secret scan, license/rights review, reproducible rebuild, and independent approval | Security and Builder reviewers |
-| Dispose or retain originals | Explicit retention/deletion decision with recoverability and access record | Dataset/incident owner |
+| Dispose or retain originals | Explicit retention/deletion decision with access record; deletion is operator-confirmed for the HF archive | Dataset/incident owner |
 
 The first two rows require an operator action outside this workspace. They must not be inferred
 from the existence of a downloaded backup or a successful script run.
@@ -78,9 +79,9 @@ are reference material for audits, not dependencies or migration targets.
 ## Recovery completion criterion
 
 Recovery is complete only when the incident owner can demonstrate that public access has been
-restricted or the dataset has been removed, applicable credentials have been rotated, the original
-archive remains quarantined or is deliberately disposed of, and any new public export is a fresh
-sanitized artifact with independent review. It is not complete merely because data was downloaded,
-decrypted, or readable. The local quarantine acquisition and no-extract inventory are complete;
-provider-side access restriction, credential rotation, classification review, and any sanitized
-export remain operator-owned gates.
+restricted or the dataset has been removed, applicable credentials have been rotated, the archive
+disposition is recorded, and any new public export is a fresh sanitized artifact with independent
+review. It is not complete merely because data was downloaded, decrypted, readable, or reported
+deleted by an operator. The historical quarantine acquisition and no-extract inventory are
+complete; provider-side access restriction, credential rotation, classification review, and any
+sanitized export remain operator-owned gates.

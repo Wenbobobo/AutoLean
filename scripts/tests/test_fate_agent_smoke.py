@@ -1,6 +1,8 @@
 from __future__ import annotations
 
 import hashlib
+import os
+import stat
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -179,3 +181,73 @@ def test_command_policy_exposes_non_promotable_mount_boundary() -> None:
     assert policy["root_filesystem"] == "read_only"
     assert policy["image"] == fate_agent_smoke.IMAGE_REPOSITORY_DIGEST
     assert cast(dict[str, str], policy["mounts"])["dependencies"] == "read_only"
+
+
+@pytest.mark.skipif(os.name != "posix", reason="POSIX permission bits are authoritative on Linux")
+def test_fate_limits_cross_uid_output_access_to_compile_phase(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, int] = {}
+    output_root: Path | None = None
+
+    def fake_run_phase(
+        _cls: type[fate_agent_smoke.OciMountedMathlibCompiler],
+        argv: tuple[str, ...],
+        *,
+        container_name: str,
+        timeout_seconds: int,
+    ) -> tuple[subprocess.CompletedProcess[bytes], None]:
+        del container_name, timeout_seconds
+        nonlocal output_root
+        phase = argv[argv.index("--phase") + 1]
+        if phase == "compile":
+            mount = next(value for value in argv if "dst=/output" in value)
+            source = next(
+                field.removeprefix("src=") for field in mount.split(",") if field.startswith("src=")
+            )
+            output_root = Path(source)
+            observed["parent"] = stat.S_IMODE(output_root.parent.stat().st_mode)
+            observed["compile"] = stat.S_IMODE(output_root.stat().st_mode)
+            (output_root / "Candidate.olean").write_bytes(b"fate-olean")
+        else:
+            assert output_root is not None
+            observed["query"] = stat.S_IMODE(output_root.stat().st_mode)
+        return subprocess.CompletedProcess(argv, 0, b"{}", b""), None
+
+    monkeypatch.setattr(
+        fate_agent_smoke.OciMountedMathlibCompiler,
+        "_run_container_phase",
+        classmethod(fake_run_phase),
+    )
+
+    observation = _compiler(tmp_path).compile(_candidate(), timeout_seconds=20)
+
+    assert observation.returncode == 0
+    assert observed == {"parent": 0o700, "compile": 0o733, "query": 0o700}
+
+
+def test_fate_handoff_rejects_non_regular_or_symlinked_olean(tmp_path: Path) -> None:
+    compiler_output = tmp_path / "compiler-output"
+    sealed = tmp_path / "sealed"
+    compiler_output.mkdir()
+    sealed.mkdir()
+    compiled = compiler_output / "Candidate.olean"
+    compiled.mkdir()
+
+    with pytest.raises(
+        FateSmokeError,
+        match=r"smoke_compiled_candidate_(unavailable|not_regular)",
+    ):
+        fate_agent_smoke._seal_candidate_olean(compiler_output, sealed)
+
+    compiled.rmdir()
+    outside = tmp_path / "outside.olean"
+    outside.write_bytes(b"outside")
+    try:
+        compiled.symlink_to(outside)
+    except OSError:
+        pytest.skip("symbolic links are unavailable on this Windows configuration")
+
+    with pytest.raises(FateSmokeError, match="smoke_compiled_candidate_unavailable"):
+        fate_agent_smoke._seal_candidate_olean(compiler_output, sealed)

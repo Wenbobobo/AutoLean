@@ -1,0 +1,441 @@
+{
+  "schema_version": "autolean.builder-pilot-manifest.v1",
+  "protocol": "autolean.builder-pilot.v1",
+  "prover_handoff": "forbidden",
+  "graphs": [
+    {
+      "graph_id": "connection-curvature-overlap-reference",
+      "admission_mode": "overlap_blocked_reference",
+      "domain": "vector-bundle connection curvature",
+      "source": {
+        "status": "verified",
+        "rationale": "The local official McKay cache is suitable for source-alignment calibration only; it cannot override an active upstream overlap.",
+        "reference": {
+          "reference_id": "mckay-lectures-differential-geometry-2022-text",
+          "artifact_sha256": "3fdfa27690ce473d8b84c322dbd12779ce5ba76aa12ef8d07608db768894bd25",
+          "manifest_sha256": "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+          "parent_reference_id": "mckay-lectures-differential-geometry-2022-pdf",
+          "parent_artifact_sha256": "1cd1660be5e63bf2d5198e7a7f7e912d3179c9cf3b5f2d972db6283e0b483ea4",
+          "license_expression": "CC-BY-SA-4.0",
+          "attribution": "McKay, Benjamin. Lectures on Differential Geometry. University College Cork, 2022. CC BY-SA 4.0.",
+          "model_egress_policy": "local_only",
+          "source_scope": "declared_entry_boundary",
+          "entry_boundary_locator": "Chapter 59 after the Chapter 58 vector-bundle definition chain",
+          "prior_dependency_scope": [
+            "Chapter 58: vector bundles, local trivializations, sections, and transition functions"
+          ],
+          "prior_dependency_review_state": "pending",
+          "anchors": [
+            {
+              "anchor_id": "connection-definition",
+              "human_locator": "Chapter 59, p. 505",
+              "start_offset": 907451,
+              "end_offset": 907863,
+              "raw_sha256": "fa3c1bf4503d8eda60996f86b13b1e3d4b29bbd620ee57ce6a11fd3171e4c0b8"
+            },
+            {
+              "anchor_id": "metric-compatibility",
+              "human_locator": "Chapter 59, p. 511",
+              "start_offset": 922067,
+              "end_offset": 922714,
+              "raw_sha256": "2637ad9df96cd0dfcd2710dc7f2e0dd525ddc6f44efb1415aed1cc8749e37d7d"
+            },
+            {
+              "anchor_id": "curvature-form",
+              "human_locator": "Chapter 60, p. 517",
+              "start_offset": 932554,
+              "end_offset": 932946,
+              "raw_sha256": "bd0eb569db9dc492319621d1998248044cff09774015344b2655b8401f04544f"
+            },
+            {
+              "anchor_id": "curvature-operator",
+              "human_locator": "Chapter 60, pp. 517-518",
+              "start_offset": 933164,
+              "end_offset": 933713,
+              "raw_sha256": "d3d589785de400dd6eeced80d511c2e004b5f25ddc1c99ec750a8f421b906c70"
+            },
+            {
+              "anchor_id": "metric-curvature",
+              "human_locator": "Chapter 60, p. 518",
+              "start_offset": 934839,
+              "end_offset": 935146,
+              "raw_sha256": "be7f26b8aff322b9250fae35b667d68192509c36c939492fbf0cecafad68ac33"
+            }
+          ]
+        }
+      },
+      "mathlib_census": {
+        "observed_revision": "6c5a9081e9b704f0d366214e1fd5e68e1538a4b2",
+        "observed_at": "2026-07-24",
+        "scope": "Audited master-tree paths and active upstream pull requests for manifold vector-bundle covariant derivatives and curvature.",
+        "observation": "An active PR #36036 changes CovariantDerivative/Curvature and declares curvatureEndomorphismTensor. This is concrete overlap evidence, not a claim that path absence proves global non-overlap.",
+        "current_review_state": "pending"
+      },
+      "calibration_requirements": [
+        {"role": "source_analyst", "required_independence_groups": 1, "review_state": "pending"},
+        {"role": "normalizer", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "mathlib_mapper", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "challenge_author", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "semantic_reviewer", "required_independence_groups": 2, "review_state": "pending"}
+      ],
+      "nodes": [
+        {
+          "node_id": "cc-connection-definition",
+          "kind": "textbook_definition",
+          "summary": "A connection is a linear differential operator on vector-bundle sections with a scalar Leibniz rule.",
+          "normalized_claim": "For every local scalar f and section s, nabla(f*s) = df tensor s + f*nabla(s).",
+          "formalization_target": "Map the existing covariant-derivative interface before any new declaration.",
+          "source_anchor_ids": ["connection-definition"],
+          "depends_on": [],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "cc-curvature-form",
+          "kind": "dependency_lemma",
+          "summary": "In a local frame, the curvature form is d(gamma) + gamma wedge gamma.",
+          "normalized_claim": "Omega = d(gamma) + gamma wedge gamma is frame-covariant and its vanishing is basis-independent.",
+          "formalization_target": "Boundary-only mapping to bundle-valued differential forms; no declaration admission.",
+          "source_anchor_ids": ["connection-definition", "curvature-form"],
+          "depends_on": ["cc-connection-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "cc-curvature-operator",
+          "kind": "target_claim",
+          "summary": "Curvature is an endomorphism-valued two-form independent of the local frame.",
+          "normalized_claim": "R(u,v) is alternating in tangent arguments and acts linearly on a section value.",
+          "formalization_target": "Reference-only comparison against the overlapping upstream curvature API.",
+          "source_anchor_ids": ["curvature-form", "curvature-operator"],
+          "depends_on": ["cc-curvature-form"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "cc-metric-skew",
+          "kind": "target_claim",
+          "summary": "Metric-compatible curvature is skew-adjoint rather than an arbitrary endomorphism.",
+          "normalized_claim": "For a metric-compatible connection, each curvature value is skew-adjoint with respect to the metric.",
+          "formalization_target": "Semantic comparison only; no duplicate theorem proposal while the overlap blocker remains active.",
+          "source_anchor_ids": ["metric-compatibility", "metric-curvature"],
+          "depends_on": ["cc-curvature-operator"],
+          "review_state": "pending"
+        }
+      ],
+      "feedback_gates": [
+        {
+          "gate_id": "cc-opposite-symmetry",
+          "kind": "opposite_conclusion",
+          "target_node_id": "cc-curvature-operator",
+          "challenged_conclusion": "R(u,v) = R(v,u) for arbitrary tangent vectors.",
+          "concrete_witness": "On the trivial line bundle over R^2 with connection form gamma = x dy, Omega = dx wedge dy, so R(partial_x,partial_y) is the negative of R(partial_y,partial_x) when nonzero.",
+          "expected_disposition": "reject_challenged_conclusion",
+          "review_state": "pending"
+        }
+      ],
+      "blockers": [
+        {
+          "blocker_id": "upstream-curvature-pr-36036",
+          "kind": "upstream_overlap",
+          "state": "active",
+          "evidence": "PR #36036 is open and includes Geometry/Manifold/VectorBundle/CovariantDerivative/Curvature plus curvatureEndomorphismTensor.",
+          "resolution_required": "Obtain maintainer-confirmed non-overlap or keep this graph reference-only."
+        }
+      ]
+    },
+    {
+      "graph_id": "first-order-soundness-conditional",
+      "admission_mode": "conditional_candidate",
+      "domain": "first-order model theory proof-calculus soundness",
+      "source": {
+        "status": "verified_local_copy",
+        "rationale": "The official SLC PDF and a manifest-bound local UTF-8 extraction are verified for source-alignment calibration. This local copy resolves acquisition only; it does not accept a statement, review, or prover handoff.",
+        "reference": {
+          "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
+          "artifact_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
+          "manifest_sha256": "9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab",
+          "parent_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+          "parent_artifact_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+          "license_expression": "CC-BY-4.0",
+          "attribution": "Open Logic Project. Sets, Logic, Computation. CC BY 4.0.",
+          "model_egress_policy": "local_only",
+          "source_scope": "declared_entry_boundary",
+          "entry_boundary_locator": "Chapter 6, p. 88, begins the formal first-order syntax chain used by this graph.",
+          "prior_dependency_scope": [
+            "Part I, Chapters 1-4: propositional-logic vocabulary and derivation background",
+            "Chapter 5: informal first-order-logic orientation before the formal syntax entry"
+          ],
+          "prior_dependency_review_state": "pending",
+          "anchors": [
+            {
+              "anchor_id": "mt-terms-formulas",
+              "human_locator": "Chapter 6, Section 6.3, pp. 91-95",
+              "start_offset": 158052,
+              "end_offset": 163178,
+              "raw_sha256": "16de81b370496c7546d4c1a392c6310b29f41cc76b051e767cdf211a0b2a3f21"
+            },
+            {
+              "anchor_id": "mt-satisfaction",
+              "human_locator": "Chapter 7, Section 7.4, pp. 117-123",
+              "start_offset": 193351,
+              "end_offset": 202378,
+              "raw_sha256": "37394ba62eff7fd0598a5414bbf863b0f0c006172c6eab7b2fb02da4f861da82"
+            },
+            {
+              "anchor_id": "mt-sequent-calculus",
+              "human_locator": "Chapter 10, Section 10.1, pp. 162-163",
+              "start_offset": 259671,
+              "end_offset": 261613,
+              "raw_sha256": "6a3a1487fc0a86e24390e073f0cce517b6ee0e93d2b7927cdc9f7b45863d8248"
+            },
+            {
+              "anchor_id": "mt-sequent-soundness",
+              "human_locator": "Chapter 10, Section 10.12, pp. 182-188",
+              "start_offset": 282943,
+              "end_offset": 292557,
+              "raw_sha256": "0a2d927a3a90949f15a96960a13b1072c15f930a33639c341dfe83c299e38172"
+            }
+          ]
+        }
+      },
+      "mathlib_census": {
+        "observed_revision": "6c5a9081e9b704f0d366214e1fd5e68e1538a4b2",
+        "observed_at": "2026-07-24",
+        "scope": "ModelTheory Syntax, Semantics, and Satisfiability paths plus paths named Completeness, Compactness, or ProofSystem.",
+        "observation": "The audit found Syntax, Semantics, and Satisfiability. It did not find the named completeness, compactness, or proof-calculus paths; this is a bounded path-census observation, not proof of global absence.",
+        "current_review_state": "pending"
+      },
+      "calibration_requirements": [
+        {"role": "source_analyst", "required_independence_groups": 1, "review_state": "pending"},
+        {"role": "normalizer", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "mathlib_mapper", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "challenge_author", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "semantic_reviewer", "required_independence_groups": 2, "review_state": "pending"}
+      ],
+      "nodes": [
+        {
+          "node_id": "mt-syntax-definition",
+          "kind": "textbook_definition",
+          "summary": "Define first-order signatures, terms, and formulas before selecting a calculus theorem.",
+          "normalized_claim": "Well-formed terms and formulas are generated inductively from a signature and variable context.",
+          "formalization_target": "Align with existing Mathlib ModelTheory syntax types after the current census is reviewed.",
+          "source_anchor_ids": ["mt-terms-formulas"],
+          "depends_on": [],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "mt-valuation-definition",
+          "kind": "dependency_lemma",
+          "summary": "Define interpretation of terms and satisfaction under a valuation.",
+          "normalized_claim": "Term substitution and valuation update commute in the precise variable context required by satisfaction.",
+          "formalization_target": "Map semantics and substitution interfaces without defining a duplicate satisfaction relation.",
+          "source_anchor_ids": ["mt-satisfaction"],
+          "depends_on": ["mt-syntax-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "mt-derivation-definition",
+          "kind": "dependency_lemma",
+          "summary": "Introduce an explicit sequent or derivation calculus as a separate syntactic object.",
+          "normalized_claim": "A derivation is an inductive proof object whose rules expose all assumptions and conclusion contexts.",
+          "formalization_target": "Declare a proof-calculus boundary only after collision and API review.",
+          "source_anchor_ids": ["mt-sequent-calculus"],
+          "depends_on": ["mt-syntax-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "mt-soundness-target",
+          "kind": "target_claim",
+          "summary": "Prove soundness before considering completeness or compactness.",
+          "normalized_claim": "If a sequent has a derivation, every structure and valuation satisfying its antecedent satisfies its conclusion.",
+          "formalization_target": "A candidate StatementDraftRequest only after source spans, rule-by-rule review, and a current mapping pass.",
+          "source_anchor_ids": ["mt-satisfaction", "mt-sequent-calculus", "mt-sequent-soundness"],
+          "depends_on": ["mt-valuation-definition", "mt-derivation-definition"],
+          "review_state": "pending"
+        }
+      ],
+      "feedback_gates": [
+        {
+          "gate_id": "mt-invalid-rule-counterexample",
+          "kind": "counterexample",
+          "target_node_id": "mt-soundness-target",
+          "challenged_conclusion": "A calculus remains sound if it admits an unchecked rule from P to Q.",
+          "concrete_witness": "Use a two-valued structure and valuation with P true and Q false; the rule derives a false conclusion from a true premise and must fail the rule-by-rule soundness check.",
+          "expected_disposition": "reject_challenged_conclusion",
+          "review_state": "pending"
+        }
+      ],
+      "blockers": [
+        {
+          "blocker_id": "slc-derived-text-prepared",
+          "kind": "source_provenance",
+          "state": "resolved",
+          "evidence": "The manifest-bound official SLC PDF and pypdf 6.10.0 derived UTF-8 text have verified hashes and four span digests for the selected source chain.",
+          "resolution_required": "No source acquisition action remains; complete independent calibration, current-census, node, and feedback review before any statement-drafting decision."
+        }
+      ]
+    },
+    {
+      "graph_id": "abstract-galerkin-cea-conditional",
+      "admission_mode": "conditional_candidate",
+      "domain": "abstract variational PDE Galerkin orthogonality and Cea bound",
+      "source": {
+        "status": "pending_acquisition",
+        "rationale": "No official local textbook asset has been selected for this domain, so the dependency graph is a source-requested candidate rather than a textbook-aligned statement pipeline.",
+        "proposed_work": "Open-licensed abstract variational PDE source to be selected by a source analyst",
+        "proposed_license": "unknown"
+      },
+      "mathlib_census": {
+        "observed_revision": "6c5a9081e9b704f0d366214e1fd5e68e1538a4b2",
+        "observed_at": "2026-07-24",
+        "scope": "Lax--Milgram, distributions, Sobolev spaces, and active weak-derivative work.",
+        "observation": "The abstract route may reuse Lax--Milgram, while concrete Sobolev work is unstable around PR #32305. This is not a statement that no alternative Cea formalization exists.",
+        "current_review_state": "pending"
+      },
+      "calibration_requirements": [
+        {"role": "source_analyst", "required_independence_groups": 1, "review_state": "pending"},
+        {"role": "normalizer", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "mathlib_mapper", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "challenge_author", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "semantic_reviewer", "required_independence_groups": 2, "review_state": "pending"}
+      ],
+      "nodes": [
+        {
+          "node_id": "pde-hilbert-definition",
+          "kind": "textbook_definition",
+          "summary": "Fix a Hilbert space and a continuous bilinear form before introducing a PDE instance.",
+          "normalized_claim": "The variational problem is posed on a Hilbert space V with bilinear form a and linear functional ell.",
+          "formalization_target": "Reuse existing inner-product and continuous-linear-map APIs where the census confirms them.",
+          "source_anchor_ids": [],
+          "depends_on": [],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "pde-coercivity-definition",
+          "kind": "dependency_lemma",
+          "summary": "State coercivity explicitly rather than inferring stability from continuity.",
+          "normalized_claim": "There exists alpha > 0 such that alpha*norm(v)^2 <= a(v,v) for every v.",
+          "formalization_target": "Map to the exact Lax--Milgram hypotheses after source and API review.",
+          "source_anchor_ids": [],
+          "depends_on": ["pde-hilbert-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "pde-galerkin-definition",
+          "kind": "dependency_lemma",
+          "summary": "Define the finite-dimensional trial subspace and Galerkin solution.",
+          "normalized_claim": "The Galerkin solution satisfies a(u-u_h,v_h)=0 for every v_h in the selected subspace.",
+          "formalization_target": "Keep finite-dimensional approximation and concrete PDE regularity outside the first contract.",
+          "source_anchor_ids": [],
+          "depends_on": ["pde-coercivity-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "pde-cea-target",
+          "kind": "target_claim",
+          "summary": "Establish the abstract quasi-optimality estimate only after all constants are explicit.",
+          "normalized_claim": "norm(u-u_h) <= (M/alpha) * inf_{v_h} norm(u-v_h), under continuity M and coercivity alpha.",
+          "formalization_target": "A library-gap draft only; no concrete Sobolev or domain theorem is implied.",
+          "source_anchor_ids": [],
+          "depends_on": ["pde-galerkin-definition"],
+          "review_state": "pending"
+        }
+      ],
+      "feedback_gates": [
+        {
+          "gate_id": "pde-drop-coercivity-counterexample",
+          "kind": "counterexample",
+          "target_node_id": "pde-cea-target",
+          "challenged_conclusion": "Continuity alone guarantees existence and the Cea estimate.",
+          "concrete_witness": "On V=R, take a(u,v)=0 and ell(v)=v. The form is continuous but the variational equation has no solution, so the stability conclusion is invalid.",
+          "expected_disposition": "reject_challenged_conclusion",
+          "review_state": "pending"
+        }
+      ],
+      "blockers": [
+        {
+          "blocker_id": "cea-source-not-selected",
+          "kind": "source_provenance",
+          "state": "active",
+          "evidence": "No official source bytes, rights record, or exact definition spans are bound to this graph.",
+          "resolution_required": "Select an open-licensed source, verify it in the reference cache, and replace every pending node with span-bound source claims."
+        }
+      ]
+    },
+    {
+      "graph_id": "van-kampen-rights-restricted",
+      "admission_mode": "conditional_candidate",
+      "domain": "fundamental group van Kampen dependency chain",
+      "source": {
+        "status": "rights_restricted",
+        "rationale": "Hatcher material is available only as a local rights-restricted lead; no text may enter source preparation or model context until an operator records a lawful source decision.",
+        "proposed_work": "Algebraic Topology (Hatcher)",
+        "proposed_license": "rights review required; local-only lead"
+      },
+      "mathlib_census": {
+        "observed_revision": "6c5a9081e9b704f0d366214e1fd5e68e1538a4b2",
+        "observed_at": "2026-07-24",
+        "scope": "Fundamental-group, pushout, and van Kampen APIs at the pinned candidate revision.",
+        "observation": "No admission claim is made before a reproducible current API census and a lawful source decision.",
+        "current_review_state": "pending"
+      },
+      "calibration_requirements": [
+        {"role": "source_analyst", "required_independence_groups": 1, "review_state": "pending"},
+        {"role": "normalizer", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "mathlib_mapper", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "challenge_author", "required_independence_groups": 2, "review_state": "pending"},
+        {"role": "semantic_reviewer", "required_independence_groups": 2, "review_state": "pending"}
+      ],
+      "nodes": [
+        {
+          "node_id": "vk-path-connected-definition",
+          "kind": "textbook_definition",
+          "summary": "Make path-connectedness and basepoint data explicit before a pushout statement.",
+          "normalized_claim": "U, V, and U intersect V require the connectivity hypotheses appropriate to the group version of van Kampen.",
+          "formalization_target": "Map fundamental group and basepoint APIs only after rights and current-census gates pass.",
+          "source_anchor_ids": [],
+          "depends_on": [],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "vk-open-cover-definition",
+          "kind": "dependency_lemma",
+          "summary": "Define an open cover X=U union V and the inclusion maps.",
+          "normalized_claim": "The cover, basepoint, and all three inclusion-induced homomorphisms are part of the statement data.",
+          "formalization_target": "Keep groupoid generalization outside the first candidate contract.",
+          "source_anchor_ids": [],
+          "depends_on": ["vk-path-connected-definition"],
+          "review_state": "pending"
+        },
+        {
+          "node_id": "vk-pushout-target",
+          "kind": "target_claim",
+          "summary": "State the group pushout conclusion with its full intersection hypothesis.",
+          "normalized_claim": "Under the specified basepoint and path-connectedness assumptions, pi_1(X) is the pushout of pi_1(U) and pi_1(V) over pi_1(U intersect V).",
+          "formalization_target": "A source-bound theorem candidate only after rights clearance and an API mapping census.",
+          "source_anchor_ids": [],
+          "depends_on": ["vk-open-cover-definition"],
+          "review_state": "pending"
+        }
+      ],
+      "feedback_gates": [
+        {
+          "gate_id": "vk-disconnected-intersection-counterexample",
+          "kind": "counterexample",
+          "target_node_id": "vk-pushout-target",
+          "challenged_conclusion": "The ordinary group pushout conclusion holds without a path-connected intersection hypothesis.",
+          "concrete_witness": "Cover S^1 by two open arcs whose intersection has two components. The naive group-only calculation loses the loop; a groupoid formulation or stronger hypotheses are required.",
+          "expected_disposition": "reject_challenged_conclusion",
+          "review_state": "pending"
+        }
+      ],
+      "blockers": [
+        {
+          "blocker_id": "hatcher-rights-not-cleared",
+          "kind": "rights",
+          "state": "active",
+          "evidence": "The proposed source is a local-only lead with no reviewed rights record or cache provenance binding.",
+          "resolution_required": "Obtain a lawful source decision and exact provenance before any source text, statement contract, or model context is created."
+        }
+      ]
+    }
+  ]
+}

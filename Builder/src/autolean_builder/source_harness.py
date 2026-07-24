@@ -5,6 +5,7 @@ from __future__ import annotations
 import hashlib
 from dataclasses import asdict, dataclass
 from datetime import datetime
+from pathlib import Path
 
 from autolean_contracts import (
     AlignmentTargetV1,
@@ -42,6 +43,12 @@ from .fidelity_harness import (
     SourceClaimSpan,
     StatementFidelityHarness,
     TranslationAgent,
+)
+from .pilot_harness import (
+    PilotAdmissionReceiptV1,
+    PilotHarnessError,
+    PilotManifestV1,
+    load_pilot_manifest,
 )
 from .reference_cache import (
     ParentLocatorAuthority,
@@ -143,6 +150,7 @@ class StatementDraftRequest:
     alignment_confidence: float = 1.0
     dependencies: tuple[DependencyReferenceV1, ...] = ()
     provenance: tuple[ProvenanceTraceV1, ...] = ()
+    pilot_admission: PilotAdmissionReceiptV1 | None = None
 
     def __post_init__(self) -> None:
         for label, value in (
@@ -176,6 +184,7 @@ class StatementDraftPacket:
     parent_artifact_sha256: str
     rights_record: RightsRecordV1
     spans: tuple[ChapterSourceSpan, ...]
+    pilot_admission: PilotAdmissionReceiptV1 | None = None
 
     def preparation_record(self) -> SourcePreparationRecordV1:
         contract_sha256 = _canonical_sha256(self.contract)
@@ -194,6 +203,11 @@ class StatementDraftPacket:
                 "parent_artifact_sha256": self.parent_artifact_sha256,
                 "rights_record": self.rights_record.model_dump(mode="json", exclude_none=False),
                 "spans": spans_payload,
+                "pilot_admission": (
+                    None
+                    if self.pilot_admission is None
+                    else self.pilot_admission.model_dump(mode="json")
+                ),
             }
         )
         return SourcePreparationRecordV1(
@@ -336,6 +350,8 @@ class StatementDraftPacket:
             "human_parent_locators": expected_locators,
             "source_analyst_ids": tuple(sorted({span.source_analyst_id for span in self.spans})),
         }
+        if self.pilot_admission is not None:
+            expected_metadata["pilot_admission"] = self.pilot_admission.model_dump(mode="json")
         if self.contract.source.metadata != expected_metadata:
             raise SourceHarnessError("draft source metadata changed")
         return verified
@@ -350,10 +366,24 @@ class SourceToStatementHarness:
         *,
         preparation_ledger: SourcePreparationLedger,
         fidelity_harness: StatementFidelityHarness | None = None,
+        pilot_manifest: PilotManifestV1 | None = None,
     ) -> None:
         self.cache = cache
         self.preparation_ledger = preparation_ledger
         self.fidelity_harness = fidelity_harness or StatementFidelityHarness()
+        default_manifest = (
+            Path(__file__).resolve().parents[2]
+            / "pilots"
+            / "self-calibration"
+            / "pilot-manifest.v1.json"
+        )
+        self.pilot_manifest = (
+            pilot_manifest
+            if pilot_manifest is not None
+            else load_pilot_manifest(default_manifest)
+            if default_manifest.is_file()
+            else None
+        )
 
     def prepare_draft(
         self,
@@ -376,6 +406,11 @@ class SourceToStatementHarness:
             request.rights,
             source_reference_id=parent.entry.reference_id,
         )
+        self._validate_pilot_admission(
+            reference_id=entry.reference_id,
+            receipt=request.pilot_admission,
+            rights=rights,
+        )
         source_id = rights.source_id
         spans = tuple(
             SourceSpanV1(
@@ -391,6 +426,28 @@ class SourceToStatementHarness:
             )
             for span in request.spans
         )
+        source_metadata: dict[str, object] = {
+            "authors": list(parent.entry.authors),
+            "citation": parent.entry.citation,
+            "reference_manifest_sha256": verified.manifest_sha256,
+            "derived_reference_id": entry.reference_id,
+            "derived_artifact_kind": entry.artifact_kind.value,
+            "reference_access_policy": entry.access_policy.value,
+            "reference_model_egress_policy": entry.model_egress_policy.value,
+            "license_expression": entry.license.expression,
+            "license_evidence_url": entry.license.evidence_url,
+            "parent_reference_id": parent.entry.reference_id,
+            "parent_artifact_sha256": parent.entry.sha256,
+            "parent_snapshot_ref": parent.cache_ref,
+            "derivation": _derivation_metadata(entry),
+            "human_parent_locators": _human_locator_records(
+                entry.reference_id,
+                request.spans,
+            ),
+            "source_analyst_ids": sorted({span.source_analyst_id for span in request.spans}),
+        }
+        if request.pilot_admission is not None:
+            source_metadata["pilot_admission"] = request.pilot_admission.model_dump(mode="json")
         source = SourceRecordV1(
             source_id=source_id,
             work_id=parent.entry.reference_id,
@@ -401,26 +458,7 @@ class SourceToStatementHarness:
             snapshot_ref=verified.cache_ref,
             retrieved_at=entry.retrieved_at,
             spans=spans,
-            metadata={
-                "authors": list(parent.entry.authors),
-                "citation": parent.entry.citation,
-                "reference_manifest_sha256": verified.manifest_sha256,
-                "derived_reference_id": entry.reference_id,
-                "derived_artifact_kind": entry.artifact_kind.value,
-                "reference_access_policy": entry.access_policy.value,
-                "reference_model_egress_policy": entry.model_egress_policy.value,
-                "license_expression": entry.license.expression,
-                "license_evidence_url": entry.license.evidence_url,
-                "parent_reference_id": parent.entry.reference_id,
-                "parent_artifact_sha256": parent.entry.sha256,
-                "parent_snapshot_ref": parent.cache_ref,
-                "derivation": _derivation_metadata(entry),
-                "human_parent_locators": _human_locator_records(
-                    entry.reference_id,
-                    request.spans,
-                ),
-                "source_analyst_ids": sorted({span.source_analyst_id for span in request.spans}),
-            },
+            metadata=source_metadata,
         )
         formal_target = f"{request.formal.namespace}.{request.formal.declaration_name}"
         contract = StatementContractV1(
@@ -459,13 +497,14 @@ class SourceToStatementHarness:
             parent_artifact_sha256=parent.entry.sha256,
             rights_record=rights,
             spans=request.spans,
+            pilot_admission=request.pilot_admission,
         )
         packet._assert_source_binds(self.cache)
         try:
             self.preparation_ledger.record(packet.preparation_record())
         except SourcePreparationError as error:
             raise SourceHarnessError(str(error)) from error
-        packet.assert_binds(self.cache, self.preparation_ledger)
+        self._assert_packet(packet)
         return packet
 
     def run_fidelity(
@@ -478,7 +517,7 @@ class SourceToStatementHarness:
         reviewer: SemanticReviewAgent,
         additional_signoffs: tuple[ReviewerSignoffV1, ...] = (),
     ) -> FidelityEvaluation:
-        packet.assert_binds(self.cache, self.preparation_ledger)
+        self._assert_packet(packet)
         source_claims = tuple(
             SourceClaimSpan(
                 span_id=stable_identifier(
@@ -518,7 +557,7 @@ class SourceToStatementHarness:
         planned Builder signing gateway.
         """
 
-        packet.assert_binds(self.cache, self.preparation_ledger)
+        self._assert_packet(packet)
         preparation = packet.preparation_record()
         return _freeze_reviewed_contract(
             packet.contract,
@@ -559,6 +598,51 @@ class SourceToStatementHarness:
             evidence_identity=evidence_identity,
             attestation_ttl_seconds=attestation_ttl_seconds,
         )
+
+    def _assert_packet(self, packet: StatementDraftPacket) -> None:
+        packet.assert_binds(self.cache, self.preparation_ledger)
+        self._validate_pilot_admission(
+            reference_id=packet.reference_id,
+            receipt=packet.pilot_admission,
+            rights=packet.rights_record,
+        )
+
+    def _validate_pilot_admission(
+        self,
+        *,
+        reference_id: str,
+        receipt: PilotAdmissionReceiptV1 | None,
+        rights: RightsRecordV1,
+    ) -> None:
+        if self.pilot_manifest is None:
+            if receipt is not None:
+                raise SourceHarnessError(
+                    "pilot admission receipt cannot be checked without its manifest"
+                )
+            return
+        matching = tuple(
+            graph
+            for graph in self.pilot_manifest.graphs
+            if graph.source.reference is not None
+            and graph.source.reference.reference_id == reference_id
+        )
+        if len(matching) > 1:
+            raise SourceHarnessError("source reference belongs to multiple pilot graphs")
+        if not matching:
+            if receipt is not None:
+                raise SourceHarnessError("pilot admission receipt names an unrelated source")
+            return
+        if receipt is None:
+            raise SourceHarnessError(
+                f"source belongs to blocked pilot graph {matching[0].graph_id}; "
+                "an admission receipt is required"
+            )
+        if receipt.graph_id != matching[0].graph_id:
+            raise SourceHarnessError("pilot admission receipt names a different source graph")
+        try:
+            self.pilot_manifest.validate_admission_receipt(receipt, rights=rights)
+        except PilotHarnessError as error:
+            raise SourceHarnessError(str(error)) from error
 
     def _validate_spans(
         self,

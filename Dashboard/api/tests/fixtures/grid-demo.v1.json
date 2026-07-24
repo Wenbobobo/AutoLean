@@ -285,5 +285,116 @@
       "occurred_at": "2026-07-23T13:29:00Z",
       "summary": "Clarify connection regularity without weakening the conclusion"
     }
+  ],
+  "phase_feedback": [
+    {
+      "task_id": "task-curvature",
+      "builder_fidelity": {
+        "state": "frozen_attested_with_evidence",
+        "contract_id": "curvature-contract",
+        "revision": 2,
+        "contract_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "bundle_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd",
+        "registration_event_sequence": 1,
+        "registration_event_id": "event-curvature-registration",
+        "registered_at": "2026-07-23T13:25:00Z",
+        "evidence_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+      },
+      "prover_verification": {
+        "state": "verified_candidate_available",
+        "submitted_proof_ids": [
+          "proof-curvature-0001"
+        ],
+        "accepted_proof_ids": [
+          "proof-curvature-0001"
+        ]
+      },
+      "mathematical_dependency_node_count": 5,
+      "dependency_leverage_exact_node_limit": 512,
+      "dependency_leverage_mode": "exact_transitive",
+      "mathematical_dependency_leverage": [
+        {
+          "node_id": "dashboard-node|task-curvature|mathematical|math-mission",
+          "source_node_id": "math-mission",
+          "label": "Curvature and Bianchi pilot",
+          "direct_dependents": 1,
+          "transitive_dependents": 4
+        },
+        {
+          "node_id": "dashboard-node|task-curvature|mathematical|math-source",
+          "source_node_id": "math-source",
+          "label": "Licensed chapter source and exact byte spans",
+          "direct_dependents": 1,
+          "transitive_dependents": 3
+        },
+        {
+          "node_id": "dashboard-node|task-curvature|mathematical|math-curvature",
+          "source_node_id": "math-curvature",
+          "label": "Curvature of a vector-bundle connection",
+          "direct_dependents": 1,
+          "transitive_dependents": 2
+        },
+        {
+          "node_id": "dashboard-node|task-curvature|mathematical|math-tensoriality",
+          "source_node_id": "math-tensoriality",
+          "label": "Tensoriality and alternating laws",
+          "direct_dependents": 1,
+          "transitive_dependents": 1
+        },
+        {
+          "node_id": "dashboard-node|task-curvature|mathematical|math-bianchi",
+          "source_node_id": "math-bianchi",
+          "label": "First Bianchi boundary",
+          "direct_dependents": 0,
+          "transitive_dependents": 0
+        }
+      ],
+      "milestones": [
+        {
+          "phase": "builder_fidelity",
+          "state": "recorded",
+          "source_event_sequence": 1,
+          "source_event_id": "event-curvature-registration",
+          "occurred_at": "2026-07-23T13:25:00Z",
+          "evidence_digest": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee"
+        },
+        {
+          "phase": "prover_candidate",
+          "state": "pending",
+          "source_event_sequence": 2,
+          "source_event_id": "event-curvature-submission",
+          "occurred_at": "2026-07-23T13:26:40Z",
+          "evidence_digest": "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          "proof_id": "proof-curvature-0001"
+        },
+        {
+          "phase": "prover_verification",
+          "state": "accepted",
+          "source_event_sequence": 3,
+          "source_event_id": "event-curvature-verification",
+          "occurred_at": "2026-07-23T13:27:00Z",
+          "evidence_digest": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+          "proof_id": "proof-curvature-0001"
+        }
+      ],
+      "replay": {
+        "first_relevant_event_sequence": 1,
+        "last_relevant_event_sequence": 3,
+        "last_relevant_event_id": "event-curvature-verification",
+        "last_relevant_event_recorded_at": "2026-07-23T13:27:00Z",
+        "relevant_event_count": 3,
+        "relevant_event_sequences": [
+          1,
+          2,
+          3
+        ],
+        "replay_head_event_sequence": 5,
+        "replay_head_event_id": "event-curvature-change-request",
+        "replay_head_recorded_at": "2026-07-23T13:29:00Z",
+        "events_observed_after_last_relevant": 2,
+        "last_relevant_event_is_replay_head": false
+      },
+      "promotion_state": "not_a_promotion"
+    }
   ]
 }

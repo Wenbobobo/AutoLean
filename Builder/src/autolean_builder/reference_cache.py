@@ -52,6 +52,7 @@ class ReferenceAccessPolicy(StrEnum):
 
 class ReferenceAcquisitionPolicy(StrEnum):
     OPERATOR_ONLY = "operator_only"
+    LOCAL_DERIVATION_ONLY = "local_derivation_only"
 
 
 class ReferenceEgressPolicy(StrEnum):
@@ -67,10 +68,16 @@ class ReferenceArtifactKind(StrEnum):
 
 class ReferenceDerivationKind(StrEnum):
     REPOSITORY_TEXT_EXTRACTION = "repository_text_extraction"
+    LOCAL_PDF_TEXT_EXTRACTION = "local_pdf_text_extraction"
 
 
 class ParentLocatorAuthority(StrEnum):
     HUMAN_DECLARED = "human_declared"
+    MANIFEST_BOUND = "manifest_bound"
+
+
+_LOCAL_PDF_TEXT_METHOD = "pypdf-pdfreader-extract-text-plain-form-feed-v1"
+_LOCAL_PDF_TEXT_TOOL_NAME = "pypdf"
 
 
 @dataclass(frozen=True, slots=True)
@@ -101,7 +108,7 @@ class ReferenceEntryV1:
     version: str
     citation: str
     source_record_url: str
-    download_url: str
+    download_url: str | None
     allowed_redirect_urls: tuple[str, ...]
     media_type: str
     file_extension: str
@@ -119,7 +126,9 @@ class ReferenceEntryV1:
 
     @property
     def allowed_download_urls(self) -> frozenset[str]:
-        return frozenset((self.download_url, *self.allowed_redirect_urls))
+        return frozenset(
+            (() if self.download_url is None else (self.download_url,)) + self.allowed_redirect_urls
+        )
 
     def cache_relative_path(self) -> Path:
         return Path(self.reference_id) / f"{self.sha256}{self.file_extension}"
@@ -310,6 +319,55 @@ class ReferenceCache:
             manifest_sha256=self.manifest.manifest_sha256,
         )
 
+    def verify_utf8_span_digest(
+        self,
+        reference_id: str,
+        *,
+        start_offset: int,
+        end_offset: int,
+        expected_sha256: str,
+    ) -> VerifiedReference:
+        """Verify a private UTF-8 span without returning its text to the caller.
+
+        A pilot manifest can commit to a source span's raw-byte digest without tracking an
+        excerpt. Callers receive only the cache identity, not selected textbook text.
+        """
+
+        if not _SHA256.fullmatch(expected_sha256):
+            raise ReferenceCacheError("expected UTF-8 span SHA-256 is malformed")
+        if (
+            isinstance(start_offset, bool)
+            or isinstance(end_offset, bool)
+            or start_offset < 0
+            or end_offset <= start_offset
+        ):
+            raise ReferenceCacheError("UTF-8 span offsets must describe a nonempty byte range")
+        entry = self.manifest.require(reference_id)
+        if (
+            entry.artifact_kind is not ReferenceArtifactKind.DERIVED_TEXT
+            or entry.media_type != "text/plain"
+            or entry.derivation is None
+        ):
+            raise ReferenceCacheError("UTF-8 span verification requires manifest-derived text")
+        path = self.path_for(reference_id)
+        self._require_existing_directory_tree(path.parent)
+        inspection = _inspect_regular_file(path, span=(start_offset, end_offset))
+        self._validate_inspection(entry, inspection, cached=True)
+        span_bytes = inspection.span_bytes
+        if span_bytes is None:
+            raise ReferenceCacheError("UTF-8 span bytes were not captured")
+        try:
+            span_bytes.decode("utf-8")
+        except UnicodeDecodeError as error:
+            raise ReferenceCacheError("UTF-8 span offsets split a character") from error
+        if hashlib.sha256(span_bytes).hexdigest() != expected_sha256:
+            raise ReferenceCacheError("cached UTF-8 span differs from its declared digest")
+        return VerifiedReference(
+            entry=entry,
+            cache_path=path,
+            manifest_sha256=self.manifest.manifest_sha256,
+        )
+
     def operator_fetch(
         self,
         reference_id: str,
@@ -319,6 +377,8 @@ class ReferenceCache:
         entry = self.manifest.require(reference_id)
         if entry.acquisition_policy is not ReferenceAcquisitionPolicy.OPERATOR_ONLY:
             raise ReferenceCacheError("unsupported reference acquisition policy")
+        if entry.download_url is None:
+            raise ReferenceCacheError("operator-fetched reference has no download URL")
         target = self.path_for(reference_id)
         with _target_lock(target):
             return self._operator_fetch_locked(entry, target, refresh=refresh)
@@ -371,6 +431,92 @@ class ReferenceCache:
             if temporary_path is not None:
                 _unlink_confined_temporary(temporary_path, target.parent)
 
+    def operator_import_local(
+        self,
+        reference_id: str,
+        source_path: Path,
+        *,
+        refresh: bool = False,
+    ) -> ReferenceFetchResult:
+        """Import operator-supplied local bytes only after manifest verification.
+
+        This is intentionally distinct from network acquisition.  It supports a verified
+        bootstrap PDF and the deterministic text derived from it, while preserving the same
+        content-addressed destination and atomic replacement guarantees as ``operator_fetch``.
+        """
+
+        entry = self.manifest.require(reference_id)
+        if entry.acquisition_policy not in {
+            ReferenceAcquisitionPolicy.OPERATOR_ONLY,
+            ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY,
+        }:
+            raise ReferenceCacheError("unsupported local reference import policy")
+        source = _absolute_lexical(source_path)
+        source_stat = _lstat_optional(source)
+        if source_stat is None:
+            raise ReferenceCacheError("local reference import source is absent")
+        _require_regular_stat(source, source_stat)
+        target = self.path_for(reference_id)
+        with _target_lock(target):
+            return self._operator_import_local_locked(
+                entry,
+                target,
+                source,
+                refresh=refresh,
+            )
+
+    def _operator_import_local_locked(
+        self,
+        entry: ReferenceEntryV1,
+        target: Path,
+        source: Path,
+        *,
+        refresh: bool,
+    ) -> ReferenceFetchResult:
+        self._ensure_directory_tree(target.parent)
+        target_stat = _lstat_optional(target)
+        if target_stat is not None:
+            _require_regular_stat(target, target_stat)
+            if not refresh:
+                return ReferenceFetchResult(
+                    verified=self.verify(entry.reference_id),
+                    observation=None,
+                )
+
+        temporary_path: Path | None = None
+        try:
+            with (
+                source.open("rb") as input_file,
+                tempfile.NamedTemporaryFile(
+                    mode="w+b",
+                    prefix=".operator-import-",
+                    suffix=".part",
+                    dir=target.parent,
+                    delete=False,
+                ) as destination,
+            ):
+                temporary_path = Path(destination.name)
+                while chunk := input_file.read(_CHUNK_BYTES):
+                    destination.write(chunk)
+                destination.flush()
+                os.fsync(destination.fileno())
+            inspection = _inspect_regular_file(temporary_path)
+            self._validate_inspection(entry, inspection, cached=False)
+            self._require_existing_directory_tree(target.parent)
+            existing_target = _lstat_optional(target)
+            if existing_target is not None:
+                _require_regular_stat(target, existing_target)
+            os.replace(temporary_path, target)
+            temporary_path = None
+            _fsync_directory_if_supported(target.parent)
+            return ReferenceFetchResult(
+                verified=self.verify(entry.reference_id),
+                observation=None,
+            )
+        finally:
+            if temporary_path is not None:
+                _unlink_confined_temporary(temporary_path, target.parent)
+
     def _ensure_directory_tree(self, path: Path) -> None:
         relative = _relative_parts(path, self.confinement_root)
         _require_directory(self.confinement_root)
@@ -401,7 +547,10 @@ class ReferenceCache:
         entry: ReferenceEntryV1,
         observation: DownloadObservation,
     ) -> None:
-        if observation.final_url not in entry.allowed_download_urls:
+        if (
+            not entry.allowed_download_urls
+            or observation.final_url not in entry.allowed_download_urls
+        ):
             raise ReferenceCacheError("download ended at a URL absent from the manifest")
         if observation.media_type != entry.media_type:
             raise ReferenceCacheError(
@@ -450,6 +599,8 @@ class _AllowlistedRedirectHandler(urllib.request.HTTPRedirectHandler):
 
 
 def _download_reference(entry: ReferenceEntryV1, destination: BinaryIO) -> DownloadObservation:
+    if entry.download_url is None:
+        raise ReferenceCacheError("reference has no network download URL")
     opener = urllib.request.build_opener(_AllowlistedRedirectHandler(entry.allowed_download_urls))
     request = urllib.request.Request(
         entry.download_url,
@@ -529,7 +680,11 @@ def _parse_entry(value: object, index: int) -> ReferenceEntryV1:
     source_record_url = _validate_https_url(
         _require_string(item, "source_record_url"), "source_record_url"
     )
-    download_url = _validate_https_url(_require_string(item, "download_url"), "download_url")
+    raw_download_url = item["download_url"]
+    if raw_download_url is None:
+        download_url = None
+    else:
+        download_url = _validate_https_url(_require_string(item, "download_url"), "download_url")
     redirect_value = item["allowed_redirect_urls"]
     if not isinstance(redirect_value, list):
         raise ReferenceCacheError(f"{reference_id}: allowed_redirect_urls must be an array")
@@ -578,6 +733,21 @@ def _parse_entry(value: object, index: int) -> ReferenceEntryV1:
         raise ReferenceCacheError(f"{reference_id}: source documents cannot declare a derivation")
     if artifact_kind is ReferenceArtifactKind.DERIVED_TEXT and derivation is None:
         raise ReferenceCacheError(f"{reference_id}: derived text requires derivation provenance")
+    if acquisition_policy is ReferenceAcquisitionPolicy.OPERATOR_ONLY and download_url is None:
+        raise ReferenceCacheError(
+            f"{reference_id}: operator-fetched reference requires download URL"
+        )
+    if (
+        acquisition_policy is ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY
+        and download_url is not None
+    ):
+        raise ReferenceCacheError(
+            f"{reference_id}: locally-derived reference cannot declare a download URL"
+        )
+    if download_url is None and redirects:
+        raise ReferenceCacheError(
+            f"{reference_id}: reference without a download URL cannot allow redirects"
+        )
     return ReferenceEntryV1(
         reference_id=reference_id,
         title=_require_string(item, "title"),
@@ -688,6 +858,31 @@ def _validate_derivations(entries: tuple[ReferenceEntryV1, ...]) -> None:
         if egress_rank[entry.model_egress_policy] > egress_rank[parent.model_egress_policy]:
             raise ReferenceCacheError(
                 f"{entry.reference_id}: derived text egress exceeds its parent policy"
+            )
+        if derivation.kind is ReferenceDerivationKind.LOCAL_PDF_TEXT_EXTRACTION:
+            if entry.acquisition_policy is not ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: local PDF extraction must be local-derivation-only"
+                )
+            if derivation.tool_name != _LOCAL_PDF_TEXT_TOOL_NAME:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: local PDF extraction must name pypdf"
+                )
+            if derivation.tool_version is None:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: local PDF extraction requires a pinned tool version"
+                )
+            if derivation.method != _LOCAL_PDF_TEXT_METHOD:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: unsupported local PDF extraction method"
+                )
+            if derivation.parent_locator_authority is not ParentLocatorAuthority.MANIFEST_BOUND:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: local PDF extraction parent must be manifest-bound"
+                )
+        elif entry.acquisition_policy is ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
+            raise ReferenceCacheError(
+                f"{entry.reference_id}: local-derivation-only requires local PDF extraction"
             )
 
 
@@ -937,8 +1132,9 @@ def _inspect_regular_file(
 def _unlink_confined_temporary(path: Path, parent: Path) -> None:
     absolute_path = _absolute_lexical(path)
     absolute_parent = _absolute_lexical(parent)
+    permitted_prefixes = (".operator-download-", ".operator-import-")
     if absolute_path.parent != absolute_parent or not absolute_path.name.startswith(
-        ".operator-download-"
+        permitted_prefixes
     ):
         raise ReferenceCacheError("refusing to clean an unconfined acquisition temporary")
     try:

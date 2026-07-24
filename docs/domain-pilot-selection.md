@@ -1,172 +1,115 @@
 # Builder Domain Pilot Selection
 
-Status: discovery decision, not a frozen Builder mission
+Status: conditional discovery decision, not a frozen Builder mission
 
-Decision date: 2026-07-23
+Decision date: 2026-07-24
 
-Primary: curvature of vector-bundle connections and the first Bianchi boundary
+Primary: first-order model theory, sequent-calculus soundness
 
-Backup: abstract variational PDE, Galerkin orthogonality, and Cea-type error bounds
+Backups: an abstract Cea-type variational-PDE bound; a van Kampen-style algebraic-topology slice
 
 ## Decision
 
-The first 20--40 node Builder pilot should remain in Riemannian/geometric analysis, but the
-original Levi-Civita target is revoked. Current mathlib already contains covariant derivatives,
-metric compatibility, and torsion, while an active upstream pull request implements existence and
-uniqueness of the Levi-Civita connection. Duplicating that work would give misleading progress.
+The next Builder discovery pilot is a bounded first-order model-theory exercise: formulate a
+small sequent calculus and establish soundness with respect to a stated semantics. It is
+conditional on a compile spike in the pinned independent `Library/` project. This is a
+calibration target for the Builder--Prover boundary and for reusable formal structure; it is not
+an open-problem claim and it is not yet a frozen theorem portfolio.
 
-The revised pilot begins one layer later: define curvature for a connection on a smooth vector
-bundle, establish its tensorial and alternating laws, relate it to local connection forms, and
-reach a sharply scoped Bianchi boundary. It uses the existing connection API without depending on
-the open Levi-Civita pull request for its first accepted nodes.
+Two independently produced candidate designs disagree about the right first boundary:
 
-The primary source is Benjamin McKay, *Lectures on Differential Geometry*, Chapters 59--60,
-especially pages 505--520. University College Cork describes this 643-page published book as
-peer-reviewed and licenses it under CC BY-SA 4.0:
-
-- <https://cora.ucc.ie/items/274ec834-ca2e-4885-922f-e353d539ef18/full>
-
-The exact PDF and repository-extracted text are pinned in
-[`Builder/references/manifest.v1.json`](../Builder/references/manifest.v1.json). Their bytes remain
-under the ignored local `.cache/references/` tree.
-
-## Evidence snapshots
-
-Two mathlib snapshots must not be conflated:
-
-1. FATE v4.28.0 pins mathlib commit
-   [`8f9d9cff`](https://github.com/leanprover-community/mathlib4/commit/8f9d9cff6bd728b17a24e163c9402775d9e6a365).
-   In the locally verified checkout, `Geometry/Manifold/Riemannian` contains only `Basic.lean` and
-   `PathELength.lean`; there is no manifold covariant-derivative module.
-2. The original discovery census used the pinned snapshot
-   [`e780b56e`](https://github.com/leanprover-community/mathlib4/commit/e780b56e9235c747285043b5cd5f2ebba300daad).
-   It contains
-   [`CovariantDerivative/Basic.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Basic.lean),
-   [`Metric.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Metric.lean),
-   and
-   [`Torsion.lean`](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Geometry/Manifold/VectorBundle/CovariantDerivative/Torsion.lean).
-3. During integration, `master` had advanced to
-   [`bbc4475e`](https://github.com/leanprover-community/mathlib4/commit/bbc4475e9e8fd25fbc8e26d636dd8b37be8f105a).
-   A second GitHub tree census found the same three covariant-derivative modules and no path
-   containing curvature or parallel transport. PR #36845 was still open. This reduces snapshot
-   drift; it does not replace maintainer coordination.
-
-The observed modules explicitly provide bundled and local covariant derivatives, differences of
-connections, metric compatibility, and torsion. A code census at `e780b56e`, repeated at
-`bbc4475e`, found no
-`CovariantDerivative.curvature`, Riemann-curvature, or manifold parallel-transport declaration.
-Absence from one repository snapshot is not proof that no branch or downstream project exists.
-Maintainer coordination remains an admission gate.
-
-The overlap risk is concrete:
-
-- [PR #36845](https://github.com/leanprover-community/mathlib4/pull/36845), updated 2026-07-22,
-  implements the Levi-Civita connection.
-- [PR #26221](https://github.com/leanprover-community/mathlib4/pull/26221) is the umbrella
-  covariant-derivative project and lists Christoffel symbols and related follow-on work.
-
-AutoLean therefore treats those declarations as upstream dependencies or mappings, never as pilot
-deliverables.
-
-## Three-domain comparison
-
-| Candidate | Snapshot evidence | Why it fits | Blocking risk | Decision |
-| --- | --- | --- | --- | --- |
-| Connection curvature / geometric analysis | The two discovery snapshots have covariant derivative, metric, torsion, differential forms, Lie brackets, and tensoriality; no curvature module was found | A 24-node graph can reuse most structural prerequisites and exercises definitions, local/global equivalence, side conditions, and identities | Nearby upstream work can rapidly make the census stale; bundle-valued forms may require API design | Primary, conditional on maintainer check |
-| Abstract weak PDE / modern analysis | Mathlib has [Lax--Milgram](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Analysis/InnerProductSpace/LaxMilgram.lean), distributions, and Fourier/Bessel [Sobolev spaces](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Analysis/Distribution/Sobolev.lean) | Galerkin orthogonality and a Cea-style bound can stay abstract, avoiding boundary regularity in the first slice | Weak-derivative Sobolev spaces remain under [PR #32305](https://github.com/leanprover-community/mathlib4/pull/32305); concrete domain PDE statements would overrun 40 nodes | Backup |
-| Stochastic analysis / SDE | Current mathlib has [Brownian motion](https://github.com/leanprover-community/mathlib4/blob/e780b56e9235c747285043b5cd5f2ebba300daad/Mathlib/Probability/BrownianMotion/Basic.lean), martingales, stopping times, and convergence | Very high long-term leverage for SDE and stochastic PDE | No stochastic-integral or Ito-calculus module was found; Brownian work is active, and an earlier all-in-one attempt [PR #35571](https://github.com/leanprover-community/mathlib4/pull/35571) closed without merge | Defer until the integral boundary is designed with maintainers |
-
-The comparison is architectural, not a theorem-count score. If the latest snapshot census is wrong
-or an unindexed curvature project exists, the primary choice loses its non-overlap advantage and
-the backup becomes first.
-
-## Proposed 24-node graph
-
-The first eight nodes are mappings to existing APIs at a newly pinned mathlib commit. They are not
-new declarations and must compile in the pilot environment before downstream contracts are
-frozen.
-
-| ID | Kind | Mathematical asset |
+| Candidate | Strength | Cost and omitted evidence |
 | --- | --- | --- |
-| `GC-E01` | existing map | smooth manifolds and smooth vector bundles |
-| `GC-E02` | existing map | smooth sections and section extensionality |
-| `GC-E03` | existing map | bundled and local covariant derivatives |
-| `GC-E04` | existing map | adding an endomorphism-valued one-form and connection difference |
-| `GC-E05` | existing map | tensoriality constructors |
-| `GC-E06` | existing map | vector-field Lie bracket |
-| `GC-E07` | existing map | differential forms, wedge products, and bundle homomorphisms |
-| `GC-E08` | existing map | metric compatibility and torsion |
-| `GC-N01` | new candidate | unbundled curvature expression |
-| `GC-N02` | new candidate | additivity in the first vector field |
-| `GC-N03` | new candidate | scalar tensoriality in the first vector field |
-| `GC-N04` | new candidate | additivity in the second vector field |
-| `GC-N05` | new candidate | scalar tensoriality in the second vector field |
-| `GC-N06` | new candidate | dependence on the section value at a point |
-| `GC-N07` | new candidate | bundled curvature endomorphism |
-| `GC-N08` | new candidate | curvature application formula |
-| `GC-N09` | new candidate | alternating law and repeated-vector zero |
-| `GC-N10` | new candidate | flat connection predicate |
-| `GC-N11` | new candidate | zero curvature of a trivial flat connection |
-| `GC-N12` | new candidate | curvature after adding an endomorphism-valued one-form |
-| `GC-N13` | new candidate | local connection form and frame-change statement |
-| `GC-N14` | new candidate | local formula `dA + A wedge A` |
-| `GC-N15` | new candidate | skew-adjoint curvature of a metric connection |
-| `GC-N16` | boundary candidate | covariant exterior derivative and first Bianchi statement |
+| Closed-only conservative pilot | Restricts the first slice to closed formulas and closed sequents, minimizing substitution, alpha-renaming, and context transport | It may hide whether AutoLean can preserve structural side conditions and reason over open formulas |
+| Structural/open-formula pilot | Makes finite variable contexts, open formulas, freshness, and context-sensitive substitution explicit | The representation and freshness obligations may dominate the slice before a soundness argument is reachable |
 
-`GC-N13`--`GC-N16` are discovery boundaries, not promised declarations. If bundle-valued forms or
-local-frame APIs require a foundational redesign, Prover must emit a `GapReportV1`; Builder must
-not hide the gap by weakening the statement.
+Neither candidate wins by narrative preference or by compiling first. The pinned `Library/`
+spike described below supplies reproducible API-compatibility evidence, while source
+interpretation, explicit freshness/capture-avoidance obligations, and independent review retain
+selection authority. A failed spike is a gap report for its candidate, not a license to change a
+theorem silently. If neither candidate reaches the required boundary, the pilot moves to the
+Cea-type or van Kampen backup after the same selection process.
 
-## Source-to-contract path
+## Curvature reference boundary
 
-Each trial statement follows one route:
+The former curvature/first-Bianchi proposal is **reference only**. It is blocked by mathlib
+[PR #36036](https://github.com/leanprover-community/mathlib4/pull/36036), an open work-in-progress
+that unifies ongoing connections and geodesics work and includes a curvature module. AutoLean
+will not fork, duplicate, or build a pilot on that moving upstream branch. The McKay reference
+cache and prior overlap notes remain provenance/reference material only; they do not authorize
+new curvature contracts, a new benchmark, or a promotion claim.
 
-1. `reference_cache.py` independently verifies the parent PDF and its manifest-typed derived text.
-2. A source analyst selects exact UTF-8 byte offsets in the derived text and separately declares
-   the corresponding chapter/page locator in the parent PDF.
-3. An operator records a rights decision no broader than the manifest egress policy.
-4. `SourceToStatementHarness.prepare_draft` creates a `draft` `StatementContractV1` with source,
-   span, rights, alignment, environment, and provenance bindings.
-5. Normalization and mathlib mapping complete before independent candidates are produced.
-6. `SourceToStatementHarness.run_fidelity` delegates to the existing
-   `StatementFidelityHarness`.
-7. Preparation commits the complete source, rights, span, and contract state to the append-only
-   source-preparation ledger.
-8. `SourceToStatementHarness.revalidate_freeze_and_bridge` reloads that record, revalidates both
-   artifacts and every excerpt, freezes the reviewed statement with the preparation record ID and
-   typed digest, and emits the signed bundle.
+This decision does not assert that the upstream work will merge, that its final API will satisfy
+AutoLean, or that the old census was complete. It only says that the dependency is too active for
+curvature to be a responsible first pilot today.
 
-The local reference cache proves artifact and derived-text byte identity, not semantic fidelity.
-The parent-PDF page locator is a human declaration. Page alignment, notation scope, quantifier
-recovery, and mathematical equivalence still require independent review. Production release also
-remains blocked on the Builder signing gateway because the local freeze authority is not yet
-authenticated.
+## Pinned Library Compile Spike
+
+`Library/` is the independent formal-work system of record and the staging surface for eventual
+upstream contributions. It is neither a scratch checkout nor a substitute verifier. The spike
+uses its committed Lake lock and public mathlib imports; it must not patch `.lake/packages`, move
+the lock incidentally, or depend on a local mathlib branch.
+
+Before choosing a candidate, record one immutable spike packet for each candidate containing:
+
+1. the exact `Library` commit, `lake-manifest.json` digest, Lean toolchain, and candidate-design
+   revision;
+2. a compact signature/formula/sequent representation and the exact intended soundness statement;
+3. the imports and mappings it relies on, including every explicit freshness or substitution
+   premise;
+4. a clean compile result for the mapping layer and a minimal soundness-rule skeleton in that
+   pinned environment; and
+5. any compiler failure, API gap, or statement ambiguity as a `GapReportV1` or contract-change
+   request, without replacing it with a weaker statement.
+
+The spike tests whether each candidate (a) preserves its advertised mathematical scope, (b)
+compiles against the pinned public API without a foundation redesign, and (c) leaves a traceable
+route to the full soundness statement. Candidate selection additionally requires independent
+source and semantic review of the quantifier/freshness boundary. A compile alone establishes none
+of semantic fidelity, mathematical novelty, proof validity in the production verifier, candidate
+selection, or suitability for promotion. The independent verifier remains required for any
+accepted proof.
+
+## Self-calibration before manual calibration
+
+The immediate work is the multi-agent self-calibration loop in
+[the decision record](self-calibration-decision.md), coupled to textbook and open-problem
+alignment. It compares candidate decompositions, source interpretation, formal boundaries, and
+research relevance while preserving the Builder/Prover authority split.
+
+Manual Builder calibration is deliberately later. It begins only after a separate selection
+record binds the source interpretation, formal boundary, independent review, and compatible
+pinned-Library evidence, and the ordinary rights and domain-review gates are satisfied. Human
+review remains the authority for semantic fidelity; agents can surface disagreement and
+counterexamples but cannot turn them into a freeze decision.
 
 ## Admission and revocation gates
 
-The primary pilot starts only if all conditions hold:
+The selected model-theory pilot starts only when all conditions hold:
 
-1. Maintainers report no conflicting curvature project or agree on a collaboration boundary.
-2. At least six of the eight existing mappings compile without API redesign.
-3. Five trial claims can be cut into local source spans and pass reverse rendering, mutation,
-   positive/negative example, non-vacuity, library review, and domain review.
-4. At least one qualified differential geometer reviews semantic fidelity.
-5. The first ten proposed nodes do not require a general theory of parallel transport.
-6. Rights review permits the selected model endpoints; the initial cached source policy is
-   local-only.
+1. the selected candidate has a retained pinned-Library spike packet and no unresolved statement
+   weakening;
+2. textbook interpretation and open-problem alignment have been independently reviewed and their
+   disagreement is recorded rather than averaged away;
+3. the source rights record permits the intended local use and any later endpoint class;
+4. the formal plan states whether it covers closed formulas only or open formulas with explicit
+   context/freshness semantics;
+5. the first frozen contract has passed the normal reverse-rendering, mutation, positive/negative
+   example, non-vacuity, library-review, and domain-review gates; and
+6. Builder and verifier authority requirements for promotion are independently satisfied.
 
-Failure of gates 1, 2, or 5 moves the pilot to the abstract variational PDE backup. Failure of
-gates 3, 4, or 6 pauses Builder ingestion rather than changing the theorem.
+Failure of conditions 1, 2, or 4 returns the work to self-calibration or selects a backup.
+Failure of conditions 3, 5, or 6 pauses ingestion or promotion. No failure changes the selected
+theorem by implication.
 
 ## Feedback cadence
 
-Every five accepted nodes must yield:
+Each self-calibration round records a candidate revision, an adversarial critique, an explicit
+agreement/disagreement table, and a decision of `continue`, `compile-spike`, `gap`, or `stop`.
+Each compile spike records its pinned environment and outcome. After selection, each manual
+calibration batch records the frozen contract/evidence chain or the corresponding gap.
 
-- a frozen statement contract and canonical fidelity artifact;
-- one Prover result independently recompiled in the pinned environment;
-- a `GapReportV1` for every missing API rather than an informal TODO;
-- a source-to-normalization-to-Lean trace that a domain reviewer can inspect; and
-- a current-main overlap check before proposing anything upstream.
-
-These artifacts demonstrate the Builder--Prover interface. They do not establish research novelty
-or progress on an open problem by themselves.
+`Library/records/` retains the safe, immutable pointers to the reviewed/promotion chain;
+`Library/Staging/` is the work surface for candidate formal assets once they are bound to a
+Builder draft-contract revision. A later upstream proposal is staged from that record only after
+its AutoLean review path is complete. Upstream merge status never promotes an AutoLean claim.

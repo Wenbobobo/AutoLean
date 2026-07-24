@@ -71,14 +71,16 @@ frozen declaration.
 ## OCI Runner Requirement
 
 `OciLeanRunner` is the concrete protocol boundary. It invokes only the fixed executable
-`/opt/autolean/bin/autolean-lean-wrapper` inside a digest-pinned image, with its candidate at the
-read-only `/input/Candidate.lean` mount, a frozen declaration name, and canonical type-format
-identifier. The wrapper's stdout must be
+`/opt/autolean/bin/autolean-lean-wrapper` in two fresh containers from one digest-pinned image.
+The compile phase receives `/input/Candidate.lean` read-only and a dedicated writable `/output`;
+its stdout is untrusted. After that container is confirmed absent, the host copies one bounded,
+regular, non-link `Candidate.olean` into a private directory. The query phase receives only that
+file at `/compiled/Candidate.olean` read-only, has no writable host bind, and emits
 one JSON object with exactly these fields:
 
 ```json
 {
-  "schema_version": "autolean.oci-lean-wrapper.v1",
+  "schema_version": "autolean.oci-lean-wrapper.v2",
   "declaration": "Exact.Namespace.target",
   "canonical_type": "one single-line Lean expression",
   "lean_version": "pinned Lean version",
@@ -93,18 +95,19 @@ a model-supplied `type_hash`), a declaration/type/environment mismatch, malforme
 truncated output. It hashes the verifier-rendered candidate and binds every protected frozen file
 in the read-only source snapshot to the workspace hashes both before and after OCI execution. The
 resulting `LeanRunEvidence` carries the recomputed type evidence and non-secret execution facts
-(image digest, environment, generated full-OCI-argv hash, candidate, trusted-statement, and
-manifest hashes) for later artifact storage and attestation; it is not itself a promotion artifact.
+(image digest, environment, separate compile/query argv hashes, sealed `.olean` hash, handoff
+protocol, aggregate command-transcript hash, candidate, trusted-statement, and manifest hashes)
+for later artifact storage and attestation; it is not itself a promotion artifact.
 `TrustedLeanVerifier.observe` passes only those non-secret OCI facts to the Prover-side evidence
 adapter. Production flow then uses
 [`attest_oci_observation_via_gateway`](../Prover/src/autolean_prover/verification_gateway.py),
 which binds them to the submitted proof bytes, frozen bundle, and current fenced lease before a
 dedicated gateway authority can sign. The direct signer adapter remains a test-only fixture.
 
-The repository now has an exercised [pure-Lean OCI worker](oci-lean-worker.md). Its image-owned
-helper compiles the candidate, separately imports the generated `Candidate.olean`, reads the
-declaration type and axioms from the checked environment, and keeps candidate diagnostics outside
-wrapper stdout. The explicit canary has run this image through `OciLeanRunner` and the transient
+The repository now has an exercised [pure-Lean OCI worker](oci-lean-worker.md). One container
+compiles the candidate, the host seals its output only after proving that container is gone, and a
+second container's image-owned helper imports the sealed `Candidate.olean`. The explicit canary
+has run this image through `OciLeanRunner` and the transient
 verifier on Lean 4.28.0. This closes the real-execution protocol gap only for a theorem with no
 mathlib dependency; it is not yet the pinned mathlib/FATE production image.
 
@@ -115,6 +118,8 @@ Required pinned-OCI canaries:
   is rejected;
 - correct type text reported under another declaration: rejected;
 - missing, malformed, multiline, or unknown-profile helper output: rejected; and
+- candidate-created shadows of trusted query modules and a persistent compile-time writer cannot
+  cross the container handoff; and
 - a helper/profile change without a new frozen contract revision: rejected.
 
 These canaries now run explicitly through `scripts/oci_worker.py`. Normal unit tests still validate

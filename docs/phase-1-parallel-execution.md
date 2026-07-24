@@ -1,13 +1,14 @@
 # Phase 1 Parallel Execution Plan
 
-Snapshot: 2026-07-23
+Snapshot: 2026-07-24
 Baseline commit: `48b129097773616a28534abfe833eb10b9779aac`
 
 ## Decision
 
 Phase 1 proves that Builder and Prover can exchange a faithful, immutable statement and produce
 replayable proof evidence without sharing authority. It does not optimize a headline benchmark
-score and does not promote an open-problem claim. Work proceeds in parallel only where the
+score and does not promote an open-problem claim. FATE is a bounded Prover fixture, not the
+research north star or a proxy for a formal library. Work proceeds in parallel only where the
 evidence roots remain independently reviewable.
 
 The repository may become public after the public-release gate below passes. Downloaded source
@@ -36,16 +37,20 @@ No passing score can waive a failed statement, verifier, rights, or provenance g
 | A. Public release and governance | Complete license metadata, scan the entire one-commit history, document contribution and disclosure boundaries, and make visibility an explicit operator action | Root license, package metadata, zero tracked restricted files, secret/provider scans, clean remote CI | Historical HF incident containment or credential rotation |
 | B. Prover vertical slice | Extend the digest-pinned OCI path from pure Lean to the pinned FATE mathlib environment and run `agent-smoke-8` through the same verifier-evidence boundary | Immutable image/build inputs, clean statement/type comparison, eight separate task reports, signed-gateway observation | Model quality, project-scale library construction, or independent production attestation |
 | C. Role and model benchmark | Freeze role-specific matrices, seeds, evaluators, provider readiness, private raw-output CAS, public aggregate report, and controlled comparison semantics | Deterministic fake forward test, readiness refusal tests, then a separately authorized online run | A fake score, cross-role ranking, contamination-free evaluation, or causal attribution from a confounded comparison |
-| D. Builder source and fidelity | Cache lawful sources locally by manifest, select a 20--40 node pilot, and calibrate source-span-to-contract conversion with independent review and mutation tests | Verified source hash and rights record, five human-reviewed trial statements, fidelity artifacts, frozen bundles | That Lean truth establishes source fidelity or that a textbook license permits model egress |
-| E. Read-only graph observability | Show mathematical, formal, and execution graphs as distinct but linked operational layers, with revision/attempt/gap/verification drill-down | Projection-only API tests, sanitizer/XSS tests, desktop/mobile screenshots and geometry checks | Control authority, remote-access approval, or completeness of hidden artifacts |
-| F. Reliability and release evidence | Turn chaos, SBOM, inventory, attestation, Windows compatibility, and Linux authority checks into one replayable RC decision | Retained manifests/reports, 1,000-job recovery evidence, SBOM, clean Linux authority run, explicit pass/block table | Physical power-loss tolerance, KMS/HSM deployment, or a final RC while mandatory gates remain unrun |
+| D. Self-calibration and Builder source | Run independent textbook/open-problem alignment and adversarial candidate reviews for the conditional model-theory pilot; use the pinned `Library/` spike as API-compatibility evidence, never as selection authority | Public-safe candidate/critique/alignment records, retained spike evidence, and a separate selected/gap/backup decision | That agreement is semantic review, that a spike selects a candidate or proves a theorem, or that a textbook license permits model egress |
+| E. Library record and upstream staging | Keep the independent `Library/` project as the formal-work system of record: staged candidate assets, pinned-lock evidence, reviewed records, and any later upstream proposal | Public-API-only staging, lock-bound record, and reviewable provenance links | That a local compile is independent verification, or that upstream activity promotes an AutoLean result |
+| F. Read-only graph observability | Show mathematical, formal, and execution graphs as distinct but linked operational layers, with revision/attempt/gap/verification drill-down | Projection-only API tests, sanitizer/XSS tests, desktop/mobile screenshots and geometry checks | Control authority, remote-access approval, or completeness of hidden artifacts |
+| G. Reliability and release evidence | Turn chaos, SBOM, inventory, attestation, Windows compatibility, and Linux authority checks into one replayable RC decision | Retained manifests/reports, 1,000-job recovery evidence, SBOM, clean Linux authority run, explicit pass/block table | Physical power-loss tolerance, KMS/HSM deployment, or a final RC while mandatory gates remain unrun |
 
 ## Critical path
 
 ```text
 lawful source manifest
-  -> rights and egress decision
-  -> human calibration statements
+  -> independent self-calibration candidates
+  -> textbook and open-problem alignment
+  -> pinned Library compile spike
+  -> selected scope or explicit gap/backup
+  -> rights and human calibration statements
   -> fidelity freeze
   -> standard task bundle
   -> Prover claim
@@ -82,9 +87,14 @@ an explicit GitHub operation.
 - Add failure fixtures for altered declaration type, imports, axioms, source, image digest, and
   stale lease.
 - Retain one small, independently recompiled Lean proof as the human-visible checkpoint.
+- Complete the independent self-calibration candidate, textbook/open-problem alignment, and
+  adversarial-review records for the conditional model-theory pilot.
+- Run the two pinned-Library compile spikes. Select a candidate or retain a gap/backup decision;
+  do not start manual Builder calibration in this wave.
 
-Exit: eight smoke tasks have separate evidence states; failures remain failures rather than being
-discarded or repaired by changing statements.
+Exit: eight smoke tasks have separate evidence states and the pilot boundary is selected or
+explicitly blocked. Failures remain failures rather than being discarded or repaired by changing
+statements.
 
 ### Wave 2: close Weeks 5--6
 
@@ -101,17 +111,21 @@ the independent verifier. Missing API authority is reported as `blocked`, not sc
 - Run `model-compare-90` pass@1.
 - Perform one-factor model, retrieval, and specialist-role ablations.
 - Finish graph-state drill-down and cost/budget/circuit-breaker projections.
-- Begin five-statement Builder calibration from a locally verified source.
+- If the candidate was selected and rights/domain review are ready, begin the first manual Builder
+  calibration batch. Otherwise retain the explicit gap/backup decision and continue no ingestion.
 
 Exit: comparisons label controlled versus confounded changes, roles and FATE tiers remain
-separate, and the Dashboard exposes no mutation path.
+separate, the pilot selection state remains reproducible, and the Dashboard exposes no mutation
+path.
 
 ### Wave 4: close Weeks 9--10
 
 - Run pass@4 and success-at-budget on the fixed comparison suite.
 - Add authoritative Linux CI evidence and practical process/transaction fault cases.
 - Replay reports from immutable inputs and compare canonical bytes.
-- Freeze the first reviewed Builder pilot bundles and hand them to Prover unchanged.
+- If the selection and manual-calibration gates have passed, freeze the first reviewed Builder
+  pilot bundles and hand them to Prover unchanged. Otherwise retain the selection gap; do not
+  replace it with a benchmark milestone.
 
 Exit: restart, duplicate delivery, stale fence, replay, and independent rebuild gates are retained
 as release evidence.
@@ -153,6 +167,12 @@ Each wave ends with three artifacts:
 Benchmark changes are repeated at least three times for stochastic calls. Model or code upgrades
 create a new matrix revision rather than overwriting old results.
 
+For the pilot route, a self-calibration round additionally retains independent candidate reports,
+textbook/open-problem alignment, an adversarial critique, unresolved disagreements, and one
+explicit next state. The `Library/` spike records the exact lock/environment and either its
+minimal-scope result or a gap. Neither planned report represents a completed compile, calibration,
+or proof.
+
 ## Immediate blockers and operator inputs
 
 The current iteration does not require an API key. The first online regression requires:
@@ -162,6 +182,8 @@ The current iteration does not require an API key. The first online regression r
 - a hard total budget and per-attempt timeout; and
 - permission to send only cases whose rights record allows that endpoint class.
 
-The Builder pilot additionally requires a qualified reviewer and an explicit source-use/egress
-decision. Until then, source acquisition and synthetic fidelity tests can proceed, but no pilot
-statement becomes `frozen`.
+The immediate self-calibration route requires public-safe source identifiers and two independent
+candidate reports; it does not require an external model key or authorize a Builder freeze. The
+later Builder calibration requires a qualified reviewer and an explicit source-use/egress decision.
+Until then, source acquisition and synthetic fidelity tests can proceed, but no pilot statement
+becomes `frozen`.
