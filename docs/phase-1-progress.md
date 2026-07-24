@@ -3,9 +3,9 @@
 Snapshot: 2026-07-24
 
 Decision: the local architecture has substantial adversarial evidence, but this branch is not a
-Phase 1 release candidate. The remaining blockers are authoritative mathlib-in-image execution,
-deployed authenticated Builder/verifier authorities, authorized external-model evaluation, fixed
-regression/compare runs, the active model-theory quantifier/freshness gap, and later
+Phase 1 release candidate. The remaining blockers include model-theory source-fidelity review and
+Builder admission/freeze, bundle/lease/signer integration, deployed authenticated Builder/verifier
+authorities, authorized external-model evaluation, fixed regression/compare runs, and later
 human-calibrated Builder statements.
 
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
@@ -32,10 +32,10 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Project DAG | Verified, synthetic | Fixed 20-node multi-file frontier, conflict, propagation, API-change, and integration-lease fixture | Does not compile a real multi-file Lean library |
 | Providers | Verified offline | Fake, Codex CLI, OpenAI Responses, and custom-compatible adapters; authorization/egress controls, stable failure taxonomy, and persistent circuit breaker | No paid/external run; no prohibited provider path |
 | OCI verifier | Verified, pure Lean test-only canary | Non-root image `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`; protocol V2 uses separate compile/query containers and binds both argv hashes plus the host-sealed `Candidate.olean` digest; statement replacement, wrong declaration/profile, stdout spoof, trusted-module shadow injection, persistent compile-time writer, and axiom attacks were rejected; an independent rerun produced an authenticated test-only execution receipt. Image-owned identity hash `81099458f107fc5a179e1d308b09ff0189424d8b4341dd47026cfbf01c3828e0`; policy-V2 canary SHA `8aa49896f153b763d5887a88b7ee646f0842e72d61f8c0379442332e8eb324b2` | The image deliberately contains no mathlib; FATE's matching two-phase path was code-tested but not rerun; the receipt and gateway are fixture-only, `promotion_attestation_created=false`, and no production KMS/mTLS evidence exists |
-| Mathlib source lock | Verified, source-input stage only | All nine Git dependencies in the pinned Lake manifest were acquired as source-only codeload archives, structurally validated, and rebound from the operator cache. The complete tracked lock SHA is `f9ef72acfebed52c6c7de1bacebe840fcd620568f7dc2875685771f363701448`; it binds Lake-manifest SHA `e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89`, exact commits/URLs, and every archive SHA. Both lock-only and cache-byte verification passed after a real interrupted-download resume | No mathlib build or `.olean` provenance exists yet. The next gate must unpack only these locked inputs into a fresh Docker context, build the required import closure with network disabled and no host `.lake`, and rerun a real mathlib-importing OCI V2 canary |
+| Mathlib source-built OCI profile | Verified, local test-only | All nine locked Git sources plus only the JS payload from the official ProofWidgets v0.0.87 release asset entered a fresh exact context; `--no-cache --pull=false --network=none` completed 889/889 targets for `+Mathlib.ModelTheory.Semantics:olean`. Image `autolean/mathlib-worker@sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`; build evidence SHA `bd7576eb489c140704c691aadb80669ed462133b973848b4a49871c0cf5b4aab`; canonical receipt SHA `801959222c195e249e320a0568418d177022c8dbd925b70ad34ee28c0c2e2a90`; canary SHA `95505c212b7bf32b027766399322d3a4af96d2a30cf1b309a869d8f2f64971ce`. The canary observed `∀ (n : Nat), @Eq.{1} Nat n n`, zero axioms, and ignored an invalid `/deps` shadow | Local test-only evidence only: no registry, KMS/mTLS, production signer, promotion attestation, bundle/lease integration, full Mathlib build, FATE claim, or full rerun of the pure-worker adversarial V3 suite |
 | Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
 | Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
-| Builder self-calibration and pilot selection | Partial, blocked | Both model-theory semantic adapters compiled in the pinned Library lock. The tracked receipt v2 and self-calibration record bind canonical build-input SHA `1bdc463299bc21d3836832c5c05755655d7450e9a3f91cef979e7c3c0aded795`, canonical report digest `9b9c75bd40d1ead093603f57f38b4c0d74ba317ca90ec63204125ca52f073769`, packet SHA `a94a45ec974d70888a327192ed9100351b87c90982be31681ed424ee9fb572c5`, receipt SHA `7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f`, verifier SHA `7c6cf6ba9bed96d978238e27c0ab7bdd95464c7d1c6360da4f86df08e906ac29`, dependency-tree SHA `43f889366a4c5dc6daaed5b56cf3704e82e491ff90f2044602a187d7da2bfe62`, and dependency-manifest SHA `7f83b557c145abc56ec83619871c305f4bb6b5abff54b1d6fd52dd837c4f6423`; the packet state is `partial_passed_with_gap` and `not_selected` | The adapters and observed-cache binding establish local API compatibility and byte-level replay detection only, not trusted clean-build provenance. The Builder self-calibration round deliberately remains incomplete/gap; quantifier/eigenvariable freshness, capture avoidance, weakening, source interpretation, and independent review remain open. No candidate is selected, frozen, handed to Prover, or promoted |
+| Builder self-calibration and pilot selection | Partial, technically advanced | The pinned Library packet now includes the kernel-checked `UniversalLK` micro-slice for the classical two-sided `⊥`, `→`, and `∀` fragment: level-indexed formulas, weakening, capture-avoiding instantiation, eigenvariable-safe universal rules, local/global soundness, the level-zero sentence bridge, and retained Bool rejection controls. The clean WSL/ext4 receipt binds source-tree SHA `87890952359a75d408505ed6f4462720cdb8a3f82cc80dd783f99d34585fac70`, build-report SHA `79325354563c19c5b32134f5102f964c11a738444a68746e85c8d03f5ab92c15`, packet-content SHA `c8cff937a896804f8fa2d48232200e3153f14d33174b2e00aee16a963c6ecb36`, and receipt SHA `5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3` | The packet remains `partial_passed_with_gap` and `not_selected`. It is not full LK; source fidelity, independent Builder admission, contract freeze, Prover handoff, promotion, and open-problem claims remain open |
 | Builder reference cache | Verified offline | Four locked source/derived records, including locally extracted Open Logic Project *Sets, Logic, Computation*: source PDF SHA `39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9`, extracted text SHA `285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584`, manifest SHA `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab` | Retained only as local reference/provenance material; no human-calibrated pilot statement is recorded and model egress remains forbidden |
 | HF recovery boundary | Partially closed by operator confirmation | Operator confirmed deletion of the HF archive; no archive material is a migration source | This does not independently prove provider-side access state, credential rotation, or incident closure |
 | Local and remote CI, inventory, and SBOM | Verified in the recorded scope | The staged source-lock/publication increment passed 570 Python and policy tests locally, with two documented Windows skips; current-tree and reachable-history scans, source-lock, inventory, and SPDX checks passed. Draft PR baseline head `76d2092` passed Ubuntu/Windows Python+policy and UI in [run 30082181435](https://github.com/Wenbobobo/AutoLean/actions/runs/30082181435) | The staged increment still requires its own remote run. GitHub Actions is compatibility and policy evidence, not the missing authoritative mathlib-in-image verifier |
@@ -45,30 +45,29 @@ Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by rel
 | Gate | State | What remains before the gate can close |
 | --- | --- | --- |
 | Local architecture baseline | Verified in the stated local/synthetic scopes | Retain the evidence boundaries; it does not close authoritative Lean/OCI, production authority, or semantic-fidelity gates |
-| Pilot self-calibration | Partial, blocked | Reconcile the retained partial-pass spike with source-interpreter, research-alignment, Library-steward, source-entry, Mathlib-census, and later human-review records; agreement is never a freeze |
-| Pinned Library selection spike | Partial passed with gap | Both adapter modules compiled under the committed lock, but implement and review the calculus-level quantifier/eigenvariable freshness bridge before selecting either boundary |
+| Pilot self-calibration | Partial, blocked | The technical freshness micro-slice and rejection controls now compile; reconcile them with independent source-fidelity and Builder-admission review. Agreement or compilation is never a freeze |
+| Pinned Library selection spike | Partial passed with gap | The universal fragment is kernel-checked, but retain `not_selected` until source interpretation, rule boundaries, and admission are independently accepted |
 | Manual Builder calibration | Deferred | Begin only after candidate selection, rights readiness, and domain review; retain normal fidelity/non-vacuity evidence |
-| Authoritative Prover path | Partially verified | Build mathlib and verifier helper inside one pinned image, then retain immutable bundle, lease, evidence, and signing observations |
+| Authoritative Prover path | Partially verified | The local test-only mathlib image and focused canary passed; bind a frozen bundle through lease, verifier evidence, signer integration, and rejected controls, then separately close the production-authority and full adversarial-suite gaps |
 | Controlled model/benchmark evaluation | Blocked before egress | Obtain operator authorization, then run fixed suites and ablations as secondary diagnostics; no FATE result closes a Builder or Library gate |
 | Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
 
 ## Pilot discovery
 
-The conditional primary is first-order model-theory sequent-calculus soundness. Two independent
-candidates disagree over a closed-only conservative formulation versus explicit structural
-freshness and open-formula contexts. Both semantic adapters now compile in the pinned independent
-`Library/` project, but their retained packet is deliberately `partial_passed_with_gap`: it does
-not represent a calculus, a soundness theorem, a textbook-faithful statement, or a selection. The
-selection authority remains the resolved quantifier/freshness bridge and its independent review,
-not a model preference or a benchmark score. The backups are an abstract Cea-type variational-PDE
-bound and a van Kampen-style topology slice.
+The conditional primary is first-order model-theory sequent-calculus soundness. The two original
+candidates disagreed over a closed-only conservative formulation versus explicit structural
+freshness and open-formula contexts. The retained packet now contains a kernel-checked calculus and
+soundness theorem for only the `⊥`, `→`, and `∀` fragment, but deliberately remains
+`partial_passed_with_gap` and `not_selected`: it is neither full LK nor a textbook-fidelity or
+admission decision. Selection authority remains independent source-fidelity and Builder-admission
+review, not compilation, a model preference, or a benchmark score. The backups are an abstract
+Cea-type variational-PDE bound and a van Kampen-style topology slice.
 
-Two later independent automated research inputs have refined the gap without closing it. The
-textbook target is a closed, two-sided classical `LK` sequent, while substitution and eigenvariable
-freshness still require an internal open layer. The next spike therefore uses level-indexed
-`Formula (Fin n)` sequents internally and exposes soundness only through an explicit `n = 0`
-sentence bridge. This reconciliation rejects both original candidates as sufficient in their
-current form; it is neither a selected replacement nor a human semantic review.
+The technical spike now uses level-indexed `Formula (Fin n)` sequents internally and exposes
+soundness through an explicit `n = 0` sentence bridge. It implements only the `⊥`, `→`, and `∀`
+fragment and retains capture/freshness rejection controls. This closes the named implementation
+micro-slice, not the source-fidelity or Builder-admission decision: neither original candidate nor
+the new representation is selected, frozen, or human-reviewed by compilation.
 
 Curvature is reference only: mathlib [PR #36036](https://github.com/leanprover-community/mathlib4/pull/36036)
 is an active, open connection/geodesics work-in-progress that includes curvature. No curvature
@@ -76,9 +75,10 @@ mapping, source-to-contract calibration, or upstream duplication is current work
 
 Before manual Builder calibration, the active work requires:
 
-- independent candidate, adversarial, textbook, and open-problem-alignment records;
-- a pinned-Library compile spike that preserves the selected candidate's stated scope;
-- a complete gap record if neither candidate compiles without a representation redesign; and
+- independent source-fidelity, rule-boundary, and Builder-admission records for the implemented
+  fragment;
+- the retained pinned-Library receipt preserving its deliberately limited scope;
+- a complete gap/backup record if admission rejects that representation; and
 - an explicit rights decision before any non-local model egress.
 
 Only after that selection may human source-to-contract calibration start. Failure of selection,
@@ -87,13 +87,13 @@ weakens a theorem.
 
 ## Immediate execution order
 
-1. Complete the multi-agent self-calibration records: source interpretation, research alignment,
-   Library stewardship, source-entry review, and the bounded Mathlib API census.
-2. Design and test a calculus-level quantifier/eigenvariable freshness bridge with capture
-   avoidance and weakening. Retain its gap or review result; do not select a candidate merely
-   because the two semantic adapters compile.
-3. In parallel, build a source-clean, mathlib-containing OCI verifier image and repeat
-   `agent-smoke-8` through bundle, lease, evidence artifact, and signing-gateway boundaries.
+1. Complete T3 admission: independently review source fidelity and rule boundaries, then record
+   either an admission receipt or an immutable gap/backup decision.
+2. Complete T5 only after admission: calibrate and freeze a coherent source-backed contract slice,
+   preserving rejected mutations and every Builder-owned revision.
+3. Complete T6 against the exact T4 digest: enumerate and bind the complete transitive import
+   closure, then carry an unchanged bundle through claim, lease, execution evidence,
+   verifier/signer integration, and retained rejected controls.
 4. Implement the authorized online executor and production role evaluators. Request an
    operator-owned API secret reference only when readiness otherwise passes.
 5. After selection and rights/domain readiness, begin expert-reviewed source-to-contract

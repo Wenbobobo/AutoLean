@@ -1,0 +1,112 @@
+#!/bin/sh
+set -eu
+
+json_sha256_field() {
+  receipt=$1
+  field=$2
+  case "$field" in
+    helper_olean_sha256 | mathlib_import_closure_sha256 | \
+      mathlib_target_olean_sha256 | runtime_files_manifest_sha256) ;;
+    *) return 1 ;;
+  esac
+  value=$(
+    LC_ALL=C sed -n \
+      "s/^.*\"$field\":\"\\([0-9a-f]\\{64\\}\\)\".*$/\\1/p" \
+      "$receipt"
+  )
+  [ "${#value}" -eq 64 ]
+  printf '%s\n' "$value"
+}
+
+verify_dynamic_claims() {
+  receipt=$1
+  helper_olean=$2
+  closure_manifest=$3
+  target_olean=$4
+  runtime_manifest=$5
+
+  for artifact in \
+    "$receipt" "$helper_olean" "$closure_manifest" "$target_olean" "$runtime_manifest"
+  do
+    [ -f "$artifact" ] && [ ! -L "$artifact" ]
+  done
+
+  claimed_closure_count=$(
+    LC_ALL=C sed -n \
+      's/^.*"mathlib_import_closure_count":\([0-9][0-9]*\).*$/\1/p' \
+      "$receipt"
+  )
+  case "$claimed_closure_count" in
+    "" | *[!0-9]*) return 1 ;;
+  esac
+  [ "$claimed_closure_count" -eq "$(wc -l <"$closure_manifest" | tr -d ' ')" ]
+  [ "$(json_sha256_field "$receipt" helper_olean_sha256)" = \
+    "$(sha256sum "$helper_olean" | awk '{print $1}')" ]
+  [ "$(json_sha256_field "$receipt" mathlib_import_closure_sha256)" = \
+    "$(sha256sum "$closure_manifest" | awk '{print $1}')" ]
+  [ "$(json_sha256_field "$receipt" mathlib_target_olean_sha256)" = \
+    "$(sha256sum "$target_olean" | awk '{print $1}')" ]
+  [ "$(json_sha256_field "$receipt" runtime_files_manifest_sha256)" = \
+    "$(sha256sum "$runtime_manifest" | awk '{print $1}')" ]
+}
+
+if [ "${AUTOLEAN_RECEIPT_VERIFY_DYNAMIC_ONLY:-0}" = 1 ]; then
+  [ "$#" -eq 5 ]
+  verify_dynamic_claims "$@"
+  exit 0
+fi
+
+[ "$#" -eq 0 ] || {
+  printf '%s\n' "autolean-mathlib-build-receipt: no arguments are accepted" >&2
+  exit 2
+}
+
+receipt=/opt/autolean/attestations/mathlib-source-build-receipt.v1.json
+helper_olean=/opt/autolean/lib/AutoleanLeanQuery.olean
+closure_manifest=/opt/autolean/attestations/mathlib-import-closure.sha256
+target_olean=/opt/mathlib/.lake/build/lib/lean/Mathlib/ModelTheory/Semantics.olean
+runtime_manifest=/opt/autolean/attestations/runtime-files.sha256
+
+sha256sum --check --strict --status \
+  "$closure_manifest"
+sha256sum --check --strict --status \
+  "$runtime_manifest"
+verify_dynamic_claims \
+  "$receipt" "$helper_olean" "$closure_manifest" "$target_olean" "$runtime_manifest"
+
+proofwidgets_build=/opt/mathlib/.lake/packages/proofwidgets/.lake/build
+proofwidgets_manifest=/opt/autolean/attestations/proofwidgets-js.sha256
+proofwidgets_expected=/tmp/autolean-proofwidgets-js.expected
+proofwidgets_actual=/tmp/autolean-proofwidgets-js.actual
+
+[ -d "$proofwidgets_build/js" ] && [ ! -L "$proofwidgets_build/js" ]
+[ -f "$proofwidgets_manifest" ] && [ ! -L "$proofwidgets_manifest" ]
+[ -z "$(find "$proofwidgets_build/js" ! -type f ! -type d -print -quit)" ]
+LC_ALL=C awk '
+  NF == 2 &&
+  length($1) == 64 &&
+  $1 ~ /^[0-9a-f]+$/ &&
+  $2 ~ /^js\/[!-~]+$/ {
+    print $2
+    next
+  }
+  { exit 1 }
+' "$proofwidgets_manifest" >"$proofwidgets_expected"
+LC_ALL=C sort -c "$proofwidgets_expected"
+[ "$(wc -l <"$proofwidgets_expected" | tr -d ' ')" -eq 20 ]
+(
+  cd "$proofwidgets_build"
+  find js -type f -print | LC_ALL=C sort
+) >"$proofwidgets_actual"
+[ "$(wc -l <"$proofwidgets_actual" | tr -d ' ')" -eq 20 ]
+cmp -s "$proofwidgets_expected" "$proofwidgets_actual"
+(cd "$proofwidgets_build" \
+  && sha256sum --check --strict --status "$proofwidgets_manifest")
+proofwidgets_bytes=0
+while IFS= read -r proofwidgets_file; do
+  file_bytes=$(wc -c <"$proofwidgets_build/$proofwidgets_file" | tr -d ' ')
+  proofwidgets_bytes=$((proofwidgets_bytes + file_bytes))
+done <"$proofwidgets_actual"
+[ "$proofwidgets_bytes" -eq 6902528 ]
+
+cat "$receipt"

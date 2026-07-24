@@ -15,7 +15,12 @@
   "source_boundary": {
     "reference_id": "openlogic-sets-logic-computation-2026-07-12-text",
     "source_artifact_sha256": "285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584",
-    "anchor_ids": ["mt-terms-formulas", "mt-satisfaction"],
+    "anchor_ids": [
+      "mt-terms-formulas",
+      "mt-satisfaction",
+      "mt-sequent-calculus",
+      "mt-sequent-soundness"
+    ],
     "model_egress": "forbidden"
   },
   "fixtures": [
@@ -27,16 +32,16 @@
     },
     {
       "candidate_id": "model-theory-structural-open-formula",
-      "module": "AutoLeanLibrary.Fixtures.ModelTheory.OpenFormulaContext",
+      "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
       "result": "compiled",
-      "verified_boundary": "Formula substitution and free-variable relabeling retain an explicit assignment parameter."
+      "verified_boundary": "Packet still imports the OpenFormulaContext adapter and now compiles the UniversalLK level-indexed bottom, implication, and universal fragment. The latter has explicit open assignments, lifts both sides for universal-right, opens only the precise body at Fin.last, proves local and global soundness, bridges level zero to Sentence realization, and retains Bool countermodels rejecting universal-right reuse, existential-left reuse, and capture."
     }
   ],
   "gap": {
-    "gap_id": "mt-quantifier-freshness-bridge-not-implemented",
+    "gap_id": "mt-universal-fragment-review-and-admission-open",
     "state": "open",
-    "scope": "A calculus-level quantifier/eigenvariable rule with capture-avoidance, weakening, and freshness side conditions.",
-    "reason": "The two fixture adapters validate only Mathlib semantic interfaces. They do not choose a syntax, context representation, derivation system, or side-condition discipline.",
+    "scope": "Independent source-fidelity review and Builder admission of the level-indexed universal fragment; existential rules and full LK remain future work.",
+    "reason": "The compiled fixture proves the internal fragment sound in Lean, but its source interpretation and representation choice have only automated research review. Compilation cannot authenticate textbook fidelity or select and freeze a Builder candidate.",
     "prohibited_substitutes": [
       "sorry",
       "new_axiom",
@@ -44,20 +49,20 @@
       "weakened_closed-only_claim"
     ],
     "required_before_selection": [
-      "replayable Mathlib API census at the pinned revision",
-      "explicit context and freshness representation",
-      "semantic review of the selected textbook statement",
-      "independent Builder fidelity review"
+      "independent review of the four retained source anchors",
+      "independent review of the closed-to-open representation and every rule side condition",
+      "Builder admission decision that preserves the fragment name and open gap boundaries",
+      "frozen statement contract before any Prover handoff"
     ]
   },
   "non_claims": [
-    "No sequent-calculus soundness theorem has been formalized.",
+    "Only the bottom, implication, and universal fragment is formalized; this is not full LK and has no completeness claim.",
     "No candidate has been selected, frozen, handed to Prover, or promoted.",
-    "A successful compile proves API compatibility in this lock, not textbook fidelity."
+    "The kernel-checked soundness and countermodels establish the implemented calculus, not textbook fidelity or progress on an open problem."
   ],
   "compile_receipt": {
     "path": "records/staging/round-01-model-theory-compile-spike/compile-receipt.v2.json",
-    "sha256": "7d5867946a5ce3d0ff1472405fc572d0fcc1a2fe6e687bc01ad41c016dfc274f"
+    "sha256": "5e2d0b9d119582f42dc4434eeedd067f19f5b82cac9f42f5ac17ccaed09312e3"
   },
   "contains_absolute_paths": false,
   "contains_source_text": false

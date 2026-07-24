@@ -1,0 +1,22 @@
+{
+  "resources": [
+    {
+      "asset_directory_count": 23,
+      "asset_name": "ProofWidgets4.tar.gz",
+      "asset_regular_file_count": 540,
+      "asset_sha256": "ce3f6cd33c49b0b6e177cb2aba77be3a39988db0d6bec9dd6119413e260ac725",
+      "asset_size": 13772162,
+      "asset_url": "https://github.com/leanprover-community/ProofWidgets4/releases/download/v0.0.87/ProofWidgets4.tar.gz",
+      "js_file_count": 20,
+      "js_manifest_sha256": "f40d87505c4016791e7196c641ec7a20797439cf0146163562888d2a84550f7d",
+      "js_unpacked_bytes": 6902528,
+      "name": "proofwidgets-release-js",
+      "package": "proofwidgets",
+      "release_tag": "v0.0.87",
+      "selection_prefix": "js/",
+      "source_revision": "be3b2e63b1bbf496c478cef98b86972a37c1417d"
+    }
+  ],
+  "schema_version": "autolean.mathlib-build-resource-lock.v1",
+  "state": "complete"
+}

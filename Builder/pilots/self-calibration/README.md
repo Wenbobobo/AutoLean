@@ -19,16 +19,21 @@ absence of human/expert review as machine-readable blockers. The spike binds the
 input tree, lock, toolchain, targets, exit status, and public-safe build-report checksum through the
 tracked `Library/records/staging/round-01-model-theory-compile-spike/` packet and receipt. Loading
 the record recomputes the Library v2 input closure and cross-checks both raw-record and canonical
-content digests. The quantifier-freshness bridge remains an active scope gap. Its only disposition
-is `gap`; neither candidate is selected.
+content digests. `UniversalLK` is the technical implementation of the existing
+structural/open-formula candidate, not a third candidate. Its bounded `⊥`, `→`, and `∀`
+micro-slice implements the quantifier-freshness bridge with weakening, capture-avoiding
+instantiation, eigenvariable-safe rules, and soundness. That technical micro-slice is complete;
+independent source-fidelity review and Builder admission remain active gaps. The round therefore
+remains `partial_passed_with_gap` and `incomplete`; neither candidate is selected or frozen.
 
 The public-safe
 [quantifier-boundary reconciliation](quantifier-boundary-2026-07-24.md) records a later pair of
 independent automated research inputs. It resolves one design ambiguity: the textbook theorem
 boundary is closed, while a level-indexed open layer is still required internally to encode
-substitution and eigenvariable freshness. It proposes a refined implementation spike, but it
-does not fill the round's authenticated role reports, select a candidate, or remove the human
-review blocker.
+substitution and eigenvariable freshness. `UniversalLK` implements that refinement for the
+existing structural/open-formula candidate, but it does not fill the round's authenticated role
+reports, establish source fidelity, issue Builder admission, select or freeze a candidate, or
+remove the human-review blocker.
 
 Every candidate, role report, compile-spike packet, and round has a canonical SHA-256 integrity
 checksum. A checksum detects accidental or unsynchronized edits; it is not a signature, an

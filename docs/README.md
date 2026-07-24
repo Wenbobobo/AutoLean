@@ -17,8 +17,9 @@ runner reports success.
    source-to-contract entry, semantic freeze gate, and artifact root handed to Prover.
 4. [Elaborated-type comparator](elaborated-type-comparator.md) defines how a frozen Lean
    declaration type is queried from the pinned runner and compared without trusting a model.
-5. [Pinned pure-Lean OCI worker](oci-lean-worker.md) records the real Linux image, replay command,
-   adversarial canaries, and its deliberately non-mathlib evidence boundary.
+5. [Pinned Lean OCI workers](oci-lean-worker.md) records the pure-Lean adversarial profile and the
+   separate test-only, source-built `Mathlib.ModelTheory.Semantics` profile with their distinct
+   replay and evidence boundaries.
 6. [Attestation trust root](attestation.md) defines separate Builder and verifier authority
    signatures, the lease-bound verifier gateway, replay semantics, and remaining mTLS/KMS gap.
 7. [Threat model](threat-model.md) defines what agents, workers, providers, the control

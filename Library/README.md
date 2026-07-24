@@ -62,6 +62,16 @@ seed but always use a fresh Library worktree and local build directory. It
 builds the public root, the three-node fixture DAG, and the non-promotable
 model-theory semantic-boundary packet.
 
+That packet now includes a level-indexed implementation spike for only the
+classical two-sided `⊥`, `→`, and `∀` fragment. Its internal formulas use
+`Formula (Fin n)` with explicit assignments; universal-right lifts both old
+contexts and reserves `Fin.last n` for the opened body. The level-zero theorem
+bridges to `Language.Sentence`, and Bool countermodels retain the rejected
+universal-right reuse, existential-left reuse, and capture variants.
+Existential-left remains a rejection control, not a rule in the implemented
+fragment. This is kernel-checked fixture evidence, not full `LK`, a selected
+Builder candidate, or a promoted Library asset.
+
 This detects cache pollution relative to the tracked receipt; it does not prove
 that the first observed bytes came from a trusted clean build. The receipt is
 local diagnostic evidence. Promotion still requires a separately attested,

@@ -1,0 +1,306 @@
+# syntax=docker/dockerfile:1
+
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS lean-archive-verifier
+
+ARG LEAN_ARCHIVE=lean-4.28.0-linux.tar.zst
+ARG LEAN_ARCHIVE_SHA256
+
+COPY ${LEAN_ARCHIVE} /tmp/${LEAN_ARCHIVE}
+RUN printf '%s  %s\n' "${LEAN_ARCHIVE_SHA256}" "/tmp/${LEAN_ARCHIVE}" \
+      | sha256sum --check --strict - \
+    && printf '%s\n' "${LEAN_ARCHIVE_SHA256}" > /lean-archive.sha256
+
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90 AS mathlib-source-builder
+
+ARG LEAN_ARCHIVE=lean-4.28.0-linux.tar.zst
+ARG LEAN_ARCHIVE_SHA256
+ARG BUILD_RESOURCE_LOCK_SHA256
+ARG SOURCE_LOCK_SHA256
+ARG SOURCE_INPUTS_SHA256
+ARG SOURCE_ARCHIVES_MANIFEST_SHA256
+ARG SOURCE_LAYOUT_SHA256
+ARG LAKE_MANIFEST_SHA256
+ARG MATHLIB_SOURCE_MANIFEST_SHA256
+ARG MATHLIB_LOCAL_PATH_MANIFEST_SHA256
+ARG PROOFWIDGETS_ASSET_NAME
+ARG PROOFWIDGETS_ASSET_SHA256
+ARG PROOFWIDGETS_ASSET_SIZE
+ARG PROOFWIDGETS_JS_FILE_COUNT
+ARG PROOFWIDGETS_JS_MANIFEST_SHA256
+ARG PROOFWIDGETS_JS_UNPACKED_BYTES
+ARG PROOFWIDGETS_RELEASE_TAG
+ARG PROOFWIDGETS_REVISION
+ARG MATHLIB_REVISION
+ARG DOCKERFILE_SHA256
+ARG QUERY_HELPER_SOURCE_SHA256
+ARG WRAPPER_SHA256
+ARG BUILD_RECEIPT_TOOL_SHA256
+
+COPY --from=lean-archive-verifier /lean-archive.sha256 /opt/lean-archive.sha256
+ADD ${LEAN_ARCHIVE} /opt/
+RUN test -x /opt/lean-4.28.0-linux/bin/lean \
+    && test "$(cat /opt/lean-archive.sha256)" = "${LEAN_ARCHIVE_SHA256}" \
+    && ln -s /opt/lean-4.28.0-linux /opt/lean
+
+ENV PATH="/opt/lean/bin:${PATH}"
+
+COPY mathlib-source-lock.v1.json /tmp/autolean-build/mathlib-source-lock.v1.json
+COPY mathlib-build-resource-lock.v1.json /tmp/autolean-build/mathlib-build-resource-lock.v1.json
+COPY mathlib-source-inputs.v1.json /tmp/autolean-build/mathlib-source-inputs.v1.json
+COPY source-archives.sha256 /tmp/autolean-build/source-archives.sha256
+COPY source-layout.tsv /tmp/autolean-build/source-layout.tsv
+COPY mathlib-local-path-manifest.v1.json /tmp/autolean-build/mathlib-local-path-manifest.v1.json
+COPY proofwidgets-js.sha256 /tmp/autolean-build/proofwidgets-js.sha256
+COPY proofwidgets-release/ /tmp/autolean-build/proofwidgets-release/
+COPY sources/ /tmp/autolean-build/sources/
+COPY Dockerfile.mathlib /tmp/autolean-build/Dockerfile.mathlib
+COPY AutoleanMathlibQuery.lean /tmp/autolean-build/AutoleanMathlibQuery.lean
+COPY autolean-mathlib-wrapper /tmp/autolean-build/autolean-mathlib-wrapper
+COPY autolean-mathlib-build-receipt /tmp/autolean-build/autolean-mathlib-build-receipt
+
+RUN printf '%s  %s\n' \
+      "${BUILD_RESOURCE_LOCK_SHA256}" \
+        /tmp/autolean-build/mathlib-build-resource-lock.v1.json \
+      "${SOURCE_LOCK_SHA256}" /tmp/autolean-build/mathlib-source-lock.v1.json \
+      "${SOURCE_INPUTS_SHA256}" /tmp/autolean-build/mathlib-source-inputs.v1.json \
+      "${SOURCE_ARCHIVES_MANIFEST_SHA256}" /tmp/autolean-build/source-archives.sha256 \
+      "${SOURCE_LAYOUT_SHA256}" /tmp/autolean-build/source-layout.tsv \
+      "${MATHLIB_LOCAL_PATH_MANIFEST_SHA256}" \
+        /tmp/autolean-build/mathlib-local-path-manifest.v1.json \
+      "${PROOFWIDGETS_JS_MANIFEST_SHA256}" \
+        /tmp/autolean-build/proofwidgets-js.sha256 \
+      "${DOCKERFILE_SHA256}" /tmp/autolean-build/Dockerfile.mathlib \
+      "${QUERY_HELPER_SOURCE_SHA256}" /tmp/autolean-build/AutoleanMathlibQuery.lean \
+      "${WRAPPER_SHA256}" /tmp/autolean-build/autolean-mathlib-wrapper \
+      "${BUILD_RECEIPT_TOOL_SHA256}" /tmp/autolean-build/autolean-mathlib-build-receipt \
+      | sha256sum --check --strict - \
+    && test "$(find /tmp/autolean-build/sources -type f | wc -l)" -eq 9 \
+    && (cd /tmp/autolean-build && sha256sum --check --strict source-archives.sha256) \
+    && test -z "$(find /tmp/autolean-build/proofwidgets-release \
+         ! -type f ! -type d -print -quit)" \
+    && find /tmp/autolean-build/proofwidgets-release/js -type f -print \
+         | LC_ALL=C sort > /tmp/autolean-build/proofwidgets-js-files.txt \
+    && test "$(wc -l < /tmp/autolean-build/proofwidgets-js-files.txt \
+         | tr -d ' ')" -eq "${PROOFWIDGETS_JS_FILE_COUNT}" \
+    && (cd /tmp/autolean-build/proofwidgets-release \
+         && sha256sum --check --strict ../proofwidgets-js.sha256) \
+    && js_bytes=0 \
+    && while IFS= read -r js_file; do \
+         file_bytes="$(wc -c < "${js_file}" | tr -d ' ')"; \
+         js_bytes=$((js_bytes + file_bytes)); \
+       done < /tmp/autolean-build/proofwidgets-js-files.txt \
+    && test "${js_bytes}" -eq "${PROOFWIDGETS_JS_UNPACKED_BYTES}"
+
+RUN set -eu; \
+    records=0; \
+    while IFS="$(printf '\t')" read -r name archive root role; do \
+      test -n "${name}" && test -n "${archive}" && test -n "${root}"; \
+      unpack="/tmp/autolean-unpack-${records}"; \
+      mkdir "${unpack}"; \
+      tar --no-same-owner --no-same-permissions -xzf \
+        "/tmp/autolean-build/sources/${archive}" -C "${unpack}"; \
+      test "$(find "${unpack}" -mindepth 1 -maxdepth 1 | wc -l)" -eq 1; \
+      test -d "${unpack}/${root}" && test ! -L "${unpack}/${root}"; \
+      case "${role}" in \
+        root) \
+          test "${name}" = mathlib && test "${records}" -eq 0; \
+          mv "${unpack}/${root}" /opt/mathlib; \
+          mkdir -p /opt/mathlib/.lake/packages \
+          ;; \
+        dependency) \
+          test -d /opt/mathlib/.lake/packages; \
+          mv "${unpack}/${root}" "/opt/mathlib/.lake/packages/${name}" \
+          ;; \
+        *) exit 1 ;; \
+      esac; \
+      rmdir "${unpack}"; \
+      records=$((records + 1)); \
+    done < /tmp/autolean-build/source-layout.tsv; \
+    test "${records}" -eq 9; \
+    test "$(find /opt/mathlib/.lake/packages -mindepth 1 -maxdepth 1 -type d | wc -l)" -eq 8; \
+    printf '%s  %s\n' "${MATHLIB_SOURCE_MANIFEST_SHA256}" /opt/mathlib/lake-manifest.json \
+      | sha256sum --check --strict -; \
+    test ! -e /opt/mathlib/.lake/build; \
+    mkdir -p /opt/autolean/attestations; \
+    cp /opt/mathlib/lake-manifest.json \
+      /opt/autolean/attestations/mathlib-source-lake-manifest.json; \
+    cp /tmp/autolean-build/mathlib-local-path-manifest.v1.json \
+      /opt/mathlib/lake-manifest.json; \
+    printf '%s  %s\n' "${MATHLIB_LOCAL_PATH_MANIFEST_SHA256}" \
+      /opt/mathlib/lake-manifest.json | sha256sum --check --strict -
+
+COPY proofwidgets-release/js/ /opt/mathlib/.lake/packages/proofwidgets/.lake/build/js/
+COPY proofwidgets-js.sha256 /opt/autolean/attestations/proofwidgets-js.sha256
+COPY mathlib-build-resource-lock.v1.json /opt/autolean/attestations/mathlib-build-resource-lock.v1.json
+
+WORKDIR /opt/mathlib/.lake/packages/proofwidgets
+RUN set -eu; \
+    verify_js() { \
+      test -z "$(find .lake/build/js ! -type f ! -type d -print -quit)"; \
+      find .lake/build/js -type f -print | LC_ALL=C sort \
+        > /tmp/autolean-build/proofwidgets-runtime-js-files.txt; \
+      test "$(wc -l < /tmp/autolean-build/proofwidgets-runtime-js-files.txt \
+        | tr -d ' ')" -eq "${PROOFWIDGETS_JS_FILE_COUNT}"; \
+      (cd .lake/build \
+        && sha256sum --check --strict /opt/autolean/attestations/proofwidgets-js.sha256); \
+      js_bytes=0; \
+      while IFS= read -r js_file; do \
+        file_bytes="$(wc -c < "${js_file}" | tr -d ' ')"; \
+        js_bytes=$((js_bytes + file_bytes)); \
+      done < /tmp/autolean-build/proofwidgets-runtime-js-files.txt; \
+      test "${js_bytes}" -eq "${PROOFWIDGETS_JS_UNPACKED_BYTES}"; \
+    }; \
+    verify_js; \
+    lake build --no-build widgetJsAll; \
+    lake build widgetJsAll; \
+    verify_js; \
+    test ! -e widget/node_modules
+
+WORKDIR /opt/mathlib
+RUN lake build +Mathlib.ModelTheory.Semantics:olean
+
+RUN mkdir -p /opt/autolean/bin /opt/autolean/lib /opt/autolean/environment \
+      /opt/autolean/attestations \
+    && lake env printenv LEAN_PATH > /opt/autolean/environment/lean-path \
+    && test -s /opt/autolean/environment/lean-path
+
+COPY AutoleanMathlibQuery.lean /opt/autolean/lib/AutoleanLeanQuery.lean
+COPY autolean-mathlib-wrapper /opt/autolean/bin/autolean-lean-wrapper
+COPY autolean-mathlib-build-receipt /opt/autolean/bin/autolean-mathlib-build-receipt
+
+WORKDIR /
+RUN chmod 0444 /opt/autolean/lib/AutoleanLeanQuery.lean \
+    && chmod 0555 /opt/autolean/bin/autolean-lean-wrapper \
+      /opt/autolean/bin/autolean-mathlib-build-receipt \
+    && LEAN_PATH="$(cat /opt/autolean/environment/lean-path)" lean \
+      -o /opt/autolean/lib/AutoleanLeanQuery.olean \
+      /opt/autolean/lib/AutoleanLeanQuery.lean \
+    && LEAN_PATH="$(cat /opt/autolean/environment/lean-path)" lean --deps \
+      /opt/autolean/lib/AutoleanLeanQuery.lean \
+      > /tmp/autolean-build/mathlib-import-paths.txt \
+    && : > /tmp/autolean-build/mathlib-import-closure.unsorted \
+    && while IFS= read -r imported; do \
+         case "${imported}" in \
+           /opt/lean-4.28.0-linux/*.olean|/opt/mathlib/*.olean) ;; \
+           *) exit 1 ;; \
+         esac; \
+         test -f "${imported}" && test ! -L "${imported}"; \
+         sha256sum "${imported}" \
+           >> /tmp/autolean-build/mathlib-import-closure.unsorted; \
+       done < /tmp/autolean-build/mathlib-import-paths.txt \
+    && LC_ALL=C sort -u /tmp/autolean-build/mathlib-import-closure.unsorted \
+      > /opt/autolean/attestations/mathlib-import-closure.sha256 \
+    && test -s /opt/autolean/attestations/mathlib-import-closure.sha256 \
+    && grep -F "  /opt/mathlib/.lake/build/lib/lean/Mathlib/ModelTheory/Semantics.olean" \
+      /opt/autolean/attestations/mathlib-import-closure.sha256 \
+    && sha256sum --check --strict --status \
+      /opt/autolean/attestations/mathlib-import-closure.sha256
+
+RUN cp /tmp/autolean-build/mathlib-source-lock.v1.json \
+      /opt/autolean/attestations/mathlib-source-lock.v1.json \
+    && cp /tmp/autolean-build/mathlib-source-inputs.v1.json \
+      /opt/autolean/attestations/mathlib-source-inputs.v1.json \
+    && closure_sha256="$(sha256sum \
+         /opt/autolean/attestations/mathlib-import-closure.sha256 | awk '{print $1}')" \
+    && closure_count="$(wc -l \
+         < /opt/autolean/attestations/mathlib-import-closure.sha256 | tr -d ' ')" \
+    && target_sha256="$(sha256sum \
+         /opt/mathlib/.lake/build/lib/lean/Mathlib/ModelTheory/Semantics.olean \
+         | awk '{print $1}')" \
+    && helper_olean_sha256="$(sha256sum \
+         /opt/autolean/lib/AutoleanLeanQuery.olean | awk '{print $1}')" \
+    && printf '%s  %s\n' \
+      "${QUERY_HELPER_SOURCE_SHA256}" /opt/autolean/lib/AutoleanLeanQuery.lean \
+      "${helper_olean_sha256}" /opt/autolean/lib/AutoleanLeanQuery.olean \
+      "${WRAPPER_SHA256}" /opt/autolean/bin/autolean-lean-wrapper \
+      "${BUILD_RECEIPT_TOOL_SHA256}" /opt/autolean/bin/autolean-mathlib-build-receipt \
+      "${BUILD_RESOURCE_LOCK_SHA256}" \
+        /opt/autolean/attestations/mathlib-build-resource-lock.v1.json \
+      "${SOURCE_LOCK_SHA256}" /opt/autolean/attestations/mathlib-source-lock.v1.json \
+      "${SOURCE_INPUTS_SHA256}" /opt/autolean/attestations/mathlib-source-inputs.v1.json \
+      "${MATHLIB_SOURCE_MANIFEST_SHA256}" \
+        /opt/autolean/attestations/mathlib-source-lake-manifest.json \
+      "${MATHLIB_LOCAL_PATH_MANIFEST_SHA256}" /opt/mathlib/lake-manifest.json \
+      "${PROOFWIDGETS_JS_MANIFEST_SHA256}" \
+        /opt/autolean/attestations/proofwidgets-js.sha256 \
+      "${closure_sha256}" /opt/autolean/attestations/mathlib-import-closure.sha256 \
+      "${target_sha256}" \
+        /opt/mathlib/.lake/build/lib/lean/Mathlib/ModelTheory/Semantics.olean \
+      "$(sha256sum /opt/autolean/environment/lean-path | awk '{print $1}')" \
+        /opt/autolean/environment/lean-path \
+      > /opt/autolean/attestations/runtime-files.sha256 \
+    && runtime_files_sha256="$(sha256sum \
+         /opt/autolean/attestations/runtime-files.sha256 | awk '{print $1}')" \
+    && printf \
+      '{"build_resource_lock_sha256":"%s","build_receipt_tool_sha256":"%s","dockerfile_sha256":"%s","helper_olean_sha256":"%s","helper_source_sha256":"%s","lake_manifest_sha256":"%s","lean_archive_sha256":"%s","mathlib_build_target":"%s","mathlib_import_closure_count":%s,"mathlib_import_closure_sha256":"%s","mathlib_local_path_manifest_sha256":"%s","mathlib_revision":"%s","mathlib_source_manifest_sha256":"%s","mathlib_target":"Mathlib.ModelTheory.Semantics","mathlib_target_olean_sha256":"%s","proofwidgets_js_file_count":%s,"proofwidgets_js_manifest_sha256":"%s","proofwidgets_js_unpacked_bytes":%s,"proofwidgets_release_asset_name":"%s","proofwidgets_release_asset_sha256":"%s","proofwidgets_release_asset_size":%s,"proofwidgets_release_tag":"%s","proofwidgets_revision":"%s","runtime_files_manifest_sha256":"%s","schema_version":"autolean.mathlib-source-build-receipt.v1","source_inputs_sha256":"%s","source_lock_sha256":"%s","wrapper_sha256":"%s"}\n' \
+      "${BUILD_RESOURCE_LOCK_SHA256}" "${BUILD_RECEIPT_TOOL_SHA256}" \
+      "${DOCKERFILE_SHA256}" \
+      "${helper_olean_sha256}" "${QUERY_HELPER_SOURCE_SHA256}" \
+      "${LAKE_MANIFEST_SHA256}" "${LEAN_ARCHIVE_SHA256}" \
+      "+Mathlib.ModelTheory.Semantics:olean" "${closure_count}" \
+      "${closure_sha256}" "${MATHLIB_LOCAL_PATH_MANIFEST_SHA256}" \
+      "${MATHLIB_REVISION}" \
+      "${MATHLIB_SOURCE_MANIFEST_SHA256}" "${target_sha256}" \
+      "${PROOFWIDGETS_JS_FILE_COUNT}" "${PROOFWIDGETS_JS_MANIFEST_SHA256}" \
+      "${PROOFWIDGETS_JS_UNPACKED_BYTES}" "${PROOFWIDGETS_ASSET_NAME}" \
+      "${PROOFWIDGETS_ASSET_SHA256}" "${PROOFWIDGETS_ASSET_SIZE}" \
+      "${PROOFWIDGETS_RELEASE_TAG}" "${PROOFWIDGETS_REVISION}" \
+      "${runtime_files_sha256}" \
+      "${SOURCE_INPUTS_SHA256}" \
+      "${SOURCE_LOCK_SHA256}" "${WRAPPER_SHA256}" \
+      > /opt/autolean/attestations/mathlib-source-build-receipt.v1.json \
+    && /opt/autolean/bin/autolean-mathlib-build-receipt > /dev/null
+
+FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
+
+ARG LEAN_ARCHIVE_SHA256
+ARG BUILD_RESOURCE_LOCK_SHA256
+ARG SOURCE_LOCK_SHA256
+ARG SOURCE_INPUTS_SHA256
+ARG LAKE_MANIFEST_SHA256
+ARG MATHLIB_REVISION
+ARG MATHLIB_LOCAL_PATH_MANIFEST_SHA256
+ARG PROOFWIDGETS_ASSET_SHA256
+ARG PROOFWIDGETS_JS_FILE_COUNT
+ARG PROOFWIDGETS_JS_MANIFEST_SHA256
+ARG PROOFWIDGETS_RELEASE_TAG
+ARG PROOFWIDGETS_REVISION
+ARG DOCKERFILE_SHA256
+ARG QUERY_HELPER_SOURCE_SHA256
+ARG WRAPPER_SHA256
+
+LABEL org.opencontainers.image.title="AutoLean source-built mathlib verifier worker" \
+      org.opencontainers.image.description="Lean 4.28.0 plus source-built Mathlib.ModelTheory.Semantics closure" \
+      org.opencontainers.image.version="4.28.0-model-theory-source-v1" \
+      org.opencontainers.image.base.digest="sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90" \
+      org.autolean.lean.archive.sha256="${LEAN_ARCHIVE_SHA256}" \
+      org.autolean.mathlib.revision="${MATHLIB_REVISION}" \
+      org.autolean.mathlib.lake-manifest.sha256="${LAKE_MANIFEST_SHA256}" \
+      org.autolean.mathlib.local-path-manifest.sha256="${MATHLIB_LOCAL_PATH_MANIFEST_SHA256}" \
+      org.autolean.mathlib.build-resource-lock.sha256="${BUILD_RESOURCE_LOCK_SHA256}" \
+      org.autolean.mathlib.proofwidgets-release-asset.sha256="${PROOFWIDGETS_ASSET_SHA256}" \
+      org.autolean.mathlib.proofwidgets-js-manifest.sha256="${PROOFWIDGETS_JS_MANIFEST_SHA256}" \
+      org.autolean.mathlib.proofwidgets-js-file-count="${PROOFWIDGETS_JS_FILE_COUNT}" \
+      org.autolean.mathlib.proofwidgets-release-tag="${PROOFWIDGETS_RELEASE_TAG}" \
+      org.autolean.mathlib.proofwidgets-revision="${PROOFWIDGETS_REVISION}" \
+      org.autolean.mathlib.source-lock.sha256="${SOURCE_LOCK_SHA256}" \
+      org.autolean.mathlib.source-inputs.sha256="${SOURCE_INPUTS_SHA256}" \
+      org.autolean.mathlib.target="Mathlib.ModelTheory.Semantics" \
+      org.autolean.mathlib.build-target="+Mathlib.ModelTheory.Semantics:olean" \
+      org.autolean.build.dockerfile.sha256="${DOCKERFILE_SHA256}" \
+      org.autolean.verifier.helper-source.sha256="${QUERY_HELPER_SOURCE_SHA256}" \
+      org.autolean.verifier.wrapper.sha256="${WRAPPER_SHA256}" \
+      org.autolean.wrapper.protocol="autolean.oci-lean-wrapper.v2"
+
+COPY --from=mathlib-source-builder /opt/lean-4.28.0-linux /opt/lean-4.28.0-linux
+COPY --from=mathlib-source-builder /opt/mathlib /opt/mathlib
+COPY --from=mathlib-source-builder /opt/autolean /opt/autolean
+
+RUN ln -s /opt/lean-4.28.0-linux /opt/lean \
+    && mkdir -p /input /source /deps /work \
+    && /opt/autolean/bin/autolean-mathlib-build-receipt > /dev/null
+
+ENV PATH="/opt/lean/bin:${PATH}"
+
+WORKDIR /work
+USER 65532:65532

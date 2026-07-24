@@ -11,6 +11,9 @@ policy, and checks deterministic release-inventory and SPDX generation. The Pyth
 full history so the history result is not based on a shallow clone. A separate matrix installs the
 committed pnpm lock and runs the Dashboard UI tests and production build.
 
+Pytest covers the mathlib source/resource locks and OCI-driver policy with fixtures. That coverage
+does not execute the long source build, create an image, or replay the mathlib canary.
+
 The ordinary workflow deliberately does not:
 
 - fetch FATE or any benchmark task source;
@@ -46,8 +49,10 @@ regression guards, not substitutes for credential rotation, Git-host secret scan
 rewriting.
 
 `scripts/mathlib_source_lock.py` checks that the tracked source-only archive lock still matches the
-Lake manifest and all nine dependency identities. Ordinary CI does not download or build those
-archives; cache-byte verification and clean OCI construction are separate explicit gates.
+Lake manifest and all nine dependency identities. Unit tests also validate the ProofWidgets
+resource-lock and exact-context driver behavior. Ordinary CI does not download those resources or
+run the 889-target Docker build; cache-byte verification and clean OCI construction are separate
+explicit gates.
 
 `scripts/provider_policy_guard.py` blocks prohibited provider dependencies and
 production references while verifying that both runtime deny lists remain
