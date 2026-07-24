@@ -21,7 +21,7 @@ star, a pilot-selection oracle, or a substitute for a multi-file formal library.
 | Decision | Current disposition | What would change it |
 | --- | --- | --- |
 | Domain primary | Conditional first-order model-theory sequent-calculus soundness | Independent source-fidelity or Builder-admission review rejects the implemented fragment and records a backup decision |
-| Candidate boundary | The level-indexed universal fragment is technically implemented but remains `partial_passed_with_gap` and `not_selected` | Independent source-fidelity and Builder-admission review accepts its scope and rule boundaries, or records a gap/backup decision |
+| Candidate boundary | V2 records the level-indexed universal fragment as T3 `gap/not_selected`; local replay checks its internal bindings only | Fine source spans, axiom evidence, independent semantic review, and authenticated admission authority accept its boundary, or a backup is evaluated and recorded |
 | Curvature | Reference only, blocked by upstream mathlib PR #36036 | Stable upstream state plus a fresh, independent overlap and API review; this does not automatically restore priority |
 | Backups | Abstract Cea-type variational-PDE and van Kampen-style slices | The same rights, alignment, and pinned-Library selection gates |
 | Calibration order | Multi-agent self-calibration and textbook/open-problem alignment first; manual Builder calibration later | A recorded candidate selection and normal rights/domain-review readiness |
@@ -75,16 +75,17 @@ source-to-contract or Library selection gates.
 The milestones above remain the release-level sequence. The following tasks are the current
 implementation batch; they exist to make the critical path assignable and independently
 verifiable without turning each local defect into a new subsystem. T2 and the local test-only T4
-profile are technically complete; the immediate frontier is T3 admission, T5 frozen bundles, and
-T6 lease/signer/integration.
+profile are technically complete. T3 now has a replayable gap record rather than an admission;
+the immediate frontier is resolving that boundary or evaluating a backup. T5 and therefore T6
+remain blocked downstream.
 
 | Task | Why now | Output and acceptance | Depends on | Explicitly out of scope |
 | --- | --- | --- | --- | --- |
 | T1: source and quantifier boundary | The two compiling adapters are not a calculus and cannot decide source fidelity | A source-hash-bound rule matrix for substitution, capture avoidance, eigenvariable freshness, weakening, and vacuity; independent source, adversarial, research-alignment, and Library records; the result is either implementable scope or a retained gap | Pinned source and rights records | Lean proof implementation, candidate selection, contract freeze, or an open-problem claim |
 | T2: Lean freshness micro-slice | Technically complete for the bounded fragment | Kernel-checked level-indexed syntax/context, weakening, capture-avoiding instantiation, universal rules, soundness, level-zero bridge, and negative capture/freshness controls under the pinned Library lock | T1 | A complete textbook calculus, `Promoted/`, or selecting a candidate merely because it compiles |
-| T3: pilot admission | Mathematical selection must precede the Prover interface, not be inferred from proof-search success | One admission receipt or an immutable gap/backup decision; locked imports, axioms, environment, and proof-slot profile; every missing review must reject admission | T1 and T2 | Freezing a statement, issuing a Prover bundle, or treating Agent agreement as authority |
+| T3: pilot admission | V2 consistently records the current candidate as `gap/not_selected`, but replay cannot supply semantic or admission authority | Retain the V2 gap while fine spans, declaration-specific axiom evidence, independent semantic review, and authenticated authority verification are missing; either admit a fully reviewed boundary or record the selected backup | T1 and T2 | Freezing a statement, issuing a Prover bundle, or treating local replay or Agent agreement as authority |
 | T4: mathlib-in-image authority | Local test-only source build complete | The 889/889 network-disabled build produced digest `83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`; the focused V2 canary imported `Mathlib.ModelTheory.Semantics`, observed the exact type and zero axioms, and ignored `/deps` poison | Existing OCI V2 protocol and Library lock | Full Mathlib build, FATE result, registry publication, production signer, KMS/mTLS, promotion attestation, or claiming the pure-worker adversarial V3 suite ran against this profile |
-| T5: first calibrated contract slice | A real Builder--Prover result requires source-backed frozen contracts rather than another synthetic fixture | A coherent three-node source slice with separate `StatementContractV1` revisions; reverse rendering, non-vacuity, positive/negative examples, mutations, Library review, and named semantic review all pass before freeze | T3 and reviewer/rights readiness | Phase 2 batch conversion or allowing Prover to alter a statement |
+| T5: first calibrated contract slice | A real Builder--Prover result requires an admitted source boundary; the current T3 gap cannot be frozen | After T3 admission, a coherent three-node source slice with separate `StatementContractV1` revisions; reverse rendering, non-vacuity, positive/negative examples, mutations, Library review, and named semantic review all pass before freeze. Backup evaluation may run before admission, but freeze may not | T3 admission and reviewer/rights readiness | Phase 2 batch conversion, freezing the current gap, or allowing Prover to alter a statement |
 | T6: frozen-to-verified result | This is the first meaningful proof that the two engines preserve one immutable statement across their boundary | Enumerate and bind the complete transitive import closure, then run `claim -> submit_proof` or `report_gap -> verify_submission` using the T4 image; retain at least one accepted target and rejected controls while revision, type, imports, and axioms remain identical | T4 and T5 | Silent repair of a failed contract; failures emit only a gap or change request |
 | T7: real project-scale loop | The current 20-node fixture tests scheduling but does not compile a Lean library | At least four files and 20 real declarations with dependency-frontier, lease-conflict, API-revision propagation, clean integration, and per-node verification evidence | T3, T4, and T6 | Routing or throughput optimization before correctness |
 | T8: repository and Phase 1 decisions | Code visibility and mathematical release are different decisions | Two decisions bound to one commit: repository visibility after complete reachable-history checks, and RC/no-RC after T1--T7 plus the registered release gates; failed and unrun gates remain explicit | History audit can run now; RC depends on T1--T7 | Publishing source caches, raw model output, recovered data, or treating public code as a promoted theorem |
@@ -95,8 +96,8 @@ secondary diagnostic under T8; it cannot close T1--T7.
 
 Capability-adaptive `direct`/`light`/`full` routing remains in shadow evaluation until M4. A
 benchmark or Dashboard improvement cannot close M1--M3. External model runs start only after the
-operator-owned authorization and endpoint evidence are ready; no API is required for the local
-T3 admission, T5 bundle, and T6 integration increments.
+operator-owned authorization and endpoint evidence are ready; no API is required to resolve the
+local T3 evidence gaps or assess a backup. T5 cannot begin while T3 remains `not_selected`.
 
 After M5, Phase 2 begins with a 4--6 week Builder discovery/calibration cycle. It selects a weak
 field by current library overlap, source rights, expert access, and dependency leverage rather
@@ -107,10 +108,12 @@ leverage rather than benchmark score.
 
 ## Current evidence boundary
 
-The pinned-Library packet remains `partial_passed_with_gap` and `not_selected`, but now includes a
-kernel-checked soundness micro-slice for the `⊥`, `→`, and `∀` fragment. The separate local T4
-image source-built `Mathlib.ModelTheory.Semantics` and passed its focused type/axiom/path canary.
-Neither result establishes textbook fidelity, Builder admission, a frozen model-theory contract,
-lease/signer integration, production authority, a full Mathlib or FATE result, progress on an open
-problem, or an upstream contribution. The current frontier is therefore T3 admission, T5 immutable
-bundle construction, and T6 end-to-end verifier integration against the exact T4 digest.
+The pinned-Library packet remains `partial_passed_with_gap` and `not_selected`, but includes a
+kernel-checked soundness micro-slice for the `⊥`, `→`, and `∀` fragment. Its V2 T3 decision replays
+locally against the current manifest and workspace and preserves the gap. It has no fine-grained
+source spans, declaration-specific axiom evidence, independent semantic acceptance, or
+authenticated admission authority. The separate local T4 image source-built
+`Mathlib.ModelTheory.Semantics` and passed its focused type/axiom/path canary, but that profile does
+not admit the Builder candidate. T5 remains blocked; backup evaluation is the only downstream
+selection work that can proceed without weakening this boundary. The open-problem north star is
+unchanged, and neither result establishes progress on an open problem or an upstream contribution.

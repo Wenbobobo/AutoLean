@@ -11,7 +11,7 @@ The command-line entry point is bound to:
 - `Builder/references/manifest.v1.json`;
 - `.cache/references/`; and
 - manifest SHA-256
-  `881d535d62661ad496f8385964151830688a78d10123b59ff8326cb8a3a5a907`.
+  `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab`.
 
 It accepts no manifest path, cache path, receipt path, or URL argument. A manifest change therefore
 requires an intentional code change to the bound digest.
@@ -92,7 +92,10 @@ peer-reviewed published book as CC BY-SA 4.0:
 ## Exact statement span
 
 `SourceToStatementHarness.prepare_draft` accepts only a verified `text/plain` `derived_text`
-artifact whose parent PDF is also cached and verified. Every `ChapterSourceSpan` must provide:
+artifact whose parent PDF is also cached and verified. Repository-provided text keeps a
+`human_declared` parent-locator policy. Deterministic local PDF extraction instead keeps its
+parent identity `manifest_bound`; the human chapter and page declarations remain separate on
+every statement span. Every `ChapterSourceSpan` must provide:
 
 - nonempty `start_offset` and `end_offset` byte offsets;
 - `permitted_excerpt`;
