@@ -6,20 +6,22 @@ Reference books and notes are local, content-addressed inputs. Large source file
 The tracked manifest is the only acquisition allowlist and records source, rights, artifact type,
 derivation, retrieval time, byte count, media type, and digests.
 
-The command-line entry point is bound to:
+The command-line entry point defaults to the current, explicitly bound revision:
 
-- `Builder/references/manifest.v1.json`;
+- `Builder/references/manifest.v2.json`;
 - `.cache/references/`; and
 - manifest SHA-256
-  `881d535d62661ad496f8385964151830688a78d10123b59ff8326cb8a3a5a907`.
+  `b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91`.
 
-It accepts no manifest path, cache path, receipt path, or URL argument. A manifest change therefore
-requires an intentional code change to the bound digest.
+It accepts no manifest path, cache path, receipt path, or URL argument. The only revision selector
+is the fixed `--manifest-version v1|v2` allowlist, each with its own bound digest. A new revision
+therefore requires an intentional code change to both the allowlist and the bound digest.
 
 Implementation:
 
 - [`reference_cache.py`](../Builder/src/autolean_builder/reference_cache.py)
-- [`manifest.v1.json`](../Builder/references/manifest.v1.json)
+- [`manifest.v2.json`](../Builder/references/manifest.v2.json), with the historical
+  [`manifest.v1.json`](../Builder/references/manifest.v1.json) retained byte-for-byte
 - [`scripts/reference_cache.py`](../scripts/reference_cache.py)
 
 ## Commands
@@ -29,11 +31,40 @@ uv run python scripts/reference_cache.py list
 uv run python scripts/reference_cache.py operator-fetch REFERENCE_ID
 uv run python scripts/reference_cache.py verify REFERENCE_ID
 uv run python scripts/reference_cache.py verify-all
+uv run python scripts/reference_cache.py verify-all --manifest-version v1
 ```
 
 `operator-fetch` is deliberately named and manifest-marked as an operator-only acquisition
 operation. Builder agents use `verify` or `verify-all`; they do not acquire source material.
-`--refresh` is valid only with `operator-fetch`.
+`--refresh` is valid only with `operator-fetch`, `operator-import-local`, or `derive-pdf-text`.
+
+## Manifest revisions
+
+`manifest.v1.json` is historical provenance: it retains the original Open Logic derived-text
+record produced by `pypdf 6.10.0` (625,143 bytes, SHA-256
+`285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584`). It remains loadable and
+verifiable through `--manifest-version v1`, but the current environment deliberately refuses to
+re-derive it under a different extractor version.
+
+`manifest.v2.json` contains every v1 entry plus a distinct derived-text record for the same locked
+Open Logic PDF using `pypdf 6.14.2`: 437 pages, 622,790 UTF-8 bytes, SHA-256
+`6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d`. The extraction method and
+page-boundary serialization remain unchanged; the tool version is part of provenance, so the
+changed bytes require a new record rather than a rewrite of v1.
+
+After the locked parent PDF has been placed in the local cache through the operator import path,
+the current derivation and a local candidate fingerprint are available as:
+
+```text
+uv run python scripts/reference_cache.py derive-pdf-text openlogic-sets-logic-computation-2026-07-12-text-pypdf-6.14.2
+uv run python scripts/reference_cache.py fingerprint-pdf-text --input OPERATOR_LOCAL_PDF
+```
+
+The manifest digest is deliberately manifest-wide, not an entry digest. Consequently, verifying an
+unchanged entry under v2 emits the v2 digest, while a historical contract or pilot that bound v1
+must retain and verify its v1 receipt. Cache bytes are content-addressed and can be shared; receipt
+or contract provenance cannot be silently upgraded. `fingerprint-pdf-text` is therefore restricted
+to the current extractor-bound revision, while `v1` remains available for artifact verification.
 
 Receipts are emitted to standard output and are not written by this script. They contain no host
 path or source text. The `network_used` value comes from the actual acquisition observation; it is
