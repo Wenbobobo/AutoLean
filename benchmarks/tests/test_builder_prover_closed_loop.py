@@ -1,37 +1,39 @@
 from __future__ import annotations
 
 import hashlib
+import json
 from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import BinaryIO
 
 import pytest
 from autolean_builder import (
-    BuilderError,
     CandidateFormalization,
     CandidateReviewVerdict,
+    ChapterSourceSpan,
+    DownloadObservation,
     FidelityEvaluation,
     FreezeRejected,
     MutationReviewVerdict,
     ObligationReviewVerdict,
+    ReferenceCache,
+    ReferenceEntryV1,
+    ReferenceManifestV1,
+    RightsReview,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
     SemanticReviewVerdict,
-    SourcePreparationRecordV1,
-    StatementFidelityHarness,
+    SourcePreparationLedger,
+    SourceToStatementHarness,
+    StatementDraftPacket,
+    StatementDraftRequest,
     TranslationTask,
     create_next_revision,
 )
-from autolean_builder.workflow import (
-    _bridge_frozen_contract as bridge_frozen_contract,
-)
-from autolean_builder.workflow import (
-    _freeze_reviewed_contract as freeze_contract,
-)
 from autolean_contracts import (
-    AlignmentTargetV1,
     AttestationPurposeV1,
     ContractChangeRequestV1,
     ContractChangeV1,
@@ -60,9 +62,6 @@ from autolean_contracts import (
     PermissionDecisionV1,
     ProofSubmissionV1,
     ReleaseTierV1,
-    RightsRecordV1,
-    SourceRecordV1,
-    SourceSpanV1,
     StableIdentifierV1,
     StatementContractV1,
     StatementStatusV1,
@@ -72,7 +71,6 @@ from autolean_contracts import (
     VerificationEvidenceArtifactV1,
     VerificationEvidenceV1,
     VerificationReportV1,
-    digest_model,
     digest_text,
     proof_dependency_manifest_hash,
     stable_identifier,
@@ -87,6 +85,7 @@ from autolean_control_plane import (
 )
 from autolean_control_plane.errors import InvalidTransition
 from autolean_prover.context import ContextPackBuilder, SpecialistRole
+from autolean_prover.execution import WorkspaceMaterializer
 from autolean_prover.providers import (
     Capability,
     FakeProvider,
@@ -124,14 +123,126 @@ _STATEMENT_V2 = """theorem bounded_witness
     Nonempty a ∧ Finite a ∧ Noetherian ∧
       ∀ x : Nat, ∃ y : Nat, x < y ∧ x + 1 ≤ y"""
 
+_SOURCE_V1 = "For every natural x there is y with x < y and x <= y."
+_SOURCE_V2 = "For every natural x there is y with x < y and x + 1 <= y."
+_PARENT_REFERENCE_ID = "closed-loop-source-pdf-v1"
+_TEXT_REFERENCE_ID = "closed-loop-source-text-v1"
+_PARENT_BYTES = b"%PDF-1.7\nAutoLean synthetic closed-loop source\n"
+_TEXT_BYTES = (
+    f"Synthetic Builder-Prover source\nRevision 1: {_SOURCE_V1}\nRevision 2: {_SOURCE_V2}\n"
+).encode()
+_PARENT_SHA256 = hashlib.sha256(_PARENT_BYTES).hexdigest()
+_TEXT_SHA256 = hashlib.sha256(_TEXT_BYTES).hexdigest()
+_ATTRIBUTION = "AutoLean synthetic CC0 Builder-Prover fixture."
 
-def _draft(*, revision: int) -> StatementContractV1:
-    is_second_revision = revision == 2
-    source_text = (
-        "For every natural x there is y with x < y and x + 1 <= y."
-        if is_second_revision
-        else "For every natural x there is y with x < y and x <= y."
+
+def _reference_entry(
+    *,
+    reference_id: str,
+    payload: bytes,
+    media_type: str,
+    extension: str,
+    artifact_kind: str,
+    derivation: dict[str, object] | None,
+) -> dict[str, object]:
+    return {
+        "reference_id": reference_id,
+        "title": "AutoLean synthetic Builder-Prover fixture",
+        "authors": ["AutoLean contributors"],
+        "version": "fixture-v1",
+        "citation": "AutoLean synthetic Builder-Prover fixture, fixture-v1.",
+        "source_record_url": "https://example.invalid/autolean/closed-loop",
+        "download_url": f"https://example.invalid/autolean/{reference_id}{extension}",
+        "allowed_redirect_urls": [],
+        "media_type": media_type,
+        "file_extension": extension,
+        "size_bytes": len(payload),
+        "max_bytes": len(payload) + 64,
+        "sha256": hashlib.sha256(payload).hexdigest(),
+        "retrieved_at": "2026-01-01T00:00:00Z",
+        "license": {
+            "expression": "CC0-1.0",
+            "url": "https://creativecommons.org/publicdomain/zero/1.0/",
+            "evidence_url": "https://example.invalid/autolean/closed-loop",
+        },
+        "access_policy": "public_open_access",
+        "acquisition_policy": "operator_only",
+        "model_egress_policy": "local_only",
+        "artifact_kind": artifact_kind,
+        "derivation": derivation,
+        "attribution": _ATTRIBUTION,
+    }
+
+
+def _source_harness(root: Path) -> SourceToStatementHarness:
+    root.mkdir(parents=True, exist_ok=True)
+    manifest_payload = {
+        "schema_version": "autolean.reference-manifest.v1",
+        "entries": [
+            _reference_entry(
+                reference_id=_PARENT_REFERENCE_ID,
+                payload=_PARENT_BYTES,
+                media_type="application/pdf",
+                extension=".pdf",
+                artifact_kind="source_document",
+                derivation=None,
+            ),
+            _reference_entry(
+                reference_id=_TEXT_REFERENCE_ID,
+                payload=_TEXT_BYTES,
+                media_type="text/plain",
+                extension=".txt",
+                artifact_kind="derived_text",
+                derivation={
+                    "kind": "repository_text_extraction",
+                    "parent_reference_id": _PARENT_REFERENCE_ID,
+                    "parent_sha256": _PARENT_SHA256,
+                    "producer": "AutoLean synthetic fixture",
+                    "method": "repository_provided_text_bitstream",
+                    "tool_name": None,
+                    "tool_version": None,
+                    "provenance_url": "https://example.invalid/autolean/closed-loop",
+                    "parent_locator_authority": "human_declared",
+                },
+            ),
+        ],
+    }
+    manifest_path = root / "manifest.json"
+    manifest_path.write_text(json.dumps(manifest_payload), encoding="utf-8")
+    payloads = {
+        _PARENT_REFERENCE_ID: _PARENT_BYTES,
+        _TEXT_REFERENCE_ID: _TEXT_BYTES,
+    }
+
+    def download(entry: ReferenceEntryV1, destination: BinaryIO) -> DownloadObservation:
+        destination.write(payloads[entry.reference_id])
+        assert entry.download_url is not None
+        return DownloadObservation(
+            final_url=entry.download_url,
+            media_type=entry.media_type,
+            network_used=False,
+        )
+
+    cache = ReferenceCache(
+        ReferenceManifestV1.load(manifest_path),
+        root / "cache",
+        confinement_root=root,
+        downloader=download,
     )
+    cache.operator_fetch(_PARENT_REFERENCE_ID)
+    cache.operator_fetch(_TEXT_REFERENCE_ID)
+    return SourceToStatementHarness(
+        cache,
+        preparation_ledger=SourcePreparationLedger(
+            root / "source-preparations.db",
+            confinement_root=root,
+        ),
+    )
+
+
+def _draft_request(*, revision: int) -> StatementDraftRequest:
+    is_second_revision = revision == 2
+    source_text = _SOURCE_V2 if is_second_revision else _SOURCE_V1
     normalized = (
         "For all x : Nat, there exists y : Nat with x < y and x + 1 <= y."
         if is_second_revision
@@ -144,33 +255,8 @@ def _draft(*, revision: int) -> StatementContractV1:
         "Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, "
         + ("x < y /\\ x + 1 <= y" if is_second_revision else "x < y /\\ x <= y")
     )
-    source_id = _id("source")
-    span = SourceSpanV1(
-        span_id=_id(f"source-span-r{revision}"),
-        locator=f"fixture:closed-loop:source:r{revision}",
-        content_hash=digest_text(HashKindV1.SOURCE_SPAN, source_text),
-        permitted_excerpt=source_text,
-    )
-    source = SourceRecordV1(
-        source_id=source_id,
-        work_id="closed-loop-cc0-fixture",
-        title="Synthetic Builder-Prover closure fixture",
-        version=str(revision),
-        locator=f"fixture://closed-loop/source/r{revision}",
-        content_hash=digest_text(HashKindV1.SOURCE_BYTES, source_text),
-        spans=(span,),
-    )
-    rights = RightsRecordV1(
-        rights_id=_id("rights"),
-        source_id=source_id,
-        source_license="CC0-1.0",
-        overall_decision=PermissionDecisionV1.ALLOW,
-        redistribution=PermissionDecisionV1.ALLOW,
-        model_egress=PermissionDecisionV1.ALLOW,
-        allowed_endpoint_classes=(EndpointClassV1.LOCAL,),
-        reviewed_by="closed-loop-rights-fixture",
-        reviewed_at=datetime(2026, 1, 1, tzinfo=UTC),
-    )
+    source_bytes = source_text.encode()
+    start_offset = _TEXT_BYTES.index(source_bytes)
     formal = FormalSpecificationV1(
         declaration_name="bounded_witness",
         namespace="AutoLean.ClosedLoop",
@@ -191,12 +277,37 @@ def _draft(*, revision: int) -> StatementContractV1:
         ),
         imports_allowlist=("Mathlib",),
     )
-    return StatementContractV1(
-        contract_id=_id("contract"),
+    return StatementDraftRequest(
+        contract_key="closed-loop.bounded-witness",
         revision=revision,
         task_kind=TaskKindV1.KNOWN_THEOREM,
-        source=source,
-        rights=rights,
+        spans=(
+            ChapterSourceSpan(
+                span_key=f"bounded-witness-r{revision}",
+                human_declared_chapter_locator=f"synthetic:revision:{revision}",
+                human_declared_page_locator="synthetic:page:1",
+                permitted_excerpt=source_text,
+                source_analyst_id="closed-loop-source-analyst",
+                verified_artifact_sha256=_TEXT_SHA256,
+                start_offset=start_offset,
+                end_offset=start_offset + len(source_bytes),
+            ),
+        ),
+        rights=RightsReview(
+            review_key="closed-loop-source-rights-v1",
+            source_license="CC0-1.0",
+            generated_code_license="Apache-2.0",
+            overall_decision=PermissionDecisionV1.ALLOW,
+            redistribution=PermissionDecisionV1.ALLOW,
+            model_egress=PermissionDecisionV1.ALLOW,
+            training=PermissionDecisionV1.RESTRICTED,
+            embedding=PermissionDecisionV1.RESTRICTED,
+            allowed_endpoint_classes=(EndpointClassV1.LOCAL,),
+            attribution=_ATTRIBUTION,
+            restrictions=(),
+            reviewed_by="closed-loop-rights-fixture",
+            reviewed_at=datetime(2026, 1, 1, tzinfo=UTC),
+        ),
         mathematics=MathematicalSpecificationV1(
             informal_statement=source_text,
             normalized_statement=normalized,
@@ -204,19 +315,22 @@ def _draft(*, revision: int) -> StatementContractV1:
             quantifier_order=("forall x : Nat", "exists y : Nat"),
         ),
         formal=formal,
-        alignments=(
-            AlignmentTargetV1(
-                source_span_id=span.span_id,
-                formal_target="AutoLean.ClosedLoop.bounded_witness",
-                relation="formalizes",
-                confidence=1.0,
-                reviewer_id="closed-loop-semantic-reviewer",
-            ),
-        ),
         policy=TaskPolicyV1(
             release_tier=ReleaseTierV1.CALIBRATION,
             fidelity_risk=FidelityRiskV1.L1_SIMPLE,
         ),
+        alignment_reviewer_id="closed-loop-semantic-reviewer",
+    )
+
+
+def _prepare_draft(
+    harness: SourceToStatementHarness,
+    *,
+    revision: int,
+) -> StatementDraftPacket:
+    return harness.prepare_draft(
+        _TEXT_REFERENCE_ID,
+        _draft_request(revision=revision),
     )
 
 
@@ -378,35 +492,19 @@ class _SemanticReviewer:
         )
 
 
-def _evaluation(contract: StatementContractV1) -> FidelityEvaluation:
-    return StatementFidelityHarness().run(
-        contract,
-        obligations=_obligations(contract),
+def _evaluation(
+    harness: SourceToStatementHarness,
+    packet: StatementDraftPacket,
+) -> FidelityEvaluation:
+    return harness.run_fidelity(
+        packet,
+        obligations=_obligations(packet.contract),
         translators=(
             _Translator("translator-a", "independence-a"),
             _Translator("translator-b", "independence-b"),
         ),
         mutation_agent=_MutationAgent(),
         reviewer=_SemanticReviewer(),
-    )
-
-
-def _source_preparation(contract: StatementContractV1) -> SourcePreparationRecordV1:
-    content_hash = contract.semantic_hash().value
-    return SourcePreparationRecordV1(
-        preparation_id=stable_identifier(
-            "source-preparation",
-            f"{contract.contract_id.value}:revision:{contract.revision}",
-        ),
-        contract_id=contract.contract_id,
-        revision=contract.revision,
-        packet_sha256=content_hash,
-        contract_sha256=digest_model(HashKindV1.CONTRACT, contract).value,
-        rights_sha256=content_hash,
-        spans_sha256=content_hash,
-        manifest_sha256=content_hash,
-        artifact_sha256=contract.source.content_hash.value,
-        parent_artifact_sha256=contract.source.content_hash.value,
     )
 
 
@@ -445,25 +543,22 @@ def _plane(tmp_path: Path) -> ControlPlane:
 
 def _review_and_bridge(
     plane: ControlPlane,
-    draft: StatementContractV1,
+    harness: SourceToStatementHarness,
+    packet: StatementDraftPacket,
 ) -> tuple[
     FidelityEvaluation,
     ArtifactRef,
     StatementContractV1,
     FormalizationTaskBundleV1,
 ]:
-    evaluation = _evaluation(draft)
+    evaluation = _evaluation(harness, packet)
     evidence_ref = plane.artifacts.put_bytes(evaluation.render_artifact())
-    frozen = freeze_contract(
-        draft,
+    bundle = harness.revalidate_freeze_and_bridge(
+        packet,
         evaluation=evaluation,
-        source_preparation=_source_preparation(draft),
         frozen_by="closed-loop-builder-fixture",
-    )
-    bundle = bridge_frozen_contract(
-        frozen,
-        _graphs(revision=draft.revision),
-        bundle_key=f"closed-loop-r{draft.revision}",
+        graphs=_graphs(revision=packet.contract.revision),
+        bundle_key=f"closed-loop-r{packet.contract.revision}",
         fidelity_evidence=FidelityEvidenceArtifactRefV1(
             digest=evaluation.evidence_hash,
             size=evidence_ref.size,
@@ -471,7 +566,7 @@ def _review_and_bridge(
         attestor=HmacAttestationSignerV1(_BUILDER_KEY),
         evidence_identity=evidence_ref.uri,
     )
-    return evaluation, evidence_ref, frozen, bundle
+    return evaluation, evidence_ref, bundle.contract, bundle
 
 
 def _proof_artifact_digest(event_payload: Mapping[str, object]) -> str:
@@ -582,9 +677,11 @@ def _synthetic_passing_report(
 
 def test_registration_requires_the_referenced_fidelity_artifact(tmp_path: Path) -> None:
     builder_plane = _plane(tmp_path / "builder")
+    harness = _source_harness(tmp_path / "source")
     _evaluation_result, _evidence_ref, _frozen, bundle = _review_and_bridge(
         builder_plane,
-        _draft(revision=1),
+        harness,
+        _prepare_draft(harness, revision=1),
     )
     empty_registration_plane = _plane(tmp_path / "registration")
 
@@ -596,9 +693,11 @@ def test_failure_feedback_is_immutable_and_a_new_revision_restarts_builder(
     tmp_path: Path,
 ) -> None:
     plane = _plane(tmp_path)
+    harness = _source_harness(tmp_path / "source")
     evaluation, evidence_ref, frozen_v1, bundle_v1 = _review_and_bridge(
         plane,
-        _draft(revision=1),
+        harness,
+        _prepare_draft(harness, revision=1),
     )
     assert evidence_ref.digest == evaluation.evidence_hash.value
     assert plane.artifacts.get_bytes(evidence_ref) == evaluation.render_artifact()
@@ -663,16 +762,20 @@ def test_failure_feedback_is_immutable_and_a_new_revision_restarts_builder(
     assert bundle_v1.contract.formal.lean_statement_source == old_statement
     assert bundle_v1.contract.status is StatementStatusV1.FROZEN
 
+    packet_v2 = _prepare_draft(harness, revision=2)
     draft_v2 = create_next_revision(
         frozen_v1,
-        _draft(revision=2),
+        packet_v2.contract,
         request=request,
     )
     assert draft_v2.status is StatementStatusV1.DRAFT
-    with pytest.raises(BuilderError, match="only a frozen contract"):
-        bridge_frozen_contract(
-            draft_v2,
-            _graphs(revision=2),
+    assert draft_v2 == packet_v2.contract
+    with pytest.raises(FreezeRejected, match="another contract revision"):
+        harness.revalidate_freeze_and_bridge(
+            packet_v2,
+            evaluation=evaluation,
+            frozen_by="closed-loop-builder-fixture",
+            graphs=_graphs(revision=2),
             bundle_key="closed-loop-r2",
             fidelity_evidence=FidelityEvidenceArtifactRefV1(
                 digest=evaluation.evidence_hash,
@@ -681,17 +784,11 @@ def test_failure_feedback_is_immutable_and_a_new_revision_restarts_builder(
             attestor=HmacAttestationSignerV1(_BUILDER_KEY),
             evidence_identity="unreviewed-r2",
         )
-    with pytest.raises(FreezeRejected, match="another contract revision"):
-        freeze_contract(
-            draft_v2,
-            evaluation=evaluation,
-            source_preparation=_source_preparation(draft_v2),
-            frozen_by="closed-loop-builder-fixture",
-        )
 
     evaluation_v2, evidence_ref_v2, frozen_v2, bundle_v2 = _review_and_bridge(
         plane,
-        draft_v2,
+        harness,
+        packet_v2,
     )
     assert evidence_ref_v2.digest == evaluation_v2.evidence_hash.value
     assert evidence_ref_v2 != evidence_ref
@@ -716,21 +813,38 @@ def test_failure_feedback_is_immutable_and_a_new_revision_restarts_builder(
         )
 
 
-def test_fake_prover_uses_only_the_bridge_and_independent_acceptance_is_bound(
+def test_source_backed_bundle_reaches_fake_prover_and_independent_synthetic_acceptance(
     tmp_path: Path,
 ) -> None:
     plane = _plane(tmp_path)
-    evaluation, _evidence_ref, _frozen, bundle = _review_and_bridge(
+    harness = _source_harness(tmp_path / "source")
+    packet = _prepare_draft(harness, revision=1)
+    evaluation, evidence_ref, frozen, bundle = _review_and_bridge(
         plane,
-        _draft(revision=1),
+        harness,
+        packet,
     )
-    plane.register_bundle(bundle, idempotency_key="register-proof")
+    assert frozen.freeze is not None
+    assert frozen.freeze.source_preparation_id == packet.preparation_id
+    assert frozen.freeze.source_preparation_hash == packet.preparation_record().artifact_digest()
+    assert frozen.source.content_hash.value == _TEXT_SHA256
+    assert frozen.source.spans[0].permitted_excerpt is None
+    assert evidence_ref.digest == evaluation.evidence_hash.value
+    binding = plane.register_bundle(bundle, idempotency_key="register-proof")
+    assert binding.bundle_hash == bundle.handoff_hash().value
+    assert binding.fidelity_evidence_artifact == evidence_ref
     claim = plane.claim(
         bundle.bundle_id.value,
         worker_id="closed-loop-proof-worker",
         ttl_seconds=60,
         idempotency_key="claim-proof",
     )
+    oci_ready_workspace = WorkspaceMaterializer().materialize(
+        bundle,
+        tmp_path / "oci-ready-attempt",
+    )
+    assert oci_ready_workspace.bundle is bundle
+    assert oci_ready_workspace.task_input.bundle_hash == binding.bundle_hash
 
     context = ContextPackBuilder().build(
         bundle,
@@ -783,6 +897,8 @@ def test_fake_prover_uses_only_the_bridge_and_independent_acceptance_is_bound(
         idempotency_key="verify-proof-r1",
     )
     assert outcome.accepted
+    assert outcome.promotion_state == "not_a_promotion"
+    assert outcome.execution_authority_class == "test-only-local"
     assert outcome.event.event_type == "verification.accepted"
     assert outcome.event.payload["contract_hash"] == bundle.contract.semantic_hash().value
     assert outcome.event.payload["proof_boundary_hash"] == (
