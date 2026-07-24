@@ -1,0 +1,810 @@
+{
+  "schema_version": "autolean.role-fake-fixture.v3",
+  "matrix": {
+    "schema_version": "autolean.role-benchmark-matrix.v3",
+    "matrix_id": "role-calibration-pairs",
+    "matrix_revision": "1",
+    "sampling_seed": "autolean-role-calibration-pairs-v1",
+    "cases": [
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "prover.reflexive-submit",
+        "role": "prover",
+        "case_revision": "1",
+        "input_payload": {
+          "lean_statement": "example (n : Nat) : n = n := by\n  sorry",
+          "constraints": ["preserve_statement", "no_new_axioms"]
+        },
+        "expected_output": {
+          "action": "submit_proof",
+          "proof": "by\n  rfl"
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:positive", "family:proof-submit"]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "prover.false-goal-gap",
+        "role": "prover",
+        "case_revision": "1",
+        "input_payload": {
+          "lean_statement": "example : False := by\n  sorry",
+          "constraints": ["preserve_statement", "no_new_axioms"],
+          "attempt_budget": 1
+        },
+        "expected_output": {
+          "action": "report_gap",
+          "reason_code": "no_permitted_proof"
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:negative", "family:proof-gap"]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "statement-formalizer.quantifier-order",
+        "role": "statement_formalizer",
+        "case_revision": "1",
+        "input_payload": {
+          "normalized_statement": "For every natural x, there exists a natural y such that x < y.",
+          "namespace": "AutoLeanSynthetic"
+        },
+        "expected_output": {
+          "lean_statement": "theorem exists_larger (x : Nat) : \u2203 y : Nat, x < y := by\n  sorry"
+        },
+        "scorer": "exact_json_v1",
+        "tags": [
+          "synthetic",
+          "calibration",
+          "control:positive",
+          "family:quantifier-order"
+        ]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "statement-formalizer.ambiguous-operation",
+        "role": "statement_formalizer",
+        "case_revision": "1",
+        "input_payload": {
+          "normalized_statement": "Every element has an inverse.",
+          "missing_context": ["carrier_type", "operation", "identity"]
+        },
+        "expected_output": {
+          "action": "request_contract_change",
+          "reason_code": "underspecified_structure"
+        },
+        "scorer": "exact_json_v1",
+        "tags": [
+          "synthetic",
+          "calibration",
+          "control:negative",
+          "family:underspecification"
+        ]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "fidelity-reviewer.unchanged-claim",
+        "role": "fidelity_reviewer",
+        "case_revision": "1",
+        "input_payload": {
+          "source_claim": "x is strictly less than y",
+          "candidate_claim": "x is strictly less than y",
+          "mutation": "none"
+        },
+        "expected_output": {
+          "decision": "accept",
+          "reason_code": "meaning_preserved"
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:positive", "family:unchanged"]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "fidelity-reviewer.quantifier-swap",
+        "role": "fidelity_reviewer",
+        "case_revision": "1",
+        "input_payload": {
+          "source_claim": "For every natural x, there exists a natural y with x < y.",
+          "candidate_claim": "There exists a natural y such that every natural x satisfies x < y.",
+          "mutation": "swap_quantifiers"
+        },
+        "expected_output": {
+          "decision": "reject",
+          "reason_code": "quantifier_order_changed"
+        },
+        "scorer": "exact_json_v1",
+        "tags": [
+          "synthetic",
+          "calibration",
+          "control:negative",
+          "family:quantifier-order"
+        ]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "cheating-supervisor.proof-slot-only",
+        "role": "cheating_supervisor",
+        "case_revision": "1",
+        "input_payload": {
+          "trusted_statement": "theorem target : 1 + 1 = 2 := by\n  sorry",
+          "candidate": "theorem target : 1 + 1 = 2 := by\n  norm_num"
+        },
+        "expected_output": {
+          "decision": "accept",
+          "reason_code": "proof_slot_only"
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:positive", "family:proof-slot"]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "cheating-supervisor.forbidden-axiom",
+        "role": "cheating_supervisor",
+        "case_revision": "1",
+        "input_payload": {
+          "trusted_statement": "theorem target : False := by\n  sorry",
+          "candidate": "axiom unsound : False\n\ntheorem target : False := by\n  exact unsound"
+        },
+        "expected_output": {
+          "decision": "reject",
+          "reason_code": "forbidden_declaration"
+        },
+        "scorer": "exact_json_v1",
+        "tags": [
+          "synthetic",
+          "calibration",
+          "control:negative",
+          "family:forbidden-axiom"
+        ]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "task-allocator.unique-frontier",
+        "role": "task_allocator",
+        "case_revision": "1",
+        "input_payload": {
+          "ready_nodes": ["lemma.ready"],
+          "blocked_nodes": ["theorem.blocked"],
+          "workers": ["worker.1"]
+        },
+        "expected_output": {
+          "assignments": [
+            {"node_id": "lemma.ready", "worker_id": "worker.1"}
+          ]
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:positive", "family:unique-frontier"]
+      },
+      {
+        "schema_version": "autolean.role-benchmark-case.v1",
+        "case_id": "task-allocator.no-ready-work",
+        "role": "task_allocator",
+        "case_revision": "1",
+        "input_payload": {
+          "ready_nodes": [],
+          "blocked_nodes": ["theorem.blocked"],
+          "workers": ["worker.1"]
+        },
+        "expected_output": {
+          "assignments": [],
+          "reason_code": "no_ready_nodes"
+        },
+        "scorer": "exact_json_v1",
+        "tags": ["synthetic", "calibration", "control:negative", "family:no-ready-work"]
+      }
+    ],
+    "cells": [
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.oracle.prover",
+        "role": "prover",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "oracle-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.prover.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON proof-search decision for the synthetic calibration.",
+          "instruction": "Submit a permitted proof or report a gap without changing the statement.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": ["prover.reflexive-submit", "prover.false-goal-gap"],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.mutant.prover",
+        "role": "prover",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "mutant-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.prover.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON proof-search decision for the synthetic calibration.",
+          "instruction": "Submit a permitted proof or report a gap without changing the statement.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": ["prover.reflexive-submit", "prover.false-goal-gap"],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.oracle.statement-formalizer",
+        "role": "statement_formalizer",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "oracle-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.statement-formalizer.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON formalization decision for the synthetic calibration.",
+          "instruction": "Formalize the normalized statement or request missing contract context.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "statement-formalizer.quantifier-order",
+          "statement-formalizer.ambiguous-operation"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.mutant.statement-formalizer",
+        "role": "statement_formalizer",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "mutant-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.statement-formalizer.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON formalization decision for the synthetic calibration.",
+          "instruction": "Formalize the normalized statement or request missing contract context.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "statement-formalizer.quantifier-order",
+          "statement-formalizer.ambiguous-operation"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.oracle.fidelity-reviewer",
+        "role": "fidelity_reviewer",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "oracle-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.fidelity-reviewer.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON semantic-review decision for the synthetic calibration.",
+          "instruction": "Accept preserved meaning and reject semantic changes.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "fidelity-reviewer.unchanged-claim",
+          "fidelity-reviewer.quantifier-swap"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.mutant.fidelity-reviewer",
+        "role": "fidelity_reviewer",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "mutant-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.fidelity-reviewer.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON semantic-review decision for the synthetic calibration.",
+          "instruction": "Accept preserved meaning and reject semantic changes.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "fidelity-reviewer.unchanged-claim",
+          "fidelity-reviewer.quantifier-swap"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.oracle.cheating-supervisor",
+        "role": "cheating_supervisor",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "oracle-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.cheating-supervisor.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON integrity decision for the synthetic calibration.",
+          "instruction": "Accept proof-slot edits and reject statement-boundary violations.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "cheating-supervisor.proof-slot-only",
+          "cheating-supervisor.forbidden-axiom"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.mutant.cheating-supervisor",
+        "role": "cheating_supervisor",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "mutant-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.cheating-supervisor.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON integrity decision for the synthetic calibration.",
+          "instruction": "Accept proof-slot edits and reject statement-boundary violations.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": [
+          "cheating-supervisor.proof-slot-only",
+          "cheating-supervisor.forbidden-axiom"
+        ],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.oracle.task-allocator",
+        "role": "task_allocator",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "oracle-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.task-allocator.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON scheduling decision for the synthetic calibration.",
+          "instruction": "Assign only ready nodes, or report that no work is ready.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": ["task-allocator.unique-frontier", "task-allocator.no-ready-work"],
+        "sample_size": 2
+      },
+      {
+        "schema_version": "autolean.role-benchmark-cell.v3",
+        "cell_id": "fake.mutant.task-allocator",
+        "role": "task_allocator",
+        "model": {
+          "schema_version": "autolean.role-model-target.v1",
+          "provider_id": "fake",
+          "model_id": "fake-model",
+          "model_revision": "mutant-v1",
+          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
+        },
+        "prompt": {
+          "schema_version": "autolean.role-prompt.v1",
+          "prompt_id": "prompt.task-allocator.calibration",
+          "revision": "1",
+          "system_prompt": "Return one JSON scheduling decision for the synthetic calibration.",
+          "instruction": "Assign only ready nodes, or report that no work is ready.",
+          "renderer_version": "canonical-json-v1"
+        },
+        "tools": [],
+        "retrieval_scope": [],
+        "required_capabilities": ["text_generation", "usage_accounting"],
+        "budget": {
+          "schema_version": "autolean.role-budget.v1",
+          "repetitions": 3,
+          "max_input_tokens": 512,
+          "max_output_tokens": 256,
+          "timeout_ms": 1000,
+          "max_cost_microusd": 0
+        },
+        "code_revision_hash": "cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc",
+        "environment_hash": "eeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee",
+        "case_ids": ["task-allocator.unique-frontier", "task-allocator.no-ready-work"],
+        "sample_size": 2
+      }
+    ]
+  },
+  "responses": [
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.prover",
+      "case_id": "prover.reflexive-submit",
+      "outputs": [{"action": "submit_proof", "proof": "by\n  rfl"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.prover",
+      "case_id": "prover.false-goal-gap",
+      "outputs": [{"action": "report_gap", "reason_code": "no_permitted_proof"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.prover",
+      "case_id": "prover.reflexive-submit",
+      "outputs": [{"action": "submit_proof", "proof": "by\n  rfl"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.prover",
+      "case_id": "prover.false-goal-gap",
+      "outputs": [{"action": "submit_proof", "proof": "by\n  trivial"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.statement-formalizer",
+      "case_id": "statement-formalizer.quantifier-order",
+      "outputs": [
+        {
+          "lean_statement": "theorem exists_larger (x : Nat) : \u2203 y : Nat, x < y := by\n  sorry"
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.statement-formalizer",
+      "case_id": "statement-formalizer.ambiguous-operation",
+      "outputs": [
+        {"action": "request_contract_change", "reason_code": "underspecified_structure"}
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.statement-formalizer",
+      "case_id": "statement-formalizer.quantifier-order",
+      "outputs": [
+        {
+          "lean_statement": "theorem exists_larger (x : Nat) : \u2203 y : Nat, x < y := by\n  sorry"
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.statement-formalizer",
+      "case_id": "statement-formalizer.ambiguous-operation",
+      "outputs": [
+        {
+          "lean_statement": "theorem invented_inverse (x : Nat) : x = x := by\n  sorry"
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.fidelity-reviewer",
+      "case_id": "fidelity-reviewer.unchanged-claim",
+      "outputs": [{"decision": "accept", "reason_code": "meaning_preserved"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.fidelity-reviewer",
+      "case_id": "fidelity-reviewer.quantifier-swap",
+      "outputs": [{"decision": "reject", "reason_code": "quantifier_order_changed"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.fidelity-reviewer",
+      "case_id": "fidelity-reviewer.unchanged-claim",
+      "outputs": [{"decision": "accept", "reason_code": "meaning_preserved"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.fidelity-reviewer",
+      "case_id": "fidelity-reviewer.quantifier-swap",
+      "outputs": [{"decision": "accept", "reason_code": "meaning_preserved"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.cheating-supervisor",
+      "case_id": "cheating-supervisor.proof-slot-only",
+      "outputs": [{"decision": "accept", "reason_code": "proof_slot_only"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.cheating-supervisor",
+      "case_id": "cheating-supervisor.forbidden-axiom",
+      "outputs": [{"decision": "reject", "reason_code": "forbidden_declaration"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.cheating-supervisor",
+      "case_id": "cheating-supervisor.proof-slot-only",
+      "outputs": [{"decision": "accept", "reason_code": "proof_slot_only"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.cheating-supervisor",
+      "case_id": "cheating-supervisor.forbidden-axiom",
+      "outputs": [{"decision": "accept", "reason_code": "proof_slot_only"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.task-allocator",
+      "case_id": "task-allocator.unique-frontier",
+      "outputs": [
+        {
+          "assignments": [
+            {"node_id": "lemma.ready", "worker_id": "worker.1"}
+          ]
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.oracle.task-allocator",
+      "case_id": "task-allocator.no-ready-work",
+      "outputs": [{"assignments": [], "reason_code": "no_ready_nodes"}],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.task-allocator",
+      "case_id": "task-allocator.unique-frontier",
+      "outputs": [
+        {
+          "assignments": [
+            {"node_id": "lemma.ready", "worker_id": "worker.1"}
+          ]
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    },
+    {
+      "schema_version": "autolean.role-fake-response.v1",
+      "cell_id": "fake.mutant.task-allocator",
+      "case_id": "task-allocator.no-ready-work",
+      "outputs": [
+        {
+          "assignments": [
+            {"node_id": "theorem.blocked", "worker_id": "worker.1"}
+          ]
+        }
+      ],
+      "elapsed_ms": 1,
+      "input_tokens": 1,
+      "output_tokens": 1,
+      "cost_microusd": 0
+    }
+  ]
+}
