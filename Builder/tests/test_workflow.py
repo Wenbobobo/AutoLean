@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import hashlib
 import json
+from collections.abc import Callable
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
@@ -11,15 +13,20 @@ from autolean_builder import (
     BuilderCase,
     BuilderError,
     BuilderStage,
-    CandidateFormalization,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
+    CanonicalTypeEnvironmentFacts,
+    CanonicalTypeQueryAssurance,
+    CanonicalTypeQueryFacts,
+    CanonicalTypeQueryRequest,
+    CanonicalTypeQueryResult,
     EvidenceAuthority,
     FidelityHarnessError,
     FreezeRejected,
     MutationReviewVerdict,
     ObligationReviewVerdict,
+    SelectedStatementBaseline,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
@@ -270,6 +277,109 @@ class FakeTranslationAgent:
         )
 
 
+@dataclass(slots=True)
+class FakeCanonicalTypeQuery:
+    contract: StatementContractV1
+    canonical_types: dict[str, str] | None = None
+    failures: dict[str, str] | None = None
+    hash_mismatch_subjects: frozenset[str] = frozenset()
+    environment_drift_subjects: frozenset[str] = frozenset()
+    calls: list[str] | None = None
+
+    def query(self, request: CanonicalTypeQueryRequest) -> CanonicalTypeQueryResult:
+        if self.calls is None:
+            self.calls = []
+        self.calls.append(request.subject_id)
+        if self.failures is not None and request.subject_id in self.failures:
+            raise RuntimeError(self.failures[request.subject_id])
+        formal = self.contract.formal
+        assert formal.elaborated_type is not None
+        canonical_type = (
+            self.canonical_types.get(request.subject_id, formal.elaborated_type)
+            if self.canonical_types is not None
+            else formal.elaborated_type
+        )
+        worker_digest = formal.environment.verifier_execution_policy.worker_image_digest
+        if request.subject_id in self.environment_drift_subjects:
+            worker_digest = "sha256:" + "d" * 64
+        lake_manifest = formal.environment.lake_manifest_hash
+        return CanonicalTypeQueryResult(
+            declaration=request.declaration,
+            canonical_type=canonical_type,
+            canonical_type_sha256=(
+                "0" * 64
+                if request.subject_id in self.hash_mismatch_subjects
+                else hashlib.sha256(canonical_type.encode()).hexdigest()
+            ),
+            environment=CanonicalTypeEnvironmentFacts(
+                assurance=CanonicalTypeQueryAssurance.SCRIPTED_FAKE,
+                adapter_id="builder.tests.scripted-canonical-query",
+                image=f"autolean/scripted-builder-query@{worker_digest}",
+                worker_image_digest=worker_digest,
+                lean_version=formal.environment.lean_version,
+                mathlib_revision=formal.environment.mathlib_revision,
+                lake_manifest_sha256=(None if lake_manifest is None else lake_manifest.value),
+                type_format="autolean.lean-pp-expr.v1",
+                query_schema_version="autolean.scripted-canonical-query.v1",
+                query_protocol="autolean.scripted-canonical-query.v1",
+                query_identity_sha256=_sha256("scripted-query-identity"),
+                build_receipt_canonical_sha256=_sha256("scripted-build-receipt"),
+                execution_policy_sha256=_sha256("scripted-execution-policy"),
+                source_inputs_sha256=_sha256("scripted-source-inputs"),
+                source_rendering_profile="autolean.scripted-header.v1",
+            ),
+            query=CanonicalTypeQueryFacts(
+                query_output_sha256=_sha256(f"query:{request.subject_id}"),
+                source_snapshot_sha256=hashlib.sha256(
+                    request.statement_source.encode()
+                ).hexdigest(),
+                sealed_candidate_sha256=_sha256(f"sealed:{request.subject_id}"),
+                candidate_direct_imports_sha256=_sha256("scripted-direct-imports"),
+                module_import_closure_sha256=_sha256("scripted-import-closure"),
+                observed_axioms=(),
+                observed_axioms_sha256=hashlib.sha256(b"[]\n").hexdigest(),
+            ),
+        )
+
+
+def _sha256(value: str) -> str:
+    return hashlib.sha256(value.encode()).hexdigest()
+
+
+def _fidelity_harness(
+    contract: StatementContractV1,
+    *,
+    query: FakeCanonicalTypeQuery | None = None,
+    clock: Callable[[], datetime] | None = None,
+) -> StatementFidelityHarness:
+    return StatementFidelityHarness(
+        canonical_type_query=query or FakeCanonicalTypeQuery(contract),
+        **({} if clock is None else {"clock": clock}),
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class UnreachableMutationAgent:
+    actor_id: str = "unreachable-mutation-agent"
+
+    def generate(
+        self,
+        task: TranslationTask,
+        baseline: SelectedStatementBaseline,
+    ) -> tuple[MutationProbeV1, ...]:
+        del task, baseline
+        raise AssertionError("mutation callback must be unreachable")
+
+
+@dataclass(frozen=True, slots=True)
+class UnreachableReviewer:
+    reviewer_id: str = "unreachable-reviewer"
+
+    def review(self, packet: SemanticReviewPacket) -> SemanticReviewVerdict:
+        del packet
+        raise AssertionError("reviewer callback must be unreachable")
+
+
 @dataclass(frozen=True, slots=True)
 class FakeMutationSuiteAgent:
     actor_id: str = "mutation-suite-fixture"
@@ -278,9 +388,10 @@ class FakeMutationSuiteAgent:
     def generate(
         self,
         task: TranslationTask,
-        selected_candidate: CandidateFormalization,
+        baseline: SelectedStatementBaseline,
     ) -> tuple[MutationProbeV1, ...]:
-        assert selected_candidate.statement_hash == task.selected_statement_hash
+        assert baseline.statement_source_hash == task.selected_statement_hash
+        assert baseline.lean_statement_source == task.selected_lean_statement
         return tuple(
             MutationProbeV1(
                 probe_id=_id(f"mutation-{item['kind']}"),
@@ -364,7 +475,7 @@ def _evaluation(
     false_negative_kind: MutationKindV1 | None = None,
 ):
     active_contract = contract or _contract()
-    return StatementFidelityHarness().run(
+    return _fidelity_harness(active_contract).run(
         active_contract,
         obligations=_obligations(active_contract),
         translators=_translators(),
@@ -376,7 +487,10 @@ def _evaluation(
 def test_statement_fidelity_harness_rejects_naive_clock() -> None:
     contract = _contract()
     with pytest.raises(FidelityHarnessError, match=r"clock.*timezone-aware"):
-        StatementFidelityHarness(clock=lambda: datetime(2026, 7, 25, 12, 0)).run(
+        _fidelity_harness(
+            contract,
+            clock=lambda: datetime(2026, 7, 25, 12, 0),
+        ).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),
@@ -530,28 +644,8 @@ def test_false_negative_mutation_golden_blocks_freeze(kind: MutationKindV1) -> N
         )
 
 
-def test_harness_rejects_mismatched_candidate_before_reviewer_runs() -> None:
+def test_harness_rejects_canonical_type_mismatch_before_reviewer_runs() -> None:
     contract = _contract()
-
-    @dataclass(frozen=True, slots=True)
-    class UnreachableMutationAgent:
-        actor_id: str = "unreachable-mutation-agent"
-
-        def generate(
-            self,
-            task: TranslationTask,
-            selected_candidate: CandidateFormalization,
-        ) -> tuple[MutationProbeV1, ...]:
-            del task, selected_candidate
-            raise AssertionError("mutation must not receive a candidate that fails exact matching")
-
-    @dataclass(frozen=True, slots=True)
-    class UnreachableReviewer:
-        reviewer_id: str = "unreachable-reviewer"
-
-        def review(self, packet: SemanticReviewPacket) -> SemanticReviewVerdict:
-            del packet
-            raise AssertionError("reviewer must not receive a candidate that fails exact matching")
 
     translators = (
         FakeTranslationAgent(
@@ -563,14 +657,144 @@ def test_harness_rejects_mismatched_candidate_before_reviewer_runs() -> None:
         ),
         FakeTranslationAgent("translator-b", "team-b", "candidate-b", _golden()["lean_statement"]),
     )
-    with pytest.raises(FidelityHarnessError, match="exactly match"):
-        StatementFidelityHarness().run(
+    query = FakeCanonicalTypeQuery(
+        contract,
+        canonical_types={"candidate-a": "True"},
+    )
+    with pytest.raises(FidelityHarnessError, match="canonical type differs"):
+        _fidelity_harness(contract, query=query).run(
             contract,
             obligations=_obligations(contract),
             translators=translators,
             mutation_agent=UnreachableMutationAgent(),
             reviewer=UnreachableReviewer(),
         )
+
+
+def test_harness_rejects_fresh_reference_drift_before_callbacks() -> None:
+    contract = _contract()
+    query = FakeCanonicalTypeQuery(
+        contract,
+        canonical_types={"contract-selected-reference": "True"},
+    )
+
+    with pytest.raises(FidelityHarnessError, match="reference canonical type drifted"):
+        _fidelity_harness(contract, query=query).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
+        )
+
+    assert query.calls == ["contract-selected-reference"]
+
+
+def test_harness_rejects_candidate_elaboration_failure_before_callbacks() -> None:
+    contract = _contract()
+    query = FakeCanonicalTypeQuery(
+        contract,
+        failures={"candidate-a": "fixture parse/elaboration failure"},
+    )
+
+    with pytest.raises(FidelityHarnessError, match="parse/elaboration failure"):
+        _fidelity_harness(contract, query=query).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
+        )
+
+    assert query.calls == ["contract-selected-reference", "candidate-a"]
+
+
+def test_harness_rejects_query_type_text_hash_mismatch_before_callbacks() -> None:
+    contract = _contract()
+    query = FakeCanonicalTypeQuery(
+        contract,
+        hash_mismatch_subjects=frozenset({"candidate-a"}),
+    )
+
+    with pytest.raises(FidelityHarnessError, match="type text/hash mismatch"):
+        _fidelity_harness(contract, query=query).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
+        )
+
+
+def test_harness_rejects_candidate_query_environment_drift_before_callbacks() -> None:
+    contract = _contract()
+    query = FakeCanonicalTypeQuery(
+        contract,
+        environment_drift_subjects=frozenset({"candidate-a"}),
+    )
+
+    with pytest.raises(FidelityHarnessError, match="contract-bound environment"):
+        _fidelity_harness(contract, query=query).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
+        )
+
+
+def test_mutation_baseline_is_selected_statement_not_first_candidate() -> None:
+    contract = _contract()
+    first_candidate_source = _golden()["lean_statement"].replace(
+        "theorem bounded_witness",
+        "lemma bounded_witness",
+    )
+    observed_baselines: list[SelectedStatementBaseline] = []
+
+    @dataclass(frozen=True, slots=True)
+    class BaselineSpy:
+        actor_id: str = "baseline-spy"
+
+        def generate(
+            self,
+            task: TranslationTask,
+            baseline: SelectedStatementBaseline,
+        ) -> tuple[MutationProbeV1, ...]:
+            observed_baselines.append(baseline)
+            return FakeMutationSuiteAgent().generate(task, baseline)
+
+    evaluation = _fidelity_harness(contract).run(
+        contract,
+        obligations=_obligations(contract),
+        translators=(
+            FakeTranslationAgent(
+                "translator-a",
+                "team-a",
+                "candidate-a",
+                first_candidate_source,
+            ),
+            FakeTranslationAgent(
+                "translator-b",
+                "team-b",
+                "candidate-b",
+                _golden()["lean_statement"],
+            ),
+        ),
+        mutation_agent=BaselineSpy(),
+        reviewer=FakeSemanticReviewer(),
+    )
+
+    assert evaluation.candidates[0].lean_statement_source == first_candidate_source
+    assert first_candidate_source != contract.formal.lean_statement_source
+    assert observed_baselines == [SelectedStatementBaseline.from_task(evaluation.task)]
+    assert observed_baselines[0].lean_statement_source == contract.formal.lean_statement_source
+    frozen = freeze_contract(
+        contract,
+        evaluation=evaluation,
+        source_preparation=_source_preparation(contract),
+        frozen_by="canonical-type-liveness-fixture",
+    )
+    assert frozen.status is StatementStatusV1.FROZEN
 
 
 def test_translation_agent_receives_selected_formal_field_blind_generation_payload() -> None:
@@ -604,7 +828,7 @@ def test_translation_agent_receives_selected_formal_field_blind_generation_paylo
                 covered_obligation_ids=tuple(item.obligation_id for item in task.obligations),
             )
 
-    evaluation = StatementFidelityHarness().run(
+    evaluation = _fidelity_harness(contract).run(
         contract,
         obligations=obligations,
         translators=(
@@ -656,7 +880,7 @@ def test_translation_agent_receives_selected_formal_field_blind_generation_paylo
         assert task.formalization.mathlib_revision == contract.formal.environment.mathlib_revision
         assert task.formalization.imports_allowlist == contract.formal.imports_allowlist
         assert task.formalization.axioms_allowlist == contract.formal.axioms_allowlist
-        assert task.formalization.rendering_profile == "autolean.full-declaration-exact.v1"
+        assert task.formalization.rendering_profile == "autolean.full-declaration-canonical-type.v1"
     assert len(observed_payloads) == 2
     for payload in observed_payloads:
         assert_selected_formal_fields_absent(payload)
@@ -687,6 +911,44 @@ def test_translation_agent_receives_selected_formal_field_blind_generation_paylo
         if item.check_name == "candidate_contract_bindings"
     )
     assert evaluation.generation_task.content_hash.value in binding_check.evidence
+    canonical_check = next(
+        item
+        for item in evaluation.automatic_checks
+        if item.check_name == "canonical_elaborated_type_identity"
+    )
+    canonical_envelope = json.loads(canonical_check.evidence)
+    canonical_record = canonical_envelope["record"]
+    assert canonical_envelope["record_hash"] == (
+        evaluation.canonical_type_gate.record_hash.model_dump(mode="json")
+    )
+    assert canonical_record["contract_id"] == contract.contract_id.value
+    assert canonical_record["source_hash"] == contract.source.content_hash.model_dump(mode="json")
+    assert canonical_record["generation_task_hash"] == (
+        evaluation.generation_task.content_hash.model_dump(mode="json")
+    )
+    assert canonical_record["environment"]["lean_version"] == (
+        contract.formal.environment.lean_version
+    )
+    assert canonical_record["environment"]["mathlib_revision"] == (
+        contract.formal.environment.mathlib_revision
+    )
+    assert canonical_record["environment"]["worker_image_digest"] == (
+        contract.formal.environment.verifier_execution_policy.worker_image_digest
+    )
+    assert canonical_record["reference"]["canonical_type_hash"] == (
+        contract.formal.elaborated_type_hash.model_dump(mode="json")
+    )
+    assert [item["subject_id"] for item in canonical_record["candidates"]] == [
+        candidate.candidate_id for candidate in evaluation.candidates
+    ]
+    assert canonical_record["definitional_equivalence_claimed"] is False
+    assert canonical_record["semantic_equivalence_claimed"] is False
+    artifact_checks = cast(list[dict[str, object]], artifact["automatic_checks"])
+    assert canonical_envelope in [
+        json.loads(cast(str, item["evidence"]))
+        for item in artifact_checks
+        if item["check_name"] == "canonical_elaborated_type_identity"
+    ]
 
     tampered_candidate = replace(
         evaluation.candidates[0],
@@ -699,6 +961,19 @@ def test_translation_agent_receives_selected_formal_field_blind_generation_paylo
     with pytest.raises(FidelityHarnessError, match="candidate is not bound"):
         tampered_evaluation.assert_binds(contract)
 
+    tampered_reference = replace(
+        evaluation.canonical_type_gate.reference,
+        canonical_type="True",
+    )
+    with pytest.raises(FidelityHarnessError, match="observation is detached"):
+        replace(
+            evaluation,
+            canonical_type_gate=replace(
+                evaluation.canonical_type_gate,
+                reference=tampered_reference,
+            ),
+        ).assert_binds(contract)
+
 
 def test_harness_freezes_all_role_identities_before_untrusted_calls() -> None:
     contract = _contract()
@@ -710,10 +985,10 @@ def test_harness_freezes_all_role_identities_before_untrusted_calls() -> None:
         def generate(
             self,
             task: TranslationTask,
-            selected_candidate: CandidateFormalization,
+            baseline: SelectedStatementBaseline,
         ) -> tuple[MutationProbeV1, ...]:
             self.actor_id = "spoofed-mutation-agent"
-            return FakeMutationSuiteAgent().generate(task, selected_candidate)
+            return FakeMutationSuiteAgent().generate(task, baseline)
 
     @dataclass(slots=True)
     class MutableReviewer:
@@ -768,7 +1043,7 @@ def test_harness_freezes_all_role_identities_before_untrusted_calls() -> None:
         reviewer=reviewer,
     )
 
-    evaluation = StatementFidelityHarness().run(
+    evaluation = _fidelity_harness(contract).run(
         contract,
         obligations=_obligations(contract),
         translators=(first, second),
@@ -795,7 +1070,7 @@ def test_harness_freezes_all_role_identities_before_untrusted_calls() -> None:
 def test_harness_rejects_an_incomplete_mutation_suite() -> None:
     contract = _contract()
     with pytest.raises(FidelityHarnessError, match="drop_noetherian"):
-        StatementFidelityHarness().run(
+        _fidelity_harness(contract).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),
@@ -807,7 +1082,7 @@ def test_harness_rejects_an_incomplete_mutation_suite() -> None:
 def test_harness_requires_an_independent_semantic_reviewer() -> None:
     contract = _contract()
     with pytest.raises(FidelityHarnessError, match="independently authored"):
-        StatementFidelityHarness().run(
+        _fidelity_harness(contract).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),
@@ -820,7 +1095,7 @@ def test_harness_requires_an_independent_semantic_reviewer() -> None:
 def test_harness_rejects_declared_reviewer_role_overlap(reviewer_id: str) -> None:
     contract = _contract()
     with pytest.raises(FidelityHarnessError, match="reviewer identity must differ"):
-        StatementFidelityHarness().run(
+        _fidelity_harness(contract).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),
@@ -832,7 +1107,7 @@ def test_harness_rejects_declared_reviewer_role_overlap(reviewer_id: str) -> Non
 def test_harness_rejects_translation_and_mutation_actor_overlap() -> None:
     contract = _contract()
     with pytest.raises(FidelityHarnessError, match="mutation agent identity must differ"):
-        StatementFidelityHarness().run(
+        _fidelity_harness(contract).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),
@@ -851,7 +1126,7 @@ def test_harness_rejects_one_identity_for_independent_review_roles() -> None:
         rationale="fixture library review",
     )
     with pytest.raises(FidelityHarnessError, match="distinct reviewer identities"):
-        StatementFidelityHarness().run(
+        _fidelity_harness(contract).run(
             contract,
             obligations=_obligations(contract),
             translators=_translators(),

@@ -195,14 +195,6 @@ class FreezeGate:
             failures.append("two independent formalization candidates are required")
         if len({item.actor_id for item in candidates}) < 2:
             failures.append("independent formalization candidates require distinct actors")
-        expected = contract.formal.statement_source_hash
-        matching_groups = {
-            item.independence_group for item in candidates if item.statement_hash == expected
-        }
-        if len(matching_groups) < 2:
-            failures.append(
-                "two independent candidate groups must match the selected Lean statement"
-            )
         return failures
 
     def _fidelity_failures(

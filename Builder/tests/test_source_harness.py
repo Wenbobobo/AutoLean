@@ -16,7 +16,6 @@ import autolean_builder
 import autolean_builder.source_harness as source_harness_module
 import pytest
 from autolean_builder import (
-    CandidateFormalization,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
@@ -31,6 +30,7 @@ from autolean_builder import (
     ReferenceEntryV1,
     ReferenceManifestV1,
     RightsReview,
+    SelectedStatementBaseline,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
@@ -44,6 +44,7 @@ from autolean_builder import (
     TranslationTask,
     load_pilot_manifest,
 )
+from autolean_builder.testing import ScriptedCanonicalTypeQuery
 from autolean_contracts import (
     AttestationSignerV1,
     AxiomProfileV1,
@@ -212,14 +213,31 @@ def _harness(
     clock: Callable[[], datetime] | None = None,
 ) -> SourceToStatementHarness:
     active_clock = clock or (lambda: datetime.now(UTC))
+    formal = _formal()
+    assert formal.elaborated_type is not None
     return SourceToStatementHarness(
         cache or _cache(tmp_path),
         preparation_ledger=SourcePreparationLedger(
             tmp_path / "source-preparations.db",
             confinement_root=tmp_path,
         ),
+        canonical_type_query=ScriptedCanonicalTypeQuery(
+            canonical_types_by_statement_sha256=(
+                (formal.statement_source_hash.value, formal.elaborated_type),
+            ),
+            worker_image_digest=(formal.environment.verifier_execution_policy.worker_image_digest),
+            lean_version=formal.environment.lean_version,
+            mathlib_revision=formal.environment.mathlib_revision,
+            lake_manifest_sha256=(
+                None
+                if formal.environment.lake_manifest_hash is None
+                else formal.environment.lake_manifest_hash.value
+            ),
+            fixture_id="source-harness-tests",
+        ),
         pilot_manifest=pilot_manifest,
         clock=active_clock,
+        allow_test_only_non_authoritative_canonical_type_freeze=True,
     )
 
 
@@ -544,9 +562,9 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
         def generate(
             self,
             task: TranslationTask,
-            selected_candidate: CandidateFormalization,
+            baseline: SelectedStatementBaseline,
         ) -> tuple[MutationProbeV1, ...]:
-            assert selected_candidate.statement_hash == task.selected_statement_hash
+            assert baseline.statement_source_hash == task.selected_statement_hash
             return tuple(
                 MutationProbeV1(
                     probe_id=stable_identifier("source-mutation", kind.value),
@@ -634,6 +652,18 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
         reviewer=Reviewer(),
         additional_signoffs=(library_signoff,),
     )
+    strict_harness = SourceToStatementHarness(
+        harness.cache,
+        preparation_ledger=harness.preparation_ledger,
+        fidelity_harness=harness.fidelity_harness,
+        pilot_manifest=harness.pilot_manifest,
+    )
+    with pytest.raises(SourceHarnessError, match="non-authoritative canonical type evidence"):
+        strict_harness.revalidate_and_freeze(
+            packet,
+            evaluation=evaluation,
+            frozen_by="source-harness-freezer",
+        )
     frozen = harness.revalidate_and_freeze(
         packet,
         evaluation=evaluation,

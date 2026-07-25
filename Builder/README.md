@@ -1,8 +1,12 @@
 # AutoLean Builder
 
 `autolean-builder` owns statement fidelity. It turns reviewed source records into a frozen
-`StatementContractV1` and an immutable `FormalizationTaskBundleV1`; it never invokes a model,
-executes Lean, or accepts proof output.
+`StatementContractV1` and an immutable `FormalizationTaskBundleV1`. Before freeze, its fidelity
+Harness may ask an injected, fixed-environment Lean query adapter to elaborate the selected
+statement and independently generated candidates, but it never accepts proof output or treats
+that type observation as proof verification. The current scripted and local-OCI query assurances
+are both non-authoritative; the supported source-backed freeze path rejects them unless an
+explicit test-only switch is enabled.
 
 The freeze gate requires source and rights review, resolved blocking ambiguity, independent
 formalization candidates, reverse rendering, mutation evidence, and role-appropriate signoff.
@@ -16,10 +20,12 @@ they cannot edit a contract or satisfy a freeze gate. See
 [`builder-experience-retrieval.md`](../docs/builder-experience-retrieval.md).
 
 `StatementFidelityHarness` is the reviewed statement-conversion Harness. It binds private,
-rights-scoped source excerpts, normalized mathematics, two or more independent candidates, reverse renderings,
-semantic obligations, the required mutation suite, and an independent expert verdict into one
-canonical evidence artifact. The internal freeze primitive accepts that complete evaluation
-rather than caller-assembled Boolean checks.
+rights-scoped source excerpts, normalized mathematics, two or more independent candidates,
+fresh canonical-type observations, reverse renderings, semantic obligations, the required
+mutation suite, and an independent expert verdict into one canonical evidence artifact. Canonical
+type identity here means exact printer-text identity in one pinned environment; it is not a claim
+of definitional or semantic equivalence. The internal freeze primitive accepts that complete
+evaluation rather than caller-assembled Boolean checks.
 
 `SourceToStatementHarness` is the provenance-safe textbook entrance to that path. It accepts only
 manifest-typed derived UTF-8 text, an independently verified parent PDF, and exact byte spans

@@ -319,7 +319,7 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
             "mathlib_revision": draft.formal.environment.mathlib_revision,
             "imports_allowlist": list(draft.formal.imports_allowlist),
             "axioms_allowlist": list(draft.formal.axioms_allowlist),
-            "rendering_profile": "autolean.full-declaration-exact.v1",
+            "rendering_profile": "autolean.full-declaration-canonical-type.v1",
         },
         "obligations": [obligation],
     }
@@ -344,6 +344,104 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
         }
         for suffix in ("a", "b")
     ]
+    elaborated_type = draft.formal.elaborated_type
+    elaborated_type_hash = draft.formal.elaborated_type_hash
+    assert elaborated_type is not None
+    assert elaborated_type_hash is not None
+    worker_image_digest = draft.formal.environment.verifier_execution_policy.worker_image_digest
+    environment = {
+        "assurance": "local_oci_prefreeze",
+        "adapter_id": "scripts.oci_mathlib_worker.query_declarations",
+        "image": f"autolean/mathlib-worker@{worker_image_digest}",
+        "worker_image_digest": worker_image_digest,
+        "lean_version": draft.formal.environment.lean_version,
+        "mathlib_revision": draft.formal.environment.mathlib_revision,
+        "lake_manifest_sha256": None,
+        "type_format": "autolean.lean-pp-expr.v1",
+        "query_schema_version": "autolean.mathlib-declaration-query-evidence.v1",
+        "query_protocol": "autolean.mathlib-declaration-query.v1",
+        "query_identity_sha256": hashlib.sha256(b"query-identity").hexdigest(),
+        "build_receipt_canonical_sha256": hashlib.sha256(b"build-receipt").hexdigest(),
+        "execution_policy_sha256": hashlib.sha256(b"execution-policy").hexdigest(),
+        "source_inputs_sha256": hashlib.sha256(b"source-inputs").hexdigest(),
+        "source_rendering_profile": "autolean.declaration-type-observation.v1",
+    }
+    environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
+    observed_axioms: list[str] = []
+    observed_axioms_sha256 = hashlib.sha256(
+        canonical_json_bytes(observed_axioms) + b"\n"
+    ).hexdigest()
+
+    def observation(subject_id: str, statement_source: str) -> dict[str, object]:
+        statement_source_hash = digest_text(
+            HashKindV1.STATEMENT_SOURCE,
+            statement_source,
+        )
+        return {
+            "subject_id": subject_id,
+            "statement_source_hash": statement_source_hash.model_dump(mode="json"),
+            "declaration": (f"{draft.formal.namespace}.{draft.formal.declaration_name}"),
+            "canonical_type": elaborated_type,
+            "canonical_type_hash": elaborated_type_hash.model_dump(mode="json"),
+            "canonical_type_sha256": hashlib.sha256(elaborated_type.encode("utf-8")).hexdigest(),
+            "environment_facts_sha256": environment_facts_sha256,
+            "query": {
+                "query_output_sha256": hashlib.sha256(
+                    f"{subject_id}:query-output".encode()
+                ).hexdigest(),
+                "source_snapshot_sha256": hashlib.sha256(
+                    f"{subject_id}:source-snapshot".encode()
+                ).hexdigest(),
+                "sealed_candidate_sha256": hashlib.sha256(
+                    f"{subject_id}:sealed-candidate".encode()
+                ).hexdigest(),
+                "candidate_direct_imports_sha256": hashlib.sha256(
+                    b"candidate-direct-imports"
+                ).hexdigest(),
+                "module_import_closure_sha256": hashlib.sha256(
+                    b"module-import-closure"
+                ).hexdigest(),
+                "observed_axioms": observed_axioms,
+                "observed_axioms_sha256": observed_axioms_sha256,
+            },
+        }
+
+    canonical_evidence = {
+        "schema_version": "autolean.builder-canonical-type-gate.v1",
+        "claim": "exact_canonical_printer_text_identity",
+        "definitional_equivalence_claimed": False,
+        "semantic_equivalence_claimed": False,
+        "promotion_authority": False,
+        "contract_id": draft.contract_id.value,
+        "revision": draft.revision,
+        "draft_contract_hash": task["draft_contract_hash"],
+        "source_hash": task["source_hash"],
+        "generation_task_hash": generation_task_hash,
+        "selected_statement_hash": task["selected_statement_hash"],
+        "environment_hash": draft.formal.environment.environment_hash.model_dump(mode="json"),
+        "expected_elaborated_type_hash": elaborated_type_hash.model_dump(mode="json"),
+        "environment": environment,
+        "reference": observation(
+            "contract-selected-reference",
+            draft.formal.lean_statement_source,
+        ),
+        "candidates": [
+            observation(
+                str(candidate["candidate_id"]),
+                str(candidate["lean_statement_source"]),
+            )
+            for candidate in candidates
+        ],
+    }
+    canonical_evidence_bytes = canonical_json_bytes(canonical_evidence)
+    canonical_check_envelope = {
+        "schema_version": "autolean.builder-canonical-type-check.v1",
+        "record": canonical_evidence,
+        "record_hash": digest_bytes(
+            HashKindV1.FREEZE_EVIDENCE,
+            canonical_evidence_bytes,
+        ).model_dump(mode="json"),
+    }
     return {
         "schema_version": "autolean.builder-fidelity-evidence.v1",
         "task": task,
@@ -353,7 +451,14 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
         "mutation_agent_id": "mutation-agent",
         "mutation_probes": [],
         "review": {"review_id": "fixture-review"},
-        "automatic_checks": [],
+        "automatic_checks": [
+            {
+                "check_name": "canonical_elaborated_type_identity",
+                "authority": "automatic",
+                "passed": True,
+                "evidence": canonical_json_bytes(canonical_check_envelope).decode("ascii"),
+            }
+        ],
         "additional_signoffs": [],
     }
 
@@ -427,6 +532,49 @@ def _refresh_generation_task_hash(payload: dict[str, object]) -> None:
     for candidate in candidates:
         assert isinstance(candidate, dict)
         candidate["generation_task_hash"] = generation_task_hash
+    canonical_evidence = _canonical_evidence_payload(payload)
+    canonical_evidence["generation_task_hash"] = generation_task_hash
+    _replace_canonical_evidence_payload(payload, canonical_evidence)
+
+
+def _canonical_evidence_payload(payload: dict[str, object]) -> dict[str, object]:
+    checks = payload["automatic_checks"]
+    assert isinstance(checks, list)
+    matches = [
+        check
+        for check in checks
+        if isinstance(check, dict)
+        and check.get("check_name") == "canonical_elaborated_type_identity"
+    ]
+    assert len(matches) == 1
+    evidence_text = matches[0]["evidence"]
+    assert isinstance(evidence_text, str)
+    envelope = json.loads(evidence_text)
+    assert isinstance(envelope, dict)
+    evidence = envelope["record"]
+    assert isinstance(evidence, dict)
+    return evidence
+
+
+def _replace_canonical_evidence_payload(
+    payload: dict[str, object],
+    evidence: dict[str, object],
+) -> None:
+    checks = payload["automatic_checks"]
+    assert isinstance(checks, list)
+    canonical_check = checks[0]
+    assert isinstance(canonical_check, dict)
+    evidence_bytes = canonical_json_bytes(evidence)
+    canonical_check["evidence"] = canonical_json_bytes(
+        {
+            "schema_version": "autolean.builder-canonical-type-check.v1",
+            "record": evidence,
+            "record_hash": digest_bytes(
+                HashKindV1.FREEZE_EVIDENCE,
+                evidence_bytes,
+            ).model_dump(mode="json"),
+        }
+    ).decode("ascii")
 
 
 def _plane(
@@ -434,6 +582,7 @@ def _plane(
     *,
     clock: Callable[[], datetime] | None = None,
     allow_test_only_unreviewed_bundles: bool = True,
+    allow_test_only_non_authoritative_canonical_type_evidence: bool = True,
 ) -> ControlPlane:
     database = tmp_path / "control.db"
     return ControlPlane(
@@ -443,6 +592,9 @@ def _plane(
         attestation_verifier=_attestation_verifier(clock),
         allow_test_only_direct_verifier_attestations=True,
         allow_test_only_unreviewed_bundles=allow_test_only_unreviewed_bundles,
+        allow_test_only_non_authoritative_canonical_type_evidence=(
+            allow_test_only_non_authoritative_canonical_type_evidence
+        ),
     )
 
 
@@ -582,6 +734,137 @@ def test_registration_accepts_a_complete_v1_fidelity_artifact(tmp_path: Path) ->
 
     assert binding.fidelity_evidence_artifact is not None
     assert binding.fidelity_evidence_artifact.digest == bundle.fidelity_evidence.digest.value
+    assert binding.canonical_type_assurance == "local_oci_prefreeze"
+    assert binding.canonical_type_promotion_authority is False
+    registered = plane.events.read_stream("task", bundle.bundle_id.value)[0]
+    assert registered.payload["canonical_type_assurance"] == "local_oci_prefreeze"
+    assert registered.payload["canonical_type_promotion_authority"] is False
+
+
+def test_registration_rejects_local_prefreeze_evidence_without_test_only_mode(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(
+        tmp_path,
+        allow_test_only_non_authoritative_canonical_type_evidence=False,
+    )
+    bundle, _ = _reviewed_bundle(plane.artifacts)
+
+    with pytest.raises(InvalidTransition, match="non-authoritative canonical type evidence"):
+        plane.register_bundle(bundle, idempotency_key="local-prefreeze-default-reject")
+
+
+def test_registration_rejects_fidelity_artifact_without_canonical_type_check(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    missing_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(missing_payload, dict)
+    missing_payload["automatic_checks"] = []
+    missing, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=missing_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="exactly one canonical type check"):
+        plane.register_bundle(missing, idempotency_key="missing-canonical-type-check")
+
+
+def test_registration_rejects_canonical_type_record_hash_drift(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    checks = tampered_payload["automatic_checks"]
+    assert isinstance(checks, list)
+    check = checks[0]
+    assert isinstance(check, dict)
+    evidence_text = check["evidence"]
+    assert isinstance(evidence_text, str)
+    envelope = json.loads(evidence_text)
+    assert isinstance(envelope, dict)
+    record = envelope["record"]
+    assert isinstance(record, dict)
+    record["contract_id"] = _id("detached-canonical-record").value
+    check["evidence"] = canonical_json_bytes(envelope).decode("ascii")
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="record hash is inconsistent"):
+        plane.register_bundle(tampered, idempotency_key="canonical-record-hash-drift")
+
+
+def test_registration_rejects_detached_candidate_canonical_type(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    canonical_evidence = _canonical_evidence_payload(tampered_payload)
+    observations = canonical_evidence["candidates"]
+    assert isinstance(observations, list)
+    first = observations[0]
+    assert isinstance(first, dict)
+    first["canonical_type"] = "True"
+    _replace_canonical_evidence_payload(tampered_payload, canonical_evidence)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="differs from its Builder inputs"):
+        plane.register_bundle(tampered, idempotency_key="detached-canonical-candidate")
+
+
+def test_scripted_canonical_type_evidence_requires_explicit_test_only_mode(
+    tmp_path: Path,
+) -> None:
+    rejecting_plane = _plane(
+        tmp_path / "rejecting",
+        allow_test_only_non_authoritative_canonical_type_evidence=False,
+    )
+    base, payload = _reviewed_bundle(rejecting_plane.artifacts)
+    scripted_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(scripted_payload, dict)
+    canonical_evidence = _canonical_evidence_payload(scripted_payload)
+    environment = canonical_evidence["environment"]
+    assert isinstance(environment, dict)
+    environment["assurance"] = "scripted_fake"
+    observations = [canonical_evidence["reference"], *canonical_evidence["candidates"]]
+    environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
+    for observation in observations:
+        assert isinstance(observation, dict)
+        observation["environment_facts_sha256"] = environment_facts_sha256
+    _replace_canonical_evidence_payload(scripted_payload, canonical_evidence)
+    scripted, _ = _reviewed_bundle(
+        rejecting_plane.artifacts,
+        fidelity_payload=scripted_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="non-authoritative canonical type evidence"):
+        rejecting_plane.register_bundle(scripted, idempotency_key="scripted-default-reject")
+
+    allowing_plane = _plane(
+        tmp_path / "allowing",
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
+    )
+    allowed, _ = _reviewed_bundle(
+        allowing_plane.artifacts,
+        fidelity_payload=scripted_payload,
+    )
+    binding = allowing_plane.register_bundle(
+        allowed,
+        idempotency_key="scripted-explicit-test-mode",
+    )
+    assert binding.fidelity_evidence_artifact is not None
 
 
 def test_registration_rejects_legacy_reviewed_v1_without_generation_task(

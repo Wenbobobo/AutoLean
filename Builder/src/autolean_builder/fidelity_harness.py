@@ -38,6 +38,15 @@ from autolean_contracts import (
     utc_now,
 )
 
+from .canonical_type_gate import (
+    CanonicalTypeGateBinding,
+    CanonicalTypeGateError,
+    CanonicalTypeGateEvidence,
+    CanonicalTypeQuery,
+    CanonicalTypeQueryRequest,
+    run_canonical_type_gate,
+)
+
 
 class FidelityHarnessError(ValueError):
     """The translation evidence is structurally invalid or bound to another contract."""
@@ -325,8 +334,8 @@ class CandidateGenerationEnvelope:
     mathlib_revision: str
     imports_allowlist: tuple[str, ...]
     axioms_allowlist: tuple[str, ...]
-    rendering_profile: Literal["autolean.full-declaration-exact.v1"] = (
-        "autolean.full-declaration-exact.v1"
+    rendering_profile: Literal["autolean.full-declaration-canonical-type.v1"] = (
+        "autolean.full-declaration-canonical-type.v1"
     )
 
     @classmethod
@@ -350,7 +359,7 @@ class CandidateGenerationEnvelope:
         ):
             if not value.strip() or value != value.strip():
                 raise FidelityHarnessError(f"candidate-generation {label} must be trimmed text")
-        if self.rendering_profile != "autolean.full-declaration-exact.v1":
+        if self.rendering_profile != "autolean.full-declaration-canonical-type.v1":
             raise FidelityHarnessError("candidate-generation rendering profile is unsupported")
 
     def payload(self) -> dict[str, object]:
@@ -606,13 +615,41 @@ def _bind_candidate_proposal(
     )
 
 
+@dataclass(frozen=True, slots=True)
+class SelectedStatementBaseline:
+    """The contract-selected statement used by mutation roles, never a generated candidate."""
+
+    contract_id: StableIdentifierV1
+    revision: int
+    lean_statement_source: str
+    statement_source_hash: DigestV1
+
+    @classmethod
+    def from_task(cls, task: TranslationTask) -> SelectedStatementBaseline:
+        return cls(
+            contract_id=task.contract_id,
+            revision=task.revision,
+            lean_statement_source=task.selected_lean_statement,
+            statement_source_hash=task.selected_statement_hash,
+        )
+
+    def __post_init__(self) -> None:
+        if self.revision < 1 or not self.lean_statement_source.strip():
+            raise FidelityHarnessError("selected statement mutation baseline is invalid")
+        if self.statement_source_hash != digest_text(
+            HashKindV1.STATEMENT_SOURCE,
+            self.lean_statement_source,
+        ):
+            raise FidelityHarnessError("selected statement mutation baseline differs from its hash")
+
+
 class MutationSuiteAgent(Protocol):
     actor_id: str
 
     def generate(
         self,
         task: TranslationTask,
-        selected_candidate: CandidateFormalization,
+        baseline: SelectedStatementBaseline,
     ) -> tuple[MutationProbeV1, ...]:
         """Return the complete adversarial mutation suite."""
 
@@ -797,6 +834,7 @@ class FidelityEvaluation:
     task: TranslationTask
     generation_task: CandidateGenerationTask
     candidates: tuple[CandidateFormalization, ...]
+    canonical_type_gate: CanonicalTypeGateEvidence
     mutation_agent_id: str
     mutation_probes: tuple[MutationProbeV1, ...]
     review: SemanticReviewVerdict
@@ -841,12 +879,27 @@ class FidelityEvaluation:
             raise FidelityHarnessError(
                 "candidate-generation task does not reproduce from the draft contract"
             )
+        canonical_binding, reference_request, candidate_requests = _canonical_type_gate_inputs(
+            contract,
+            self.task,
+            self.generation_task,
+            self.candidates,
+        )
+        try:
+            self.canonical_type_gate.assert_binds(
+                canonical_binding,
+                reference_request,
+                candidate_requests,
+            )
+        except CanonicalTypeGateError as error:
+            raise FidelityHarnessError(str(error)) from error
         expected_automatic = (
             *_candidate_structure_checks(
                 self.task,
                 self.generation_task,
                 self.candidates,
             ),
+            _canonical_type_automatic_check(self.canonical_type_gate),
             *_mutation_structure_checks(
                 self.task,
                 self.mutation_agent_id,
@@ -981,7 +1034,13 @@ class FidelityEvaluation:
 class StatementFidelityHarness:
     """Run declared-group translation, mutation, semantic review, and evidence assembly."""
 
-    def __init__(self, *, clock: Callable[[], datetime] = utc_now) -> None:
+    def __init__(
+        self,
+        *,
+        canonical_type_query: CanonicalTypeQuery,
+        clock: Callable[[], datetime] = utc_now,
+    ) -> None:
+        self._canonical_type_query = canonical_type_query
         self._clock = clock
 
     def run(
@@ -1019,7 +1078,26 @@ class StatementFidelityHarness:
             registrations,
             candidates,
         )
-        probes = mutation_registration.agent.generate(task, candidates[0])
+        canonical_binding, reference_request, candidate_requests = _canonical_type_gate_inputs(
+            contract,
+            task,
+            generation_task,
+            candidates,
+        )
+        try:
+            canonical_type_gate = run_canonical_type_gate(
+                self._canonical_type_query,
+                binding=canonical_binding,
+                reference=reference_request,
+                candidates=candidate_requests,
+            )
+        except CanonicalTypeGateError as error:
+            raise FidelityHarnessError(str(error)) from error
+        automatic_checks += (_canonical_type_automatic_check(canonical_type_gate),)
+        probes = mutation_registration.agent.generate(
+            task,
+            SelectedStatementBaseline.from_task(task),
+        )
         automatic_checks += self._validate_mutations(
             task,
             mutation_registration.actor_id,
@@ -1060,6 +1138,7 @@ class StatementFidelityHarness:
             task=task,
             generation_task=generation_task,
             candidates=candidates,
+            canonical_type_gate=canonical_type_gate,
             mutation_agent_id=mutation_registration.actor_id,
             mutation_probes=probes,
             review=review,
@@ -1241,6 +1320,72 @@ class StatementFidelityHarness:
         return value.astimezone(UTC)
 
 
+def _canonical_type_gate_inputs(
+    contract: StatementContractV1,
+    task: TranslationTask,
+    generation_task: CandidateGenerationTask,
+    candidates: tuple[CandidateFormalization, ...],
+) -> tuple[
+    CanonicalTypeGateBinding,
+    CanonicalTypeQueryRequest,
+    tuple[CanonicalTypeQueryRequest, ...],
+]:
+    formal = contract.formal
+    elaborated_type = formal.elaborated_type
+    elaborated_type_hash = formal.elaborated_type_hash
+    if elaborated_type is None or elaborated_type_hash is None:
+        raise FidelityHarnessError("canonical type gate requires a contract-bound elaborated type")
+    declaration = f"{formal.namespace}.{formal.declaration_name}"
+    lake_manifest = formal.environment.lake_manifest_hash
+    binding = CanonicalTypeGateBinding(
+        contract_id=task.contract_id.value,
+        revision=task.revision,
+        draft_contract_hash=task.draft_contract_hash,
+        source_hash=task.source_hash,
+        generation_task_hash=generation_task.content_hash,
+        selected_statement_hash=task.selected_statement_hash,
+        environment_hash=formal.environment.environment_hash,
+        declaration=declaration,
+        lean_version=formal.environment.lean_version,
+        mathlib_revision=formal.environment.mathlib_revision,
+        lake_manifest_sha256=None if lake_manifest is None else lake_manifest.value,
+        worker_image_digest=(formal.environment.verifier_execution_policy.worker_image_digest),
+        expected_elaborated_type=elaborated_type,
+        expected_elaborated_type_hash=elaborated_type_hash,
+    )
+    reference = CanonicalTypeQueryRequest(
+        subject_id="contract-selected-reference",
+        statement_source=task.selected_lean_statement,
+        statement_source_hash=task.selected_statement_hash,
+        declaration=declaration,
+        namespace=formal.namespace,
+        imports_allowlist=formal.imports_allowlist,
+    )
+    candidate_requests = tuple(
+        CanonicalTypeQueryRequest(
+            subject_id=candidate.candidate_id,
+            statement_source=candidate.lean_statement_source,
+            statement_source_hash=candidate.statement_hash,
+            declaration=declaration,
+            namespace=formal.namespace,
+            imports_allowlist=formal.imports_allowlist,
+        )
+        for candidate in candidates
+    )
+    return binding, reference, candidate_requests
+
+
+def _canonical_type_automatic_check(
+    evidence: CanonicalTypeGateEvidence,
+) -> AutomaticCheckResult:
+    return AutomaticCheckResult(
+        check_name="canonical_elaborated_type_identity",
+        authority=EvidenceAuthority.AUTOMATIC,
+        passed=True,
+        evidence=evidence.automatic_evidence(),
+    )
+
+
 def _candidate_structure_checks(
     task: TranslationTask,
     generation_task: CandidateGenerationTask,
@@ -1265,10 +1410,6 @@ def _candidate_structure_checks(
             or candidate.generation_task_hash != generation_task.content_hash
         ):
             raise FidelityHarnessError("candidate is not bound to the translation task")
-        if candidate.statement_hash != task.selected_statement_hash:
-            raise FidelityHarnessError(
-                "V1 candidates must exactly match the selected Lean statement"
-            )
         covered = candidate.covered_obligation_ids
         if len(set(covered)) != len(covered) or set(covered) != required_obligations:
             raise FidelityHarnessError("candidate semantic obligation coverage is incomplete")
@@ -1279,7 +1420,8 @@ def _candidate_structure_checks(
             passed=True,
             evidence=(
                 "all candidate hashes and revision bindings match the translation task; "
-                f"generation_task_hash={generation_task.content_hash.value}"
+                f"generation_task_hash={generation_task.content_hash.value}; "
+                "statement identity is checked by the canonical elaborated-type gate"
             ),
         ),
         AutomaticCheckResult(
@@ -1326,7 +1468,8 @@ def _mutation_structure_checks(
             passed=True,
             evidence=(
                 f"agent={mutation_agent_id}; all required mutation kinds are unique "
-                "and change the statement bytes"
+                "and change the contract-selected statement bytes; "
+                f"baseline_statement_hash={task.selected_statement_hash.value}"
             ),
         ),
     )
