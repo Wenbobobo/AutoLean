@@ -1,0 +1,164 @@
+{
+  "schema_version": "autolean.real-lean-project-dag-preflight.v1",
+  "name": "twenty-declaration-real-lean-content-preflight",
+  "source_root": "lean",
+  "modules": [
+    {
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "file": "lean/AutoLean/ProjectDagPreflight/Foundations.lean",
+      "imports": [],
+      "source_sha256": "cf79bc12bfbb125af8fd72d1314cfc8115f3977c1fdbc98becd3681363a97464"
+    },
+    {
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "file": "lean/AutoLean/ProjectDagPreflight/Arithmetic.lean",
+      "imports": ["AutoLean.ProjectDagPreflight.Foundations"],
+      "source_sha256": "cee33f02aac07983481357e12e3e25ce71d29feab3189e9ca7fb08e2097093ec"
+    },
+    {
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "file": "lean/AutoLean/ProjectDagPreflight/Relations.lean",
+      "imports": [
+        "AutoLean.ProjectDagPreflight.Foundations",
+        "AutoLean.ProjectDagPreflight.Arithmetic"
+      ],
+      "source_sha256": "2c808371f0fc24e3d67b7d04e21aa23ed73da8d18388eafd827d3fb4513d7f60"
+    },
+    {
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "file": "lean/AutoLean/ProjectDagPreflight/Capstone.lean",
+      "imports": [
+        "AutoLean.ProjectDagPreflight.Foundations",
+        "AutoLean.ProjectDagPreflight.Arithmetic",
+        "AutoLean.ProjectDagPreflight.Relations"
+      ],
+      "source_sha256": "7f3d2d55093f1c90e3976b69d258c5b44c4d0bffeb05f4fdff9e243f482328af"
+    }
+  ],
+  "declarations": [
+    {
+      "id": "foundations.seed",
+      "declaration": "AutoLean.ProjectDagPreflight.Foundations.seed",
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "depends_on": []
+    },
+    {
+      "id": "foundations.next-seed",
+      "declaration": "AutoLean.ProjectDagPreflight.Foundations.nextSeed",
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "depends_on": ["foundations.seed"]
+    },
+    {
+      "id": "foundations.twice-seed",
+      "declaration": "AutoLean.ProjectDagPreflight.Foundations.twiceSeed",
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "depends_on": ["foundations.seed"]
+    },
+    {
+      "id": "foundations.next-is-three",
+      "declaration": "AutoLean.ProjectDagPreflight.Foundations.nextSeedIsThree",
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "depends_on": ["foundations.next-seed"]
+    },
+    {
+      "id": "foundations.twice-is-four",
+      "declaration": "AutoLean.ProjectDagPreflight.Foundations.twiceSeedIsFour",
+      "module": "AutoLean.ProjectDagPreflight.Foundations",
+      "depends_on": ["foundations.twice-seed"]
+    },
+    {
+      "id": "arithmetic.sum-seeds",
+      "declaration": "AutoLean.ProjectDagPreflight.Arithmetic.sumSeeds",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "depends_on": ["foundations.next-seed", "foundations.twice-seed"]
+    },
+    {
+      "id": "arithmetic.sum-is-seven",
+      "declaration": "AutoLean.ProjectDagPreflight.Arithmetic.sumSeedsIsSeven",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "depends_on": ["arithmetic.sum-seeds"]
+    },
+    {
+      "id": "arithmetic.triple-seed",
+      "declaration": "AutoLean.ProjectDagPreflight.Arithmetic.tripleSeed",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "depends_on": ["foundations.seed", "foundations.twice-seed"]
+    },
+    {
+      "id": "arithmetic.triple-is-six",
+      "declaration": "AutoLean.ProjectDagPreflight.Arithmetic.tripleSeedIsSix",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "depends_on": ["arithmetic.triple-seed"]
+    },
+    {
+      "id": "arithmetic.score",
+      "declaration": "AutoLean.ProjectDagPreflight.Arithmetic.score",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "depends_on": ["arithmetic.sum-seeds", "arithmetic.triple-seed"]
+    },
+    {
+      "id": "relations.exact-score",
+      "declaration": "AutoLean.ProjectDagPreflight.Relations.exactScore",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "depends_on": ["arithmetic.score"]
+    },
+    {
+      "id": "relations.positive-score",
+      "declaration": "AutoLean.ProjectDagPreflight.Relations.positiveScore",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "depends_on": ["arithmetic.score"]
+    },
+    {
+      "id": "relations.score-certificate",
+      "declaration": "AutoLean.ProjectDagPreflight.Relations.scoreCertificate",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "depends_on": ["relations.exact-score", "relations.positive-score"]
+    },
+    {
+      "id": "relations.score-is-nonzero",
+      "declaration": "AutoLean.ProjectDagPreflight.Relations.scoreIsNonzero",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "depends_on": ["relations.positive-score"]
+    },
+    {
+      "id": "relations.seed-is-bounded",
+      "declaration": "AutoLean.ProjectDagPreflight.Relations.seedIsBounded",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "depends_on": ["foundations.seed", "arithmetic.score"]
+    },
+    {
+      "id": "capstone.target-nat",
+      "declaration": "AutoLean.ProjectDagPreflight.Capstone.targetNat",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "depends_on": ["foundations.seed", "arithmetic.score"]
+    },
+    {
+      "id": "capstone.target-is-fifteen",
+      "declaration": "AutoLean.ProjectDagPreflight.Capstone.targetNatIsFifteen",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "depends_on": ["capstone.target-nat"]
+    },
+    {
+      "id": "capstone.target-is-positive",
+      "declaration": "AutoLean.ProjectDagPreflight.Capstone.targetNatIsPositive",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "depends_on": ["capstone.target-nat"]
+    },
+    {
+      "id": "capstone.final-certificate",
+      "declaration": "AutoLean.ProjectDagPreflight.Capstone.finalCertificate",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "depends_on": [
+        "capstone.target-is-fifteen",
+        "capstone.target-is-positive",
+        "relations.score-certificate"
+      ]
+    },
+    {
+      "id": "capstone.capstone",
+      "declaration": "AutoLean.ProjectDagPreflight.Capstone.capstone",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "depends_on": ["capstone.final-certificate"]
+    }
+  ]
+}
