@@ -159,6 +159,7 @@ def docker_clean_build_command(
     return (
         *_docker_prefix(distribution),
         "run",
+        "--pull=never",
         "--rm",
         "--network",
         "none",

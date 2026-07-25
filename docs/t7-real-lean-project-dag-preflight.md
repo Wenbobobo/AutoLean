@@ -42,7 +42,8 @@ uv run --frozen python -m scripts.real_lean_project_dag_preflight validate --jso
 
 The optional command below runs only on an operator machine with the previously built pinned
 source-v2 image available locally. On Windows it delegates Docker to WSL `Ubuntu-24.04`; on Linux
-it calls the local Docker CLI. It never pulls an image. The container has no network, receives the
+it calls the local Docker CLI. It passes Docker `--pull=never`: a missing local exact image fails
+closed instead of fetching from a registry. The container has no network, receives the
 fixture source as a read-only mount, and writes compiled OLeans only to a fresh temporary output
 mount.
 

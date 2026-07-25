@@ -18,8 +18,8 @@ def test_source_v2_clean_build_command_is_pinned_and_has_separate_mounts(
 
     command = real_lean_project_dag_preflight.docker_clean_build_command(fixture, tmp_path)
 
-    assert command[:2] == ("docker", "run")
-    assert command[3:5] == ("--network", "none")
+    assert command[:3] == ("docker", "run", "--pull=never")
+    assert command[4:6] == ("--network", "none")
     assert "--read-only" in command
     assert real_lean_project_dag_preflight.SOURCE_V2_IMAGE in command
     assert any("dst=/input,readonly" in value for value in command)
