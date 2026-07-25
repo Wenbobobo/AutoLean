@@ -14,6 +14,8 @@ from autolean_contracts import (
     AlignmentTargetV1,
     AttestationPurposeV1,
     ExecutionGraphV1,
+    FidelityEvidenceArtifactRefV1,
+    FidelityReportV1,
     FidelityRiskV1,
     FormalGraphV1,
     FormalizationTaskBundleV1,
@@ -43,6 +45,8 @@ from autolean_contracts import (
     VerificationReportV1,
     build_proof_boundary,
     builder_attestation_payload,
+    canonical_json_bytes,
+    digest_bytes,
     digest_model,
     digest_text,
     proof_dependency_manifest_hash,
@@ -125,6 +129,7 @@ def _bundle(
     signer: HmacAttestationSignerV1 | None = None,
     nonce: str | None = None,
     bundle_key: str = "bundle",
+    additional_source_spans: tuple[SourceSpanV1, ...] = (),
 ) -> FormalizationTaskBundleV1:
     source_id = _id("source")
     span = SourceSpanV1(
@@ -140,7 +145,7 @@ def _bundle(
         version="1",
         locator="fixture://source",
         content_hash=digest_text(HashKindV1.SOURCE_BYTES, "fixture source"),
-        spans=(span,),
+        spans=(span, *additional_source_spans),
     )
     rights = RightsRecordV1(
         rights_id=_id("rights"),
@@ -264,10 +269,171 @@ def _rebundle(
     return unsigned.model_copy(update={"builder_attestation": attestation})
 
 
+def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
+    source_span = draft.source.spans[0]
+    source_claims = [
+        {
+            "span_id": span.span_id.value,
+            "locator": span.locator,
+            "content_hash": span.content_hash.model_dump(mode="json"),
+            "permitted_excerpt": span.permitted_excerpt,
+        }
+        for span in draft.source.spans
+    ]
+    obligation = {
+        "obligation_id": "conclusion",
+        "kind": "conclusion",
+        "source_span_ids": [source_span.span_id.value],
+        "normalized_fragment": "n equals n",
+    }
+    task = {
+        "contract_id": draft.contract_id.value,
+        "revision": draft.revision,
+        "draft_contract_hash": draft.semantic_hash().model_dump(mode="json"),
+        "source_hash": draft.source.content_hash.model_dump(mode="json"),
+        "source_spans": source_claims,
+        "informal_statement": draft.mathematics.informal_statement,
+        "normalized_statement": draft.mathematics.normalized_statement,
+        "normalized_statement_sha256": hashlib.sha256(
+            draft.mathematics.normalized_statement.encode("utf-8")
+        ).hexdigest(),
+        "selected_lean_statement": draft.formal.lean_statement_source,
+        "selected_statement_hash": draft.formal.statement_source_hash.model_dump(mode="json"),
+        "obligations": [
+            {
+                **obligation,
+                "description": "The source states reflexive equality.",
+                "lean_fragment": "n = n",
+                "authority": "expert",
+            }
+        ],
+    }
+    generation_task = {
+        "source_spans": source_claims,
+        "mathematics": draft.mathematics.model_dump(mode="json"),
+        "formalization": {
+            "task_kind": draft.task_kind.value,
+            "declaration_name": draft.formal.declaration_name,
+            "namespace": draft.formal.namespace,
+            "lean_version": draft.formal.environment.lean_version,
+            "mathlib_revision": draft.formal.environment.mathlib_revision,
+            "imports_allowlist": list(draft.formal.imports_allowlist),
+            "axioms_allowlist": list(draft.formal.axioms_allowlist),
+            "rendering_profile": "autolean.full-declaration-exact.v1",
+        },
+        "obligations": [obligation],
+    }
+    generation_task_hash = digest_bytes(
+        HashKindV1.PROMPT,
+        canonical_json_bytes(generation_task),
+    ).model_dump(mode="json")
+    candidates = [
+        {
+            "candidate_id": f"candidate-{suffix}",
+            "actor_id": f"translator-{suffix}",
+            "independence_group": f"group-{suffix}",
+            "contract_id": task["contract_id"],
+            "revision": task["revision"],
+            "draft_contract_hash": task["draft_contract_hash"],
+            "source_hash": task["source_hash"],
+            "normalized_statement_sha256": task["normalized_statement_sha256"],
+            "generation_task_hash": generation_task_hash,
+            "lean_statement_source": task["selected_lean_statement"],
+            "reverse_rendering": task["normalized_statement"],
+            "covered_obligation_ids": [obligation["obligation_id"]],
+        }
+        for suffix in ("a", "b")
+    ]
+    return {
+        "schema_version": "autolean.builder-fidelity-evidence.v1",
+        "task": task,
+        "generation_task": generation_task,
+        "generation_task_hash": generation_task_hash,
+        "candidates": candidates,
+        "mutation_agent_id": "mutation-agent",
+        "mutation_probes": [],
+        "review": {"review_id": "fixture-review"},
+        "automatic_checks": [],
+        "additional_signoffs": [],
+    }
+
+
+def _reviewed_bundle(
+    artifact_store: ArtifactStore,
+    *,
+    fidelity_payload: dict[str, object] | None = None,
+    base: FormalizationTaskBundleV1 | None = None,
+) -> tuple[FormalizationTaskBundleV1, dict[str, object]]:
+    base = _bundle() if base is None else base
+    assert base.contract.freeze is not None
+    draft = base.contract.model_copy(update={"status": StatementStatusV1.DRAFT, "freeze": None})
+    payload = _fidelity_payload(draft) if fidelity_payload is None else fidelity_payload
+    raw = canonical_json_bytes(payload)
+    artifact = artifact_store.put_bytes(raw)
+    evidence_hash = digest_bytes(HashKindV1.FREEZE_EVIDENCE, raw)
+    reviewed_draft = draft.model_copy(
+        update={
+            "fidelity": FidelityReportV1(
+                report_id=_id("fidelity-report"),
+                evidence_hash=evidence_hash,
+                risk_level=draft.policy.fidelity_risk,
+            )
+        }
+    )
+    frozen = reviewed_draft.model_copy(
+        update={
+            "status": StatementStatusV1.FROZEN,
+            "freeze": FreezeRecordV1(
+                contract_hash=reviewed_draft.semantic_hash(),
+                source_hash=reviewed_draft.source.content_hash,
+                source_preparation_id=base.contract.freeze.source_preparation_id,
+                source_preparation_hash=base.contract.freeze.source_preparation_hash,
+                statement_source_hash=reviewed_draft.formal.statement_source_hash,
+                elaborated_type_hash=reviewed_draft.formal.elaborated_type_hash,
+                frozen_by="fixture",
+            ),
+        }
+    )
+    unsigned = FormalizationTaskBundleV1(
+        bundle_id=base.bundle_id,
+        contract=frozen,
+        graphs=base.graphs,
+        graph_snapshot_hash=base.graph_snapshot_hash,
+        proof_boundary=build_proof_boundary(frozen),
+        fidelity_evidence=FidelityEvidenceArtifactRefV1(
+            digest=evidence_hash,
+            size=artifact.size,
+        ),
+    )
+    attestation = _builder_signer().issue(
+        purpose=AttestationPurposeV1.BUILDER_FREEZE,
+        payload=builder_attestation_payload(unsigned),
+        evidence_identity=artifact.uri,
+        ttl_seconds=3600,
+    )
+    return unsigned.model_copy(update={"builder_attestation": attestation}), payload
+
+
+def _refresh_generation_task_hash(payload: dict[str, object]) -> None:
+    generation_task = payload["generation_task"]
+    assert isinstance(generation_task, dict)
+    generation_task_hash = digest_bytes(
+        HashKindV1.PROMPT,
+        canonical_json_bytes(generation_task),
+    ).model_dump(mode="json")
+    payload["generation_task_hash"] = generation_task_hash
+    candidates = payload["candidates"]
+    assert isinstance(candidates, list)
+    for candidate in candidates:
+        assert isinstance(candidate, dict)
+        candidate["generation_task_hash"] = generation_task_hash
+
+
 def _plane(
     tmp_path: Path,
     *,
     clock: Callable[[], datetime] | None = None,
+    allow_test_only_unreviewed_bundles: bool = True,
 ) -> ControlPlane:
     database = tmp_path / "control.db"
     return ControlPlane(
@@ -276,7 +442,7 @@ def _plane(
         artifacts=ArtifactStore(tmp_path / "artifacts"),
         attestation_verifier=_attestation_verifier(clock),
         allow_test_only_direct_verifier_attestations=True,
-        allow_test_only_unreviewed_bundles=True,
+        allow_test_only_unreviewed_bundles=allow_test_only_unreviewed_bundles,
     )
 
 
@@ -399,6 +565,380 @@ def test_control_plane_rejects_legacy_bundle_without_source_preparation(
             legacy_bundle,
             idempotency_key="legacy-source-preparation",
         )
+
+
+def test_registration_accepts_a_complete_v1_fidelity_artifact(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    bundle, payload = _reviewed_bundle(plane.artifacts)
+
+    expected_generation_hash = digest_bytes(
+        HashKindV1.PROMPT,
+        canonical_json_bytes(payload["generation_task"]),
+    )
+    assert not canonical_json_bytes(payload["generation_task"]).endswith(b"\n")
+    assert payload["generation_task_hash"] == expected_generation_hash.model_dump(mode="json")
+
+    binding = plane.register_bundle(bundle, idempotency_key="reviewed-v1")
+
+    assert binding.fidelity_evidence_artifact is not None
+    assert binding.fidelity_evidence_artifact.digest == bundle.fidelity_evidence.digest.value
+
+
+def test_registration_rejects_legacy_reviewed_v1_without_generation_task(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    legacy_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(legacy_payload, dict)
+    legacy_payload.pop("generation_task")
+    legacy_payload.pop("generation_task_hash")
+    legacy, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=legacy_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="unexpected or missing fields"):
+        plane.register_bundle(legacy, idempotency_key="legacy-reviewed-v1")
+
+
+def test_registration_rejects_wrong_top_level_generation_task_hash(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    top_hash = tampered_payload["generation_task_hash"]
+    assert isinstance(top_hash, dict)
+    top_hash["value"] = "0" * 64
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="does not match generation_task_hash"):
+        plane.register_bundle(tampered, idempotency_key="wrong-top-level-generation-hash")
+
+
+def test_registration_rejects_wrong_candidate_generation_task_hash(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    candidates = tampered_payload["candidates"]
+    assert isinstance(candidates, list)
+    first_candidate = candidates[0]
+    assert isinstance(first_candidate, dict)
+    candidate_hash = first_candidate["generation_task_hash"]
+    assert isinstance(candidate_hash, dict)
+    candidate_hash["value"] = "1" * 64
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="candidate 0 has a different generation task hash"):
+        plane.register_bundle(tampered, idempotency_key="wrong-candidate-generation-hash")
+
+
+def test_registration_rejects_generation_projection_content_drift(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(generation_task, dict)
+    formalization = generation_task["formalization"]
+    assert isinstance(formalization, dict)
+    formalization["declaration_name"] = "different_fixture"
+    generation_task_hash = digest_bytes(
+        HashKindV1.PROMPT,
+        canonical_json_bytes(generation_task),
+    ).model_dump(mode="json")
+    tampered_payload["generation_task_hash"] = generation_task_hash
+    candidates = tampered_payload["candidates"]
+    assert isinstance(candidates, list)
+    for candidate in candidates:
+        assert isinstance(candidate, dict)
+        candidate["generation_task_hash"] = generation_task_hash
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="differs from the Builder projection"):
+        plane.register_bundle(tampered, idempotency_key="generation-projection-drift")
+
+
+def test_registration_rejects_extra_generation_task_fields(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(generation_task, dict)
+    generation_task["selected_formal_answer"] = "forbidden extra"
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="differs from the Builder projection"):
+        plane.register_bundle(tampered, idempotency_key="extra-generation-field")
+
+
+@pytest.mark.parametrize("allow_test_only_unreviewed_bundles", (False, True))
+def test_registration_rejects_selected_lean_source_as_generation_fragment(
+    tmp_path: Path,
+    allow_test_only_unreviewed_bundles: bool,
+) -> None:
+    plane = _plane(
+        tmp_path,
+        allow_test_only_unreviewed_bundles=allow_test_only_unreviewed_bundles,
+    )
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(task, dict) and isinstance(generation_task, dict)
+    task_obligations = task["obligations"]
+    generation_obligations = generation_task["obligations"]
+    assert isinstance(task_obligations, list) and isinstance(generation_obligations, list)
+    assert isinstance(task_obligations[0], dict) and isinstance(generation_obligations[0], dict)
+    task_obligations[0]["normalized_fragment"] = base.contract.formal.lean_statement_source
+    generation_obligations[0]["normalized_fragment"] = base.contract.formal.lean_statement_source
+    _refresh_generation_task_hash(tampered_payload)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="fragment is absent"):
+        plane.register_bundle(tampered, idempotency_key="selected-lean-fragment")
+
+
+def test_registration_rejects_task_and_generation_source_span_drift(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(task, dict) and isinstance(generation_task, dict)
+    task_spans = task["source_spans"]
+    generation_spans = generation_task["source_spans"]
+    assert isinstance(task_spans, list) and isinstance(generation_spans, list)
+    assert isinstance(task_spans[0], dict) and isinstance(generation_spans[0], dict)
+    task_spans[0]["locator"] = "attacker://different-source"
+    generation_spans[0]["locator"] = "attacker://different-source"
+    _refresh_generation_task_hash(tampered_payload)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="source span locator differs"):
+        plane.register_bundle(tampered, idempotency_key="source-span-drift")
+
+
+def test_registration_accepts_valid_reordered_private_source_claims(tmp_path: Path) -> None:
+    second_span = SourceSpanV1(
+        span_id=_id("second-span"),
+        locator="source:2",
+        content_hash=digest_text(HashKindV1.SOURCE_SPAN, "m equals m"),
+        permitted_excerpt="m equals m",
+    )
+    plane = _plane(tmp_path)
+    base = _bundle(additional_source_spans=(second_span,))
+    base, payload = _reviewed_bundle(plane.artifacts, base=base)
+    reordered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(reordered_payload, dict)
+    task = reordered_payload["task"]
+    generation_task = reordered_payload["generation_task"]
+    assert isinstance(task, dict) and isinstance(generation_task, dict)
+    task_spans = task["source_spans"]
+    generation_spans = generation_task["source_spans"]
+    assert isinstance(task_spans, list) and isinstance(generation_spans, list)
+    task_spans.reverse()
+    generation_spans.reverse()
+    _refresh_generation_task_hash(reordered_payload)
+    reordered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=reordered_payload,
+        base=base,
+    )
+
+    binding = plane.register_bundle(reordered, idempotency_key="reordered-private-source-claims")
+
+    assert binding.fidelity_evidence_artifact is not None
+
+
+@pytest.mark.parametrize("mode", ("unknown", "duplicate"))
+def test_registration_rejects_unknown_or_duplicate_task_source_span_ids(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(task, dict) and isinstance(generation_task, dict)
+    task_spans = task["source_spans"]
+    generation_spans = generation_task["source_spans"]
+    assert isinstance(task_spans, list) and isinstance(generation_spans, list)
+    assert isinstance(task_spans[0], dict) and isinstance(generation_spans[0], dict)
+    if mode == "unknown":
+        task_spans[0]["span_id"] = _id("unknown-span").value
+        generation_spans[0]["span_id"] = _id("unknown-span").value
+    else:
+        task_spans.append(dict(task_spans[0]))
+        generation_spans.append(dict(generation_spans[0]))
+    _refresh_generation_task_hash(tampered_payload)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="source span"):
+        plane.register_bundle(tampered, idempotency_key=f"{mode}-source-span")
+
+
+def test_registration_rejects_fragment_absent_from_frozen_normalized_statement(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(task, dict) and isinstance(generation_task, dict)
+    task_obligations = task["obligations"]
+    generation_obligations = generation_task["obligations"]
+    assert isinstance(task_obligations, list) and isinstance(generation_obligations, list)
+    assert isinstance(task_obligations[0], dict) and isinstance(generation_obligations[0], dict)
+    task_obligations[0]["normalized_fragment"] = "unbound normalized fragment"
+    generation_obligations[0]["normalized_fragment"] = "unbound normalized fragment"
+    _refresh_generation_task_hash(tampered_payload)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="fragment is absent"):
+        plane.register_bundle(tampered, idempotency_key="unbound-normalized-fragment")
+
+
+def test_registration_rejects_duplicate_task_obligation_source_span_ids(tmp_path: Path) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    assert isinstance(task, dict)
+    obligations = task["obligations"]
+    assert isinstance(obligations, list) and isinstance(obligations[0], dict)
+    source_span_ids = obligations[0]["source_span_ids"]
+    assert isinstance(source_span_ids, list) and isinstance(source_span_ids[0], str)
+    source_span_ids.append(source_span_ids[0])
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="source spans are invalid"):
+        plane.register_bundle(tampered, idempotency_key="duplicate-obligation-source-span")
+
+
+@pytest.mark.parametrize(
+    "field",
+    ("obligation_id", "description", "normalized_fragment", "lean_fragment"),
+)
+def test_registration_rejects_blank_task_obligation_text(tmp_path: Path, field: str) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    assert isinstance(task, dict)
+    obligations = task["obligations"]
+    assert isinstance(obligations, list) and isinstance(obligations[0], dict)
+    obligations[0][field] = " "
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match=f"{field} must not be blank"):
+        plane.register_bundle(tampered, idempotency_key=f"blank-obligation-{field}")
+
+
+@pytest.mark.parametrize("mode", ("extra", "missing"))
+def test_registration_rejects_task_obligation_extra_or_missing_fields(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    task = tampered_payload["task"]
+    assert isinstance(task, dict)
+    obligations = task["obligations"]
+    assert isinstance(obligations, list) and isinstance(obligations[0], dict)
+    if mode == "extra":
+        obligations[0]["selected_formal_answer"] = "forbidden"
+    else:
+        obligations[0].pop("description")
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="task obligation"):
+        plane.register_bundle(tampered, idempotency_key=f"{mode}-obligation-field")
+
+
+@pytest.mark.parametrize("mode", ("extra", "missing"))
+def test_registration_rejects_generation_obligation_extra_or_missing_fields(
+    tmp_path: Path,
+    mode: str,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    generation_task = tampered_payload["generation_task"]
+    assert isinstance(generation_task, dict)
+    obligations = generation_task["obligations"]
+    assert isinstance(obligations, list) and isinstance(obligations[0], dict)
+    if mode == "extra":
+        obligations[0]["lean_fragment"] = "forbidden"
+    else:
+        obligations[0].pop("normalized_fragment")
+    _refresh_generation_task_hash(tampered_payload)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="differs from the Builder projection"):
+        plane.register_bundle(tampered, idempotency_key=f"{mode}-generation-obligation-field")
 
 
 def test_protocol_accepts_only_evidence_for_the_registered_frozen_contract(tmp_path: Path) -> None:

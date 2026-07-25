@@ -11,6 +11,8 @@ from typing import BinaryIO
 import pytest
 from autolean_builder import (
     CandidateFormalization,
+    CandidateGenerationTask,
+    CandidateProposal,
     CandidateReviewVerdict,
     ChapterSourceSpan,
     DownloadObservation,
@@ -377,19 +379,13 @@ def _obligations(contract: StatementContractV1) -> tuple[SemanticObligation, ...
 class _Translator:
     actor_id: str
     independence_group: str
+    oracle_lean_statement: str
 
-    def translate(self, task: TranslationTask) -> CandidateFormalization:
-        return CandidateFormalization(
+    def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+        return CandidateProposal(
             candidate_id=f"candidate-{self.actor_id}",
-            actor_id=self.actor_id,
-            independence_group=self.independence_group,
-            contract_id=task.contract_id,
-            revision=task.revision,
-            draft_contract_hash=task.draft_contract_hash,
-            source_hash=task.source_hash,
-            normalized_statement_sha256=task.normalized_statement_sha256,
-            lean_statement_source=task.selected_lean_statement,
-            reverse_rendering=task.normalized_statement,
+            lean_statement_source=self.oracle_lean_statement,
+            reverse_rendering=task.mathematics.normalized_statement,
             covered_obligation_ids=tuple(item.obligation_id for item in task.obligations),
         )
 
@@ -500,8 +496,16 @@ def _evaluation(
         packet,
         obligations=_obligations(packet.contract),
         translators=(
-            _Translator("translator-a", "independence-a"),
-            _Translator("translator-b", "independence-b"),
+            _Translator(
+                "translator-a",
+                "independence-a",
+                packet.contract.formal.lean_statement_source,
+            ),
+            _Translator(
+                "translator-b",
+                "independence-b",
+                packet.contract.formal.lean_statement_source,
+            ),
         ),
         mutation_agent=_MutationAgent(),
         reviewer=_SemanticReviewer(),

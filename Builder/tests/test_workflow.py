@@ -12,6 +12,8 @@ from autolean_builder import (
     BuilderError,
     BuilderStage,
     CandidateFormalization,
+    CandidateGenerationTask,
+    CandidateProposal,
     CandidateReviewVerdict,
     EvidenceAuthority,
     FidelityHarnessError,
@@ -236,27 +238,33 @@ def _obligations(contract: StatementContractV1) -> tuple[SemanticObligation, ...
     )
 
 
+def test_semantic_obligation_rejects_duplicate_source_span_ids_at_construction() -> None:
+    obligation = _obligations(_contract())[0]
+
+    with pytest.raises(FidelityHarnessError, match="source span identifiers must be unique"):
+        replace(
+            obligation,
+            source_span_ids=(obligation.source_span_ids[0], obligation.source_span_ids[0]),
+        )
+
+
 @dataclass(frozen=True, slots=True)
 class FakeTranslationAgent:
     actor_id: str
     independence_group: str
     candidate_id: str
-    corrupt_normalized_binding: bool = False
+    oracle_lean_statement: str
+    return_mismatched_statement: bool = False
 
-    def translate(self, task: TranslationTask) -> CandidateFormalization:
-        normalized_hash = (
-            "0" * 64 if self.corrupt_normalized_binding else task.normalized_statement_sha256
+    def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+        lean_statement_source = (
+            "theorem mismatched_fixture : True"
+            if self.return_mismatched_statement
+            else self.oracle_lean_statement
         )
-        return CandidateFormalization(
+        return CandidateProposal(
             candidate_id=self.candidate_id,
-            actor_id=self.actor_id,
-            independence_group=self.independence_group,
-            contract_id=task.contract_id,
-            revision=task.revision,
-            draft_contract_hash=task.draft_contract_hash,
-            source_hash=task.source_hash,
-            normalized_statement_sha256=normalized_hash,
-            lean_statement_source=task.selected_lean_statement,
+            lean_statement_source=lean_statement_source,
             reverse_rendering=_golden()["reverse_rendering"],
             covered_obligation_ids=tuple(item.obligation_id for item in task.obligations),
         )
@@ -343,9 +351,10 @@ class FakeSemanticReviewer:
 
 
 def _translators() -> tuple[FakeTranslationAgent, ...]:
+    oracle_lean_statement = _golden()["lean_statement"]
     return (
-        FakeTranslationAgent("translator-a", "team-a", "candidate-a"),
-        FakeTranslationAgent("translator-b", "team-b", "candidate-b"),
+        FakeTranslationAgent("translator-a", "team-a", "candidate-a", oracle_lean_statement),
+        FakeTranslationAgent("translator-b", "team-b", "candidate-b", oracle_lean_statement),
     )
 
 
@@ -521,25 +530,266 @@ def test_false_negative_mutation_golden_blocks_freeze(kind: MutationKindV1) -> N
         )
 
 
-def test_harness_rejects_candidate_bound_to_another_normalized_statement() -> None:
+def test_harness_rejects_mismatched_candidate_before_reviewer_runs() -> None:
     contract = _contract()
+
+    @dataclass(frozen=True, slots=True)
+    class UnreachableMutationAgent:
+        actor_id: str = "unreachable-mutation-agent"
+
+        def generate(
+            self,
+            task: TranslationTask,
+            selected_candidate: CandidateFormalization,
+        ) -> tuple[MutationProbeV1, ...]:
+            del task, selected_candidate
+            raise AssertionError("mutation must not receive a candidate that fails exact matching")
+
+    @dataclass(frozen=True, slots=True)
+    class UnreachableReviewer:
+        reviewer_id: str = "unreachable-reviewer"
+
+        def review(self, packet: SemanticReviewPacket) -> SemanticReviewVerdict:
+            del packet
+            raise AssertionError("reviewer must not receive a candidate that fails exact matching")
+
     translators = (
         FakeTranslationAgent(
             "translator-a",
             "team-a",
             "candidate-a",
-            corrupt_normalized_binding=True,
+            _golden()["lean_statement"],
+            return_mismatched_statement=True,
         ),
-        FakeTranslationAgent("translator-b", "team-b", "candidate-b"),
+        FakeTranslationAgent("translator-b", "team-b", "candidate-b", _golden()["lean_statement"]),
     )
-    with pytest.raises(FidelityHarnessError, match="not bound"):
+    with pytest.raises(FidelityHarnessError, match="exactly match"):
         StatementFidelityHarness().run(
             contract,
             obligations=_obligations(contract),
             translators=translators,
-            mutation_agent=FakeMutationSuiteAgent(),
-            reviewer=FakeSemanticReviewer(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
         )
+
+
+def test_translation_agent_receives_selected_formal_field_blind_generation_payload() -> None:
+    contract = _contract()
+    base_obligations = _obligations(contract)
+    obligations = (
+        replace(
+            base_obligations[0],
+            description=contract.formal.lean_statement_source,
+        ),
+        *base_obligations[1:],
+    )
+    observed_tasks: list[CandidateGenerationTask] = []
+    observed_payloads: list[dict[str, object]] = []
+
+    @dataclass(frozen=True, slots=True)
+    class SpyTranslator:
+        actor_id: str
+        independence_group: str
+        candidate_id: str
+        oracle_lean_statement: str
+
+        def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+            assert isinstance(task, CandidateGenerationTask)
+            observed_tasks.append(task)
+            observed_payloads.append(task.payload())
+            return CandidateProposal(
+                candidate_id=self.candidate_id,
+                lean_statement_source=self.oracle_lean_statement,
+                reverse_rendering=_golden()["reverse_rendering"],
+                covered_obligation_ids=tuple(item.obligation_id for item in task.obligations),
+            )
+
+    evaluation = StatementFidelityHarness().run(
+        contract,
+        obligations=obligations,
+        translators=(
+            SpyTranslator("spy-a", "team-a", "candidate-a", _golden()["lean_statement"]),
+            SpyTranslator("spy-b", "team-b", "candidate-b", _golden()["lean_statement"]),
+        ),
+        mutation_agent=FakeMutationSuiteAgent(),
+        reviewer=FakeSemanticReviewer(),
+    )
+
+    forbidden_keys = {
+        "selected_lean_statement",
+        "selected_statement_hash",
+        "draft_contract_hash",
+        "lean_fragment",
+    }
+    forbidden_values = {
+        contract.formal.lean_statement_source,
+        contract.formal.statement_source_hash.value,
+        contract.semantic_hash().value,
+        *(obligation.lean_fragment for obligation in obligations),
+    }
+
+    def assert_selected_formal_fields_absent(value: object) -> None:
+        if isinstance(value, dict):
+            assert not (set(value) & forbidden_keys)
+            for nested in value.values():
+                assert_selected_formal_fields_absent(nested)
+        elif isinstance(value, (list, tuple)):
+            for nested in value:
+                assert_selected_formal_fields_absent(nested)
+        elif isinstance(value, str):
+            assert all(forbidden not in value for forbidden in forbidden_values)
+
+    assert len(observed_tasks) == 2
+    for task in observed_tasks:
+        assert not hasattr(task, "selected_lean_statement")
+        assert not hasattr(task, "selected_statement_hash")
+        assert not hasattr(task, "draft_contract_hash")
+        assert all(
+            not hasattr(obligation, "lean_fragment") and not hasattr(obligation, "description")
+            for obligation in task.obligations
+        )
+        assert task.mathematics == contract.mathematics
+        assert task.formalization.task_kind is contract.task_kind
+        assert task.formalization.declaration_name == contract.formal.declaration_name
+        assert task.formalization.namespace == contract.formal.namespace
+        assert task.formalization.lean_version == contract.formal.environment.lean_version
+        assert task.formalization.mathlib_revision == contract.formal.environment.mathlib_revision
+        assert task.formalization.imports_allowlist == contract.formal.imports_allowlist
+        assert task.formalization.axioms_allowlist == contract.formal.axioms_allowlist
+        assert task.formalization.rendering_profile == "autolean.full-declaration-exact.v1"
+    assert len(observed_payloads) == 2
+    for payload in observed_payloads:
+        assert_selected_formal_fields_absent(payload)
+        projected_obligations = payload["obligations"]
+        assert isinstance(projected_obligations, list)
+        assert all(
+            isinstance(obligation, dict) and "description" not in obligation
+            for obligation in projected_obligations
+        )
+    assert all(candidate.contract_id == contract.contract_id for candidate in evaluation.candidates)
+    assert all(candidate.revision == contract.revision for candidate in evaluation.candidates)
+    assert all(
+        candidate.draft_contract_hash == contract.semantic_hash()
+        for candidate in evaluation.candidates
+    )
+    assert all(
+        candidate.generation_task_hash == evaluation.generation_task.content_hash
+        for candidate in evaluation.candidates
+    )
+    artifact = evaluation.artifact_payload()
+    assert artifact["generation_task"] == evaluation.generation_task.payload()
+    assert artifact["generation_task_hash"] == evaluation.generation_task.content_hash.model_dump(
+        mode="json"
+    )
+    binding_check = next(
+        item
+        for item in evaluation.automatic_checks
+        if item.check_name == "candidate_contract_bindings"
+    )
+    assert evaluation.generation_task.content_hash.value in binding_check.evidence
+
+    tampered_candidate = replace(
+        evaluation.candidates[0],
+        generation_task_hash=digest_text(HashKindV1.PROMPT, "detached-generation-task"),
+    )
+    tampered_evaluation = replace(
+        evaluation,
+        candidates=(tampered_candidate, *evaluation.candidates[1:]),
+    )
+    with pytest.raises(FidelityHarnessError, match="candidate is not bound"):
+        tampered_evaluation.assert_binds(contract)
+
+
+def test_harness_freezes_all_role_identities_before_untrusted_calls() -> None:
+    contract = _contract()
+
+    @dataclass(slots=True)
+    class MutableMutationAgent:
+        actor_id: str = "registered-mutation-agent"
+
+        def generate(
+            self,
+            task: TranslationTask,
+            selected_candidate: CandidateFormalization,
+        ) -> tuple[MutationProbeV1, ...]:
+            self.actor_id = "spoofed-mutation-agent"
+            return FakeMutationSuiteAgent().generate(task, selected_candidate)
+
+    @dataclass(slots=True)
+    class MutableReviewer:
+        reviewer_id: str = "registered-semantic-reviewer"
+
+        def review(self, packet: SemanticReviewPacket) -> SemanticReviewVerdict:
+            self.reviewer_id = "spoofed-semantic-reviewer"
+            return FakeSemanticReviewer(reviewer_id="registered-semantic-reviewer").review(packet)
+
+    @dataclass(slots=True)
+    class MutableTranslator:
+        actor_id: str
+        independence_group: str
+        candidate_id: str
+        oracle_lean_statement: str
+        peer: MutableTranslator | None = None
+        mutation_agent: MutableMutationAgent | None = None
+        reviewer: MutableReviewer | None = None
+
+        def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+            self.actor_id = f"spoofed-{self.candidate_id}"
+            self.independence_group = f"spoofed-group-{self.candidate_id}"
+            if self.peer is not None:
+                self.peer.actor_id = "spoofed-before-second-translate"
+                self.peer.independence_group = "spoofed-before-second-group"
+            if self.mutation_agent is not None:
+                self.mutation_agent.actor_id = "spoofed-before-mutation"
+            if self.reviewer is not None:
+                self.reviewer.reviewer_id = "spoofed-before-review"
+            return CandidateProposal(
+                candidate_id=self.candidate_id,
+                lean_statement_source=self.oracle_lean_statement,
+                reverse_rendering=_golden()["reverse_rendering"],
+                covered_obligation_ids=tuple(item.obligation_id for item in task.obligations),
+            )
+
+    mutation_agent = MutableMutationAgent()
+    reviewer = MutableReviewer()
+    second = MutableTranslator(
+        "registered-translator-b",
+        "registered-group-b",
+        "candidate-b",
+        _golden()["lean_statement"],
+    )
+    first = MutableTranslator(
+        "registered-translator-a",
+        "registered-group-a",
+        "candidate-a",
+        _golden()["lean_statement"],
+        peer=second,
+        mutation_agent=mutation_agent,
+        reviewer=reviewer,
+    )
+
+    evaluation = StatementFidelityHarness().run(
+        contract,
+        obligations=_obligations(contract),
+        translators=(first, second),
+        mutation_agent=mutation_agent,
+        reviewer=reviewer,
+    )
+
+    assert tuple(candidate.actor_id for candidate in evaluation.candidates) == (
+        "registered-translator-a",
+        "registered-translator-b",
+    )
+    assert tuple(candidate.independence_group for candidate in evaluation.candidates) == (
+        "registered-group-a",
+        "registered-group-b",
+    )
+    assert evaluation.mutation_agent_id == "registered-mutation-agent"
+    assert evaluation.review.reviewer_id == "registered-semantic-reviewer"
+    assert first.actor_id == "spoofed-candidate-a"
+    assert second.actor_id == "spoofed-candidate-b"
+    assert mutation_agent.actor_id == "spoofed-mutation-agent"
+    assert reviewer.reviewer_id == "spoofed-semantic-reviewer"
 
 
 def test_harness_rejects_an_incomplete_mutation_suite() -> None:

@@ -19,6 +19,10 @@ from .experience import (
 from .fidelity_harness import (
     AutomaticCheckResult,
     CandidateFormalization,
+    CandidateGenerationEnvelope,
+    CandidateGenerationObligation,
+    CandidateGenerationTask,
+    CandidateProposal,
     CandidateReviewVerdict,
     EvidenceAuthority,
     FidelityEvaluation,
@@ -34,6 +38,7 @@ from .fidelity_harness import (
     SourceClaimSpan,
     StatementFidelityHarness,
     TranslationAgent,
+    TranslationAgentV2,
     TranslationTask,
 )
 from .pilot_harness import (
@@ -148,6 +153,10 @@ __all__ = [
     "CalibrationReviewEvidenceV1",
     "CalibrationRoleV1",
     "CandidateFormalization",
+    "CandidateGenerationEnvelope",
+    "CandidateGenerationObligation",
+    "CandidateGenerationTask",
+    "CandidateProposal",
     "CandidateReviewVerdict",
     "ChapterSourceSpan",
     "DownloadObservation",
@@ -249,6 +258,7 @@ __all__ = [
     "TextbookAnchorV1",
     "TextbookReferenceBindingV1",
     "TranslationAgent",
+    "TranslationAgentV2",
     "TranslationTask",
     "VerifiedReference",
     "candidate_integrity_checksum_sha256",

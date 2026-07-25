@@ -44,7 +44,7 @@ from .fidelity_harness import (
     SemanticReviewAgent,
     SourceClaimSpan,
     StatementFidelityHarness,
-    TranslationAgent,
+    TranslationAgentV2,
 )
 from .pilot_harness import (
     PilotAdmissionReceiptV1,
@@ -517,7 +517,7 @@ class SourceToStatementHarness:
         packet: StatementDraftPacket,
         *,
         obligations: tuple[SemanticObligation, ...],
-        translators: tuple[TranslationAgent, ...],
+        translators: tuple[TranslationAgentV2, ...],
         mutation_agent: MutationSuiteAgent,
         reviewer: SemanticReviewAgent,
         additional_signoffs: tuple[ReviewerSignoffV1, ...] = (),

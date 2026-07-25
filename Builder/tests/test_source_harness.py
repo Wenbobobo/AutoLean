@@ -17,6 +17,8 @@ import autolean_builder.source_harness as source_harness_module
 import pytest
 from autolean_builder import (
     CandidateFormalization,
+    CandidateGenerationTask,
+    CandidateProposal,
     CandidateReviewVerdict,
     ChapterSourceSpan,
     DownloadObservation,
@@ -523,19 +525,13 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
     class Translator:
         actor_id: str
         independence_group: str
+        oracle_lean_statement: str
 
-        def translate(self, task: TranslationTask) -> CandidateFormalization:
-            return CandidateFormalization(
+        def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+            return CandidateProposal(
                 candidate_id=f"{self.actor_id}-candidate",
-                actor_id=self.actor_id,
-                independence_group=self.independence_group,
-                contract_id=task.contract_id,
-                revision=task.revision,
-                draft_contract_hash=task.draft_contract_hash,
-                source_hash=task.source_hash,
-                normalized_statement_sha256=task.normalized_statement_sha256,
-                lean_statement_source=task.selected_lean_statement,
-                reverse_rendering=task.normalized_statement,
+                lean_statement_source=self.oracle_lean_statement,
+                reverse_rendering=task.mathematics.normalized_statement,
                 covered_obligation_ids=tuple(
                     obligation.obligation_id for obligation in task.obligations
                 ),
@@ -623,8 +619,16 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
         packet,
         obligations=obligations,
         translators=(
-            Translator("source-translator-a", "source-team-a"),
-            Translator("source-translator-b", "source-team-b"),
+            Translator(
+                "source-translator-a",
+                "source-team-a",
+                packet.contract.formal.lean_statement_source,
+            ),
+            Translator(
+                "source-translator-b",
+                "source-team-b",
+                packet.contract.formal.lean_statement_source,
+            ),
         ),
         mutation_agent=MutationAgent(),
         reviewer=Reviewer(),
