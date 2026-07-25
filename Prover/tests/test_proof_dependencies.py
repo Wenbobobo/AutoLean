@@ -219,6 +219,85 @@ def test_validation_cli_accepts_positive_and_rejects_disguised_fixture(
     assert "forbiddenStrong" in captured.err
 
 
+def test_query_rejects_a_symlinked_candidate_before_running_docker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.lean"
+    source.write_text("theorem source : True := True.intro\n", encoding="utf-8")
+    candidate = tmp_path / "Candidate.lean"
+    try:
+        candidate.symlink_to(source)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    def unexpected_run(
+        command: list[str],
+        *,
+        timeout: int,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        pytest.fail(f"subprocess ran before candidate validation: {command!r}, {timeout=}, {cwd=}")
+
+    monkeypatch.setattr(proof_dependency_gate, "_run", unexpected_run)
+
+    with pytest.raises(
+        proof_dependency_gate.ProofDependencySpikeError,
+        match="regular non-symlink",
+    ):
+        proof_dependency_gate.query_dependencies(
+            image=f"worker@example@sha256:{'0' * 64}",
+            candidate=candidate,
+            declaration="AutoLean.Example.theorem",
+        )
+
+
+def test_wsl_delegation_keeps_the_lexical_symlink_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.lean"
+    source.write_text("theorem source : True := True.intro\n", encoding="utf-8")
+    candidate = tmp_path / "Candidate.lean"
+    try:
+        candidate.symlink_to(source)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    translated: list[Path] = []
+
+    def fake_wsl_path(path: Path) -> str:
+        translated.append(path)
+        return path.as_posix()
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(proof_dependency_gate, "_wsl_path", fake_wsl_path)
+    monkeypatch.setattr(proof_dependency_gate.subprocess, "run", fake_run)
+    arguments = proof_dependency_gate.parse_args(
+        [
+            "query",
+            "--image",
+            f"worker@example@sha256:{'0' * 64}",
+            "--candidate",
+            str(candidate),
+            "--declaration",
+            "AutoLean.Example.theorem",
+        ]
+    )
+
+    assert proof_dependency_gate._delegate_query(arguments) == 0
+    assert translated[-1] == proof_dependency_gate._lexical_absolute(candidate)
+    assert translated[-1].is_symlink()
+    assert translated[-1] != source.resolve()
+
+
 @pytest.mark.integration
 def test_source_v2_helper_replays_committed_query_fixtures() -> None:
     if os.name != "posix" or shutil.which("docker") is None:

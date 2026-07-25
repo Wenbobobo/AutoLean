@@ -214,7 +214,7 @@ def query_dependencies(
         source_snapshot = scratch / "Candidate.lean"
         output = scratch / "output"
         output.mkdir(mode=0o777)
-        _snapshot_candidate(candidate.resolve(), source_snapshot)
+        _snapshot_candidate(candidate, source_snapshot)
 
         compile_command = [
             *_docker_base(),
@@ -378,6 +378,12 @@ def _wsl_path(path: Path) -> str:
     return translated
 
 
+def _lexical_absolute(path: Path) -> Path:
+    """Make a path absolute without dereferencing symlinks."""
+
+    return Path(os.path.abspath(path))
+
+
 def _delegate_query(arguments: argparse.Namespace) -> int:
     repo_root = Path(__file__).resolve().parents[1]
     command = [
@@ -397,7 +403,7 @@ def _delegate_query(arguments: argparse.Namespace) -> int:
         "--image",
         cast(str, arguments.image),
         "--candidate",
-        _wsl_path(cast(Path, arguments.candidate).resolve()),
+        _wsl_path(_lexical_absolute(cast(Path, arguments.candidate))),
         "--declaration",
         cast(str, arguments.declaration),
     ]
