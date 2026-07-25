@@ -53,7 +53,8 @@ runner reports success.
     `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
     independent versus compositional proof-dependency gates. The
     [image-owned substrate preflight](library-substrate-image-preflight.md) records the exact
-    child build, typed/IR inventory, sealed-Candidate query, and deliberately missing V2 adapter.
+    child build, typed/IR inventory, sealed-Candidate query, and V2-compatible preflight facade
+    without a contract, gateway, or T6 claim.
     The
     [executable proof-dependency spike](proof-dependency-gate-spike.md) records a host-mounted
     source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.

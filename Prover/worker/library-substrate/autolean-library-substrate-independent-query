@@ -41,6 +41,14 @@ import Lean.Util.FoldConsts
 
 open Lean
 
+private def targetTypeSha256 :=
+  "66d1fe3cbd2a62831bf57b9761248bf3fa5d84b95879be25c7e591c48ebeef8a"
+
+private def expectedAxioms : Array String := #["Classical.choice", "Quot.sound", "propext"]
+
+private def forbiddenDirectDependency :=
+  `AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.sound
+
 private def runtimeModules : Array (Name × System.FilePath) := #[
   (`AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core,
     "/opt/autolean/library-substrate/lib/lean/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core.olean"),
@@ -79,6 +87,17 @@ private def canonicalType (environment : Environment) (info : ConstantInfo) : IO
   if rendered.any fun char => char == '\x00' || char == '\n' || char == '\r' then
     throw <| IO.userError s!"canonical type is not one line: {info.name}"
   return rendered
+
+private def sha256Text (value : String) : IO String := do
+  let path : System.FilePath := "/tmp/autolean-library-substrate-query-type.txt"
+  IO.FS.writeFile path value
+  let output ← IO.Process.output { cmd := "sha256sum", args := #[path.toString] }
+  if output.exitCode != 0 then
+    throw <| IO.userError "sha256sum failed while hashing the target type"
+  let digest := (output.stdout.trimAscii.take 64).toString
+  if digest.length != 64 || !digest.all fun char => char.isDigit || ('a' ≤ char && char ≤ 'f') then
+    throw <| IO.userError "sha256sum emitted an invalid target type digest"
+  return digest
 
 private def observedAxioms (environment : Environment) (name : Name) : IO (Array Name) := do
   let context : Core.Context := {
@@ -218,18 +237,28 @@ private def query
   let some targetInfo := environment.checked.get.find? target
     | throw <| IO.userError "owned target has no ConstantInfo"
   let direct := uniqueSortedNames (← targetProof environment target).getUsedConstants
-  let candidateImports := candidate.imports.map (·.module)
+  if direct.any (· == forbiddenDirectDependency) then
+    throw <| IO.userError "Candidate directly depends on the forbidden Deriv.sound declaration"
+  let candidateImports := uniqueSortedNames (candidate.imports.map (·.module))
+  if candidateImports != #[`AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude, `Init] then
+    throw <| IO.userError "Candidate direct imports differ from the independent substrate profile"
+  let renderedType ← canonicalType environment targetInfo
+  if (← sha256Text renderedType) != targetTypeSha256 then
+    throw <| IO.userError "Candidate target type differs from the historical frozen hash"
+  let axioms ← observedAxioms environment target
+  if axioms.map (·.toString) != expectedAxioms then
+    throw <| IO.userError "Candidate target axioms differ from the historical frozen set"
   return Json.mkObj [
-    ("candidate_direct_imports", namesJson (sortedNames candidateImports)),
+    ("candidate_direct_imports", namesJson candidateImports),
     ("candidate_ir_auxiliary_names", namesJson candidateAuxiliaryNames),
     ("candidate_kernel_names", namesJson candidateKernelNames),
     ("candidate_namespace_disjoint", Json.bool true),
     ("candidate_owns_target", Json.bool true),
-    ("canonical_type", Json.str (← canonicalType environment targetInfo)),
+    ("canonical_type", Json.str renderedType),
     ("declaration", Json.str target.toString),
     ("direct_proof_dependencies", namesJson direct),
     ("loaded_module_closure", namesJson (sortedNames environment.header.moduleNames)),
-    ("observed_axioms", namesJson (← observedAxioms environment target)),
+    ("observed_axioms", namesJson axioms),
     ("runtime_declarations", Json.arr (← runtimeInventory environment)),
     ("runtime_ir_auxiliary_names", Json.arr (← runtimeIrAuxiliaryNames environment)),
     ("schema_version", Json.str "autolean.library-substrate-independent-query.v1"),

@@ -42,7 +42,7 @@ presented as the implementation or evidence for the focused Library profile.
 
 | Profile | Immediate purpose | Mathlib scope | Decision state |
 | --- | --- | --- | --- |
-| `library-substrate-v1` | Target-free AutoLean definitions for the first T5/T6 pilot | Reuse the locked `Mathlib.ModelTheory.Semantics` closure | Operator-local image preflight verified; not admitted or V2-integrated |
+| `library-substrate-v1` | Target-free AutoLean definitions for the first T5/T6 pilot | Reuse the locked `Mathlib.ModelTheory.Semantics` closure | Operator-local image preflight verified with a V2-compatible facade; not admitted, contract-bound, or gateway-integrated |
 | `mathlib-substrate-v1` | Possible general upstream Mathlib basis for later domains | Full default target or reviewed closures, as preflight determines | Deferred; no build choice accepted |
 | external `/deps` V3 | Dynamic accepted AutoLean theorem dependencies across project frontiers | Image-owned Mathlib plus a sealed external capsule | Deferred until the multi-file trigger below |
 
@@ -150,10 +150,11 @@ write only the proof slot, and the final image contains no target module to disc
 Registration must allowlist the new image only after its manifest and build receipt pass the
 release checks.
 
-The implemented preflight query intentionally uses a distinct command and schema. It neither
-occupies the V2 wrapper path nor emits V2 OCI evidence or a gateway receipt. See the
+The implemented direct facade occupies the V2 wrapper path and accepts the exact V2
+compile/query argv and stdout shape. It remains an image-local preflight only: it emits neither
+an OCI evidence record nor a gateway receipt. See the
 [image-owned substrate preflight](library-substrate-image-preflight.md) for the exact observed
-digest, receipt boundary, and remaining adapter gate.
+digest, receipt boundary, and remaining admission gates.
 
 ## Required rejection tests
 

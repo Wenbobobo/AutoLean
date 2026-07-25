@@ -1,8 +1,8 @@
 # Library Substrate Image Preflight
 
-Status: operator-local image-owned preflight verified; not admitted and not V2-integrated
+Status: operator-local image-owned preflight with a V2-compatible facade; not admitted
 
-Observed date: 2026-07-25
+Observed date: 2026-07-26
 
 ## Result and authority boundary
 
@@ -12,13 +12,15 @@ independent-reproof canary:
 | Evidence | Observed value |
 | --- | --- |
 | Exact parent | `autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6` |
-| Docker-recorded child RepoDigest | `autolean/library-substrate@sha256:5a71d357ce26e07a44bcce43dc26de06dd8470d2dda5f7341ffdfa2fe9e3dd2e` |
-| Child image ID | `sha256:5a71d357ce26e07a44bcce43dc26de06dd8470d2dda5f7341ffdfa2fe9e3dd2e` |
-| Build-input SHA-256 | `858b1dafb9150e117eb0886fd53cf5d4707b5c42880e5374ebab7c9a94066883` |
-| Raw child receipt SHA-256 | `02f7fd99edbc29f817e2f87477fb6f4b69364b160a5659e5b2ccb8eab8e59fa9` |
-| Runtime-manifest SHA-256 | `923914c53d499eb21d405035ecc0df7ee145eda570bd476b799c7011ba287817` |
+| Docker-recorded child RepoDigest | `autolean/library-substrate@sha256:bc336196592536658395ff0867f3008fc256dc6a3fd9098f414e118f18d5d1ef` |
+| Child image ID | `sha256:bc336196592536658395ff0867f3008fc256dc6a3fd9098f414e118f18d5d1ef` |
+| Build-input SHA-256 | `2159b72cd598b4e1c6d9d8c3a33008f3f764d10c0343f8def794ddf43f570424` |
+| Raw child receipt SHA-256 | `f98010e0c4efb3a43a06bb7782507aa74e799e10822c0cecba890a858e8590df` |
+| Runtime-manifest SHA-256 | `007afe33d7268227c52ac42e7dee7e2880ccd97954005baf7e1b23cc114ebcc5` |
 | Runtime-source checksum-manifest SHA-256 | `e6638ec0117dcb0b700e695b760bb32c87bb7290b38ed98329d158e92e2ed2f3` |
-| Query-wrapper SHA-256 | `f1c09f0002af1b0729305534433286659e4af343c78a01b2d9873b368348d8d3` |
+| Query-wrapper SHA-256 | `c6c45a498bf3e21cbf76634fa9235a236d6cb176d34ff41223d74923dbf49882` |
+| V2 facade-wrapper SHA-256 | `a61d289bce7aec547e23826480435abbdee821c84810033a05babd2f086e0f49` |
+| V2 query-helper SHA-256 | `7b7595c6003981bd8d5c3136318f514ef4a1b72a3cbaf95a683a305938db3f3d` |
 | Runtime closure | 3 Library `.olean` files, 77 typed AutoLean declarations, 22 IR auxiliaries |
 
 The RepoDigest above came from Docker's `RepoDigests` inspection field. The runner refuses to
@@ -32,7 +34,7 @@ admitted into a frozen contract, or exercised through the OCI V2 evidence and si
 exact build context. It contains:
 
 - the child Dockerfile and one canonical build-input record;
-- four image-owned helper assets; and
+- six image-owned helper assets; and
 - exactly the `Core`, `SemanticPrelude`, and `RulePrelude` Library sources selected by the
   `independent_reproof` profile.
 
@@ -46,7 +48,8 @@ The three Library runtime module source files and their `.ilean` files are absen
 dedicated final tree. This is deliberately not a claim that every parent-image source or every
 piece of Lean text is absent from the whole child image. In particular, the independent query's
 Lean program is embedded in a here-document inside the hashed query wrapper and materialized
-only in a temporary, read-only-container run.
+only in a temporary, read-only-container run. The facade shell wrapper and its V2 query helper
+are separate image-owned build assets, hashed in the build input and child receipt.
 
 The source-v2 Dockerfile, receipt, and historical `UniversalLK.lean` inputs remain unchanged.
 The fresh context never includes the aggregate module, target modules, controls, Candidate
@@ -63,6 +66,10 @@ receipt. The host verifier retrieves the image-owned build input and source mani
 fixed Docker RepoDigest, then independently rereads the current three profile sources and
 recomputes all per-file hashes, sizes, manifest bytes, and the tree hash. A source change between
 input capture and context staging is therefore rejected instead of silently changing compilation.
+The same fixed-digest replay hashes the current Dockerfile and all six helper assets and requires
+the complete sorted map to equal the receipt-bound image build input. Replaying an older image
+after any current-checkout wrapper, helper, query, receipt, or build asset drift is therefore a
+failure rather than an image-self-consistency result attributed to the new checkout.
 
 `runtime-files.sha256` has a separate role: it is the exact three-line checksum manifest for the
 final `.olean` files. The image-owned receipt command validates it, parses the runtime manifest,
@@ -103,7 +110,7 @@ The image canary regenerates both inventories from the runtime `.olean` files an
 replay against the manifest.
 
 The content receipts above are replayable for the observed image. Two measured no-cache builds
-produced different image identities (`bb271a4362f4b3a7fc7e858f9d8349790cbdf8191a53085c95e3d9b1fa860903`
+produced different image identities (`7f517c627da00e1266493e17b48f15b09aad0839413bfdf1b4597c2a14e92f61`
 and the recorded final digest above), while their build input, both checksum manifests, runtime
 manifest, raw receipt, and all three `.olean` hashes matched. This is not a claim that two Docker
 builds are byte-identical or will always have the same content: Docker image/config metadata can
@@ -125,12 +132,32 @@ fresh container. The query proves that:
 - the proof expression does not directly use `Deriv.sound`; and
 - the query is bound to the runtime manifest, raw image receipt, query wrapper, and profile hash.
 
-The helper lives at
-`/opt/autolean/library-substrate/bin/autolean-library-substrate-independent-query`. It does not
-occupy `/opt/autolean/bin/autolean-lean-wrapper`, does not implement
-`autolean.oci-lean-wrapper.v2`, and is not a drop-in `OciLeanRunner` adapter. It emits neither V2
-OCI evidence nor a gateway receipt. A separate integration change must adapt this verified
-runtime/query boundary to the existing V2 compile/query and evidence protocol.
+The rich independent-query helper lives at
+`/opt/autolean/library-substrate/bin/autolean-library-substrate-independent-query`. It remains a
+rich internal diagnostic, not a public protocol. The same image now installs a narrow facade at
+`/opt/autolean/bin/autolean-lean-wrapper` that accepts the existing V2 compile/query argv and
+emits the unchanged single V2 record. Before emitting that record, its query phase runs the rich
+preflight and rejects anything outside this image-owned independent boundary: the Candidate must
+own the target, have the historical type hash and axiom set, avoid direct `Deriv.sound`, use the
+independent import boundary, and avoid all runtime kernel-plus-IR collisions. The image receipt
+and build input bind both the facade wrapper and V2 query-helper hashes; the host verifier accepts
+only the Docker-recorded child RepoDigest and rechecks those bindings against the runtime manifest.
+The facade canary treats rejection as a full compile-to-sealed-query property: each negative must
+fail in its frozen expected phase, with its exact source hash, return code, and reason marker. The
+compositional source hash
+`98cd1d2ae8f48ca368d19c64ddec447185bf13753a8d87dbf79df49bf33a7f78`
+fails compile with the absent `Targets/DerivSound.olean` marker; the direct target-import hash
+`c1725f40b0091501aaf465cefe318231af157b51ab3ffef9a8669bcb09ee4d4a`
+fails compile with the absent `Targets/ClosedSound.olean` marker. A third replacement-statement
+hash `f938b08d4e6d9de5e0288207f68ccc3122a5bd96dc08c885b71ba98a52919323`
+must compile successfully and then fail the sealed query with the rich canonical-type marker.
+Failure stdout is forbidden; a fixed phase prefix and at most 4,096 child diagnostic bytes are
+retained on facade stderr. Acceptance, a different phase, a different return code, source drift,
+or an unrelated failure is always a canary failure.
+
+This is V2-compatible preflight only. It does not alter a statement contract, the control plane,
+the signing gateway, or any public protocol. It emits no gateway receipt and does
+not establish T6, formal-asset admission, or provider execution.
 
 ## Operator commands
 
@@ -140,25 +167,25 @@ From the repository root:
 uv run --frozen python -m Library.scripts.library_substrate_image build
 uv run --frozen python -m Library.scripts.library_substrate_image verify --image <recorded-repodigest>
 uv run --frozen python -m Library.scripts.library_substrate_image canary --image <recorded-repodigest>
+uv run --frozen python -m Library.scripts.library_substrate_image facade-canary --image <recorded-repodigest>
 uv run --frozen python -m Library.scripts.library_substrate_image all
 ```
 
-Windows delegates the Docker work to WSL `Ubuntu-24.04`; Linux runs it natively. `verify` and
-`canary` require the exact Docker-recorded child RepoDigest.
+Windows delegates the Docker work to WSL `Ubuntu-24.04`; Linux runs it natively. `verify`,
+`canary`, and `facade-canary` require the exact Docker-recorded child RepoDigest.
 
 Focused negative tests cover context leakage, missing offline flags, fabricated child references,
 source-to-context TOCTOU, source checksum-manifest drift, synchronized runtime
 manifest/inventory/checksum forgery against unchanged actual `.olean` bytes, typed/IR inventory
 drift, invalid IR kind and origin, kernel/IR/target collisions, forbidden pilot theorems, exact
-target-type collision, and accidental V2-wrapper claims.
+target-type collision, host asset drift, facade receipt/manifest drift, complete V2 policy argv
+drift, and negative phase/reason/source drift.
 
 ## Non-claims and next gate
 
 This preflight does not implement a contract, the signing gateway, a provider run, an external
 dependency capsule, formal-asset admission, or T6. It is limited to `independent_reproof`;
-`compositional_bridge` and external `/deps` remain deferred.
+`compositional_bridge` is a required negative canary and external `/deps` remains deferred.
 
-The next Prover step is a narrow V2 adapter and adversarial integration suite that carries the
-verified child digest, runtime-manifest identity, task mode, type/origin inventory, Candidate
-ownership, and ordinary-dependency observation through OCI evidence and gateway replay. Builder
-admission and semantic review remain separate prerequisites.
+The next gate, if this preflight is retained, is a separately reviewed contract and gateway
+integration. Builder admission and semantic review remain separate prerequisites.
