@@ -1,0 +1,61 @@
+FROM autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6 AS library-substrate-builder
+
+USER 0:0
+
+ARG BUILD_INPUT_SHA256
+ARG BUILD_TOOL_SHA256
+ARG DOCKERFILE_SHA256
+ARG INVENTORY_HELPER_SHA256
+ARG PARENT_RECEIPT_CANONICAL_SHA256
+ARG PARENT_RECEIPT_FILE_SHA256
+ARG QUERY_WRAPPER_SHA256
+ARG RECEIPT_TOOL_SHA256
+ARG RUNTIME_SOURCE_CHECKSUM_MANIFEST_SHA256
+ARG RUNTIME_SOURCE_TREE_SHA256
+
+COPY build-input.v1.json /build/input/build-input.v1.json
+COPY runtime-sources.sha256 /build/input/runtime-sources.sha256
+COPY source/ /build/source/
+COPY helpers/AutoleanLibrarySubstrateInventory.lean /build/tools/AutoleanLibrarySubstrateInventory.lean
+COPY helpers/autolean-library-substrate-build /build/tools/autolean-library-substrate-build
+COPY helpers/autolean-library-substrate-independent-query /build/tools/autolean-library-substrate-independent-query
+COPY helpers/autolean-library-substrate-build-receipt /build/tools/autolean-library-substrate-build-receipt
+COPY Dockerfile.library-substrate /build/tools/Dockerfile.library-substrate
+
+RUN /build/tools/autolean-library-substrate-build \
+      "${BUILD_INPUT_SHA256}" \
+      "${BUILD_TOOL_SHA256}" \
+      "${DOCKERFILE_SHA256}" \
+      "${INVENTORY_HELPER_SHA256}" \
+      "${PARENT_RECEIPT_CANONICAL_SHA256}" \
+      "${PARENT_RECEIPT_FILE_SHA256}" \
+      "${QUERY_WRAPPER_SHA256}" \
+      "${RECEIPT_TOOL_SHA256}" \
+      "${RUNTIME_SOURCE_CHECKSUM_MANIFEST_SHA256}" \
+      "${RUNTIME_SOURCE_TREE_SHA256}"
+
+FROM autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6
+
+USER 0:0
+
+ARG BUILD_INPUT_SHA256
+ARG PARENT_RECEIPT_CANONICAL_SHA256
+
+LABEL org.opencontainers.image.title="AutoLean library-substrate-v1 preflight" \
+      org.opencontainers.image.description="Image-owned independent-reproof UniversalLK substrate preflight" \
+      org.opencontainers.image.version="library-substrate-v1-independent-preflight" \
+      org.autolean.library-substrate.profile="library-substrate-v1-model-theory-universal-lk-independent-reproof" \
+      org.autolean.library-substrate.task-mode="independent_reproof" \
+      org.autolean.library-substrate.build-input-sha256="${BUILD_INPUT_SHA256}" \
+      org.autolean.library-substrate.parent-receipt-canonical-sha256="${PARENT_RECEIPT_CANONICAL_SHA256}"
+
+COPY --from=library-substrate-builder --chown=0:0 \
+  /build/final/ /opt/autolean/library-substrate/
+
+RUN test -x /opt/autolean/library-substrate/bin/autolean-library-substrate-build-receipt \
+    && test -x /opt/autolean/library-substrate/bin/autolean-library-substrate-independent-query \
+    && test -z "$(find /opt/autolean/library-substrate -name '*.lean' -o -name '*.ilean')" \
+    && /opt/autolean/library-substrate/bin/autolean-library-substrate-build-receipt >/dev/null
+
+USER 65532:65532
+WORKDIR /workspace

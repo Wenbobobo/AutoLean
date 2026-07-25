@@ -1,0 +1,123 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-library-substrate-build-receipt: $1" >&2
+  exit 2
+}
+
+[ "$#" -eq 0 ] || fail "no arguments are accepted"
+root=/opt/autolean/library-substrate
+receipt=$root/attestations/library-substrate-image-receipt.v1.json
+manifest=$root/attestations/runtime-manifest.v1.json
+inventory=$root/attestations/declaration-inventory.v1.json
+runtime_files=$root/attestations/runtime-files.sha256
+runtime_sources=$root/attestations/runtime-sources.sha256
+build_input=$root/attestations/build-input.v1.json
+
+for path in "$receipt" "$manifest" "$inventory" "$runtime_files" "$runtime_sources" "$build_input"; do
+  test -f "$path" && test ! -L "$path" || fail "required attestation is unavailable"
+done
+test -z "$(find "$root" ! -type f ! -type d -print -quit)" ||
+  fail "substrate tree contains a non-regular entry"
+test -z "$(find "$root" -name '*.lean' -o -name '*.ilean')" ||
+  fail "substrate tree contains Lean source"
+(cd "$root" && sha256sum --check --strict --status attestations/runtime-files.sha256) ||
+  fail "runtime file checksum mismatch"
+
+json_hash() {
+  field=$1
+  LC_ALL=C sed -n \
+    "s/^.*\"$field\":\"\\([0-9a-f]\\{64\\}\\)\".*$/\\1/p" \
+    "$receipt"
+}
+
+check_hash() {
+  field=$1
+  path=$2
+  expected=$(json_hash "$field")
+  test "${#expected}" -eq 64 || fail "receipt hash field is invalid"
+  actual=$(sha256sum "$path" | awk '{print $1}')
+  test "$actual" = "$expected" || fail "receipt hash does not match runtime content"
+}
+
+check_hash build_input_sha256 "$build_input"
+check_hash declaration_inventory_sha256 "$inventory"
+check_hash runtime_manifest_sha256 "$manifest"
+check_hash compiled_tree_sha256 "$runtime_files"
+check_hash runtime_source_checksum_manifest_sha256 "$runtime_sources"
+check_hash query_wrapper_sha256 \
+  "$root/bin/autolean-library-substrate-independent-query"
+check_hash receipt_tool_sha256 "$root/bin/autolean-library-substrate-build-receipt"
+check_hash parent_receipt_file_sha256 \
+  /opt/autolean/attestations/mathlib-source-build-receipt.v2.json
+
+manifest_hash() {
+  field=$1
+  LC_ALL=C sed -n "s/^.*\"$field\":\"\\([0-9a-f]\\{64\\}\)\".*$/\\1/p" "$manifest"
+}
+runtime_file_record() {
+  module=$1
+  path=$2
+  LC_ALL=C sed -n \
+    "s|^.*\"module\":\"$module\",\"path\":\"$path\",\"sha256\":\"\\([0-9a-f]\\{64\\}\)\",\"size\":\\([0-9]\\+\\)}.*$|\\1 \\2|p" \
+    "$manifest"
+}
+runtime_records=$(
+  LC_ALL=C sed -n 's/^.*"runtime_files":\(\[.*\]\),"runtime_modules".*$/\1/p' "$manifest"
+)
+test -n "$runtime_records" || fail "runtime manifest does not contain OLean records"
+test "$(printf '%s' "$runtime_records" | grep -o '"module":' | wc -l | tr -d ' ')" -eq 3 ||
+  fail "runtime manifest does not contain exactly three OLean records"
+
+core_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core
+semantic_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/SemanticPrelude
+rule_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/RulePrelude
+core_record=$(runtime_file_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core "lib/lean/$core_rel.olean")
+semantic_record=$(runtime_file_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude "lib/lean/$semantic_rel.olean")
+rule_record=$(runtime_file_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude "lib/lean/$rule_rel.olean")
+for record in "$core_record" "$semantic_record" "$rule_record"; do
+  set -- $record
+  test "$#" -eq 2 || fail "runtime OLean record schema drifted"
+  case "$1" in *[!0-9a-f]*|"") fail "runtime OLean hash is invalid" ;; esac
+  case "$2" in *[!0-9]*|"") fail "runtime OLean size is invalid" ;; esac
+done
+set -- $core_record
+core_sha=$1
+core_size=$2
+set -- $semantic_record
+semantic_sha=$1
+semantic_size=$2
+set -- $rule_record
+rule_sha=$1
+rule_size=$2
+for relative_and_expected in \
+  "$core_rel.olean:$core_sha:$core_size" \
+  "$semantic_rel.olean:$semantic_sha:$semantic_size" \
+  "$rule_rel.olean:$rule_sha:$rule_size"
+do
+  relative=${relative_and_expected%%:*}
+  remaining=${relative_and_expected#*:}
+  expected_sha=${remaining%%:*}
+  expected_size=${remaining#*:}
+  actual_sha=$(sha256sum "$root/lib/lean/$relative" | awk '{print $1}')
+  actual_size=$(wc -c <"$root/lib/lean/$relative" | tr -d ' ')
+  test "$actual_sha" = "$expected_sha" || fail "runtime OLean bytes differ from manifest"
+  test "$actual_size" = "$expected_size" || fail "runtime OLean bytes differ from manifest"
+done
+expected_runtime_file_sha=$(
+  {
+    printf '%s  lib/lean/%s.olean\n' "$core_sha" "$core_rel"
+    printf '%s  lib/lean/%s.olean\n' "$semantic_sha" "$semantic_rel"
+    printf '%s  lib/lean/%s.olean\n' "$rule_sha" "$rule_rel"
+  } | sha256sum | awk '{print $1}'
+)
+test "$expected_runtime_file_sha" = "$(json_hash compiled_tree_sha256)" ||
+  fail "runtime-files checksum manifest differs from runtime OLean records"
+
+test "$(wc -l <"$receipt" | tr -d ' ')" -eq 1 ||
+  fail "receipt is not a single canonical record"
+cat "$receipt"

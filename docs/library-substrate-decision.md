@@ -1,6 +1,7 @@
 # Target-Free Library Substrate Decision
 
-Status: accepted Phase 1 architecture; implementation and pilot admission remain open
+Status: accepted Phase 1 architecture; operator-local image preflight verified; pilot admission
+and V2 integration remain open
 
 Decision date: 2026-07-25
 
@@ -41,7 +42,7 @@ presented as the implementation or evidence for the focused Library profile.
 
 | Profile | Immediate purpose | Mathlib scope | Decision state |
 | --- | --- | --- | --- |
-| `library-substrate-v1` | Target-free AutoLean definitions for the first T5/T6 pilot | Reuse the locked `Mathlib.ModelTheory.Semantics` closure | Accepted architecture; not implemented |
+| `library-substrate-v1` | Target-free AutoLean definitions for the first T5/T6 pilot | Reuse the locked `Mathlib.ModelTheory.Semantics` closure | Operator-local image preflight verified; not admitted or V2-integrated |
 | `mathlib-substrate-v1` | Possible general upstream Mathlib basis for later domains | Full default target or reviewed closures, as preflight determines | Deferred; no build choice accepted |
 | external `/deps` V3 | Dynamic accepted AutoLean theorem dependencies across project frontiers | Image-owned Mathlib plus a sealed external capsule | Deferred until the multi-file trigger below |
 
@@ -148,6 +149,11 @@ initial image-owned profile. The frozen header supplies the only direct imports,
 write only the proof slot, and the final image contains no target module to discover dynamically.
 Registration must allowlist the new image only after its manifest and build receipt pass the
 release checks.
+
+The implemented preflight query intentionally uses a distinct command and schema. It neither
+occupies the V2 wrapper path nor emits V2 OCI evidence or a gateway receipt. See the
+[image-owned substrate preflight](library-substrate-image-preflight.md) for the exact observed
+digest, receipt boundary, and remaining adapter gate.
 
 ## Required rejection tests
 

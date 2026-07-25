@@ -1,0 +1,290 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-library-substrate-independent-query: $1" >&2
+  exit 2
+}
+
+[ "$#" -eq 4 ] || fail "expected the frozen wrapper argument profile"
+[ "$1" = "--phase" ] || fail "missing phase argument"
+phase=$2
+[ "$3" = "--target" ] || fail "missing target argument"
+target=$4
+[ "$target" = "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound" ] ||
+  fail "unsupported target declaration"
+
+parent_lean_path=$(cat /opt/autolean/environment/lean-path)
+runtime=/opt/autolean/library-substrate/lib/lean
+lean_path="$runtime:$parent_lean_path"
+scratch=$(mktemp -d /tmp/autolean-library-substrate-query.XXXXXX)
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+
+case "$phase" in
+  compile)
+    test -f /input/Candidate.lean && test ! -L /input/Candidate.lean ||
+      fail "candidate source is unavailable"
+    test -d /output && test ! -L /output ||
+      fail "compiler output is unavailable"
+    LEAN_PATH="$lean_path" lean -R /input \
+      -o /output/Candidate.olean /input/Candidate.lean
+    ;;
+  query)
+    test -f /compiled/Candidate.olean && test ! -L /compiled/Candidate.olean ||
+      fail "sealed Candidate.olean is unavailable"
+    cat >"$scratch/Query.lean" <<'LEAN'
+import Candidate
+import Lean.Compiler.IR.CompilerM
+import Lean.PrettyPrinter
+import Lean.Util.CollectAxioms
+import Lean.Util.FoldConsts
+
+open Lean
+
+private def runtimeModules : Array (Name × System.FilePath) := #[
+  (`AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core,
+    "/opt/autolean/library-substrate/lib/lean/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core.olean"),
+  (`AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude,
+    "/opt/autolean/library-substrate/lib/lean/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/SemanticPrelude.olean"),
+  (`AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude,
+    "/opt/autolean/library-substrate/lib/lean/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/RulePrelude.olean")
+]
+
+private def canonicalOptions : Options :=
+  ((((({} : Options).setBool `pp.all true).setBool `pp.explicit true).setBool
+        `pp.universes true).setBool `pp.notation false).set `pp.width (1000000 : Nat)
+
+private def sortedNames (names : Array Name) : Array Name :=
+  names.qsort fun left right => left.toString < right.toString
+
+private def uniqueSortedNames (names : Array Name) : Array Name := Id.run do
+  let mut seen : NameSet := {}
+  let mut result := #[]
+  for name in sortedNames names do
+    unless seen.contains name do
+      seen := seen.insert name
+      result := result.push name
+  return result
+
+private def namesJson (names : Array Name) : Json :=
+  Json.arr <| names.map fun name => Json.str name.toString
+
+private def canonicalType (environment : Environment) (info : ConstantInfo) : IO String := do
+  if info.type.hasMVar then
+    throw <| IO.userError s!"declaration type contains a metavariable: {info.name}"
+  let rendered :=
+    (← PrettyPrinter.ppExprLegacy environment {} {} canonicalOptions info.type).pretty 1000000
+  if rendered.isEmpty || rendered.length > 1000000 then
+    throw <| IO.userError s!"canonical type has invalid size: {info.name}"
+  if rendered.any fun char => char == '\x00' || char == '\n' || char == '\r' then
+    throw <| IO.userError s!"canonical type is not one line: {info.name}"
+  return rendered
+
+private def observedAxioms (environment : Environment) (name : Name) : IO (Array Name) := do
+  let context : Core.Context := {
+    fileName := "<AutoLeanLibrarySubstrateIndependentQuery>"
+    fileMap := default
+    options := canonicalOptions
+  }
+  let state : Core.State := { env := environment }
+  let axioms ← Core.CoreM.toIO' (collectAxioms name) context state
+  return sortedNames axioms
+
+private def constantKind : ConstantInfo → String
+  | .axiomInfo _ => "axiom"
+  | .defnInfo _ => "definition"
+  | .thmInfo _ => "theorem"
+  | .opaqueInfo _ => "opaque"
+  | .quotInfo _ => "quotient"
+  | .inductInfo _ => "inductive"
+  | .ctorInfo _ => "constructor"
+  | .recInfo _ => "recursor"
+
+private def originModule (environment : Environment) (name : Name) : IO Name := do
+  let some index := environment.getModuleIdxFor? name
+    | throw <| IO.userError s!"imported declaration has no module mapping: {name}"
+  let some moduleName := environment.header.moduleNames[index.toNat]?
+    | throw <| IO.userError s!"module index is outside the loaded header: {name}"
+  return moduleName
+
+private def runtimeInventory (environment : Environment) : IO (Array Json) := do
+  let mut records : Array (String × Json) := #[]
+  let mut seen : NameSet := {}
+  for (expectedOrigin, path) in runtimeModules do
+    let (moduleData, _) ← readModuleData path
+    for name in moduleData.constNames do
+      if name.toString.startsWith "AutoLeanLibrary." then
+        if seen.contains name then
+          throw <| IO.userError s!"duplicate runtime declaration: {name}"
+        seen := seen.insert name
+        let some info := environment.checked.get.find? name
+          | throw <| IO.userError s!"runtime declaration has no ConstantInfo: {name}"
+        let origin ← originModule environment name
+        if origin != expectedOrigin then
+          throw <| IO.userError s!"runtime declaration origin mismatch: {name}"
+        records := records.push (name.toString, Json.mkObj [
+          ("canonical_type", Json.str (← canonicalType environment info)),
+          ("declaration_kind", Json.str (constantKind info)),
+          ("name", Json.str name.toString),
+          ("observed_axioms", namesJson (← observedAxioms environment name)),
+          ("origin_module", Json.str origin.toString)
+        ])
+  records := records.qsort fun left right => left.1 < right.1
+  return records.map (·.2)
+
+private def runtimeIrAuxiliaryNames (environment : Environment) : IO (Array Json) := do
+  let mut records : Array (String × Json) := #[]
+  let mut seen : NameSet := {}
+  for (expectedOrigin, path) in runtimeModules do
+    let (moduleData, _) ← readModuleData path
+    for name in moduleData.extraConstNames do
+      if seen.contains name then
+        throw <| IO.userError s!"duplicate IR auxiliary name: {name}"
+      seen := seen.insert name
+      if (environment.checked.get.find? name).isSome then
+        throw <| IO.userError s!"IR auxiliary overlaps a kernel declaration: {name}"
+      let some declaration := Lean.IR.findEnvDecl environment name
+        | throw <| IO.userError s!"IR auxiliary has no IR declaration: {name}"
+      if declaration.name != name then
+        throw <| IO.userError s!"IR auxiliary declaration name mismatch: {name}"
+      let declarationKind :=
+        match declaration with
+        | .fdecl .. => "fdecl"
+        | .extern .. => "extern"
+      let origin ← originModule environment name
+      if origin != expectedOrigin then
+        throw <| IO.userError s!"IR auxiliary origin mismatch: {name}"
+      records := records.push (name.toString, Json.mkObj [
+        ("ir_decl_kind", Json.str declarationKind),
+        ("name", Json.str name.toString),
+        ("origin_module", Json.str origin.toString)
+      ])
+  records := records.qsort fun left right => left.1 < right.1
+  return records.map (·.2)
+
+private def targetProof (environment : Environment) (name : Name) : IO Expr := do
+  let some info := environment.checked.get.find? name
+    | throw <| IO.userError s!"target declaration not found: {name}"
+  match info with
+  | .thmInfo value => return value.value
+  | _ => throw <| IO.userError s!"target declaration is not a theorem: {name}"
+
+private def query
+    (runtimeManifestSha imageReceiptSha queryWrapperSha profileSha : String) : IO Json := do
+  let environment ← importModules #[{ module := `Candidate }] canonicalOptions
+  let target := `AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound
+  let (candidate, _) ← readModuleData "/compiled/Candidate.olean"
+  let candidateKernelNames := uniqueSortedNames candidate.constNames
+  let candidateAuxiliaryNames := uniqueSortedNames candidate.extraConstNames
+  if candidateKernelNames.size != candidate.constNames.size ||
+      candidateAuxiliaryNames.size != candidate.extraConstNames.size then
+    throw <| IO.userError "Candidate repeats an owned declaration name"
+  if !candidateKernelNames.any (· == target) then
+    throw <| IO.userError s!"target declaration is not owned by Candidate: {target}"
+  let mut runtimeKernelNames : NameSet := {}
+  let mut runtimeAuxiliaryNames : NameSet := {}
+  for (_, path) in runtimeModules do
+    let (moduleData, _) ← readModuleData path
+    for name in moduleData.constNames do
+      if runtimeKernelNames.contains name || runtimeAuxiliaryNames.contains name then
+        throw <| IO.userError s!"runtime modules repeat an owned name: {name}"
+      runtimeKernelNames := runtimeKernelNames.insert name
+    for name in moduleData.extraConstNames do
+      if runtimeKernelNames.contains name || runtimeAuxiliaryNames.contains name then
+        throw <| IO.userError s!"runtime modules repeat an owned name: {name}"
+      runtimeAuxiliaryNames := runtimeAuxiliaryNames.insert name
+  let mut candidateNames : NameSet := {}
+  for name in candidateKernelNames do
+    if runtimeKernelNames.contains name || runtimeAuxiliaryNames.contains name then
+      throw <| IO.userError s!"Candidate kernel name collides with runtime ownership: {name}"
+    candidateNames := candidateNames.insert name
+    let origin ← originModule environment name
+    if origin != `Candidate then
+      throw <| IO.userError s!"Candidate kernel name has the wrong module origin: {name}"
+  for name in candidateAuxiliaryNames do
+    if candidateNames.contains name ||
+        runtimeKernelNames.contains name || runtimeAuxiliaryNames.contains name then
+      throw <| IO.userError s!"Candidate IR name collides with sealed ownership: {name}"
+    candidateNames := candidateNames.insert name
+    if (environment.checked.get.find? name).isSome then
+      throw <| IO.userError s!"Candidate IR name overlaps a kernel declaration: {name}"
+    let some declaration := Lean.IR.findEnvDecl environment name
+      | throw <| IO.userError s!"Candidate IR name has no IR declaration: {name}"
+    if declaration.name != name then
+      throw <| IO.userError s!"Candidate IR declaration name mismatch: {name}"
+    let origin ← originModule environment name
+    if origin != `Candidate then
+      throw <| IO.userError s!"Candidate IR name has the wrong module origin: {name}"
+  let some targetInfo := environment.checked.get.find? target
+    | throw <| IO.userError "owned target has no ConstantInfo"
+  let direct := uniqueSortedNames (← targetProof environment target).getUsedConstants
+  let candidateImports := candidate.imports.map (·.module)
+  return Json.mkObj [
+    ("candidate_direct_imports", namesJson (sortedNames candidateImports)),
+    ("candidate_ir_auxiliary_names", namesJson candidateAuxiliaryNames),
+    ("candidate_kernel_names", namesJson candidateKernelNames),
+    ("candidate_namespace_disjoint", Json.bool true),
+    ("candidate_owns_target", Json.bool true),
+    ("canonical_type", Json.str (← canonicalType environment targetInfo)),
+    ("declaration", Json.str target.toString),
+    ("direct_proof_dependencies", namesJson direct),
+    ("loaded_module_closure", namesJson (sortedNames environment.header.moduleNames)),
+    ("observed_axioms", namesJson (← observedAxioms environment target)),
+    ("runtime_declarations", Json.arr (← runtimeInventory environment)),
+    ("runtime_ir_auxiliary_names", Json.arr (← runtimeIrAuxiliaryNames environment)),
+    ("schema_version", Json.str "autolean.library-substrate-independent-query.v1"),
+    ("substrate_identity", Json.mkObj [
+      ("image_receipt_sha256", Json.str imageReceiptSha),
+      ("profile_sha256", Json.str profileSha),
+      ("query_wrapper_sha256", Json.str queryWrapperSha),
+      ("runtime_manifest_sha256", Json.str runtimeManifestSha)
+    ])
+  ]
+
+def main (arguments : List String) : IO UInt32 := do
+  try
+    let [runtimeManifestSha, imageReceiptSha, queryWrapperSha, profileSha] := arguments
+      | throw <| IO.userError "expected the image-owned substrate identity arguments"
+    IO.println
+      (← query runtimeManifestSha imageReceiptSha queryWrapperSha profileSha).compress
+    return (0 : UInt32)
+  catch error =>
+    IO.eprintln s!"autolean-library-substrate-independent-query: {error}"
+    return (2 : UInt32)
+LEAN
+    runtime_manifest_sha256=$(
+      sha256sum \
+        /opt/autolean/library-substrate/attestations/runtime-manifest.v1.json |
+        awk '{print $1}'
+    )
+    image_receipt_sha256=$(
+      sha256sum \
+        /opt/autolean/library-substrate/attestations/library-substrate-image-receipt.v1.json |
+        awk '{print $1}'
+    )
+    query_wrapper_sha256=$(
+      sha256sum \
+        /opt/autolean/library-substrate/bin/autolean-library-substrate-independent-query |
+        awk '{print $1}'
+    )
+    profile_sha256=$(
+      LC_ALL=C sed -n \
+        's/^.*"profile_sha256":"\([0-9a-f]\{64\}\)".*$/\1/p' \
+        /opt/autolean/library-substrate/attestations/build-input.v1.json
+    )
+    for digest in \
+      "$runtime_manifest_sha256" "$image_receipt_sha256" \
+      "$query_wrapper_sha256" "$profile_sha256"
+    do
+      test "${#digest}" -eq 64 || fail "image-owned identity hash is malformed"
+    done
+    LEAN_PATH="/compiled:$lean_path" lean --run "$scratch/Query.lean" \
+      "$runtime_manifest_sha256" \
+      "$image_receipt_sha256" \
+      "$query_wrapper_sha256" \
+      "$profile_sha256"
+    ;;
+  *)
+    fail "unsupported phase"
+    ;;
+esac
