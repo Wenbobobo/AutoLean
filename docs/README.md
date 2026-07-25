@@ -70,6 +70,9 @@ runner reports success.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
+25. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
+    side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
+    non-acceptance local source-v2 clean-build boundary.
 
 The source audits that informed these decisions live in [audits/](audits/):
 [Archon](audits/archon-audit.md), [AutoArchon](audits/autoarchon-audit.md), and
