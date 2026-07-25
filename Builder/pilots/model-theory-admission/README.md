@@ -40,10 +40,19 @@ human or expert identity, authenticated independence, or operator authority.
 It contains no textbook excerpt, local cache path, prompt, model output, or private review
 material. The locators paraphrase the purpose of a source location; they are not quotations.
 
+[`fine-source-spans.v2.json`](fine-source-spans.v2.json) is a separate, digest-only attachment to
+the unchanged gap decision and source-rule matrix. It records ten machine-located byte spans
+against the manifest-v2 `pypdf 6.14.2` text revision, covering all nine fine-anchor requirements;
+the soundness requirement is split between its statement and universal-right proof case. Every
+span remains `machine_located_pending_review`. The attachment explicitly preserves unresolved
+PDF/printed-page ambiguity for Section 7.5 and the universal-right case, contains no source
+excerpt or cache path, and has no authority to change the decision, freeze a statement, or hand
+work to Prover.
+
 [`pending-review.md`](pending-review.md) lists only the confirmations still required from
-authorized reviewers. Neither file is a human or expert review, a Builder admission receipt, a
-statement contract, a freeze, a Prover handoff, a promotion record, or evidence of progress on an
-open problem.
+authorized reviewers. None of these records is a human or expert review, a Builder admission
+receipt, a statement contract, a freeze, a Prover handoff, a promotion record, or evidence of
+progress on an open problem.
 
 ## Verification
 
@@ -54,10 +63,15 @@ The matrix is bound to these observed values:
 | Open Logic Project source PDF | `39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9` |
 | Manifest-bound derived text | `285655b3e8937e37215bb51b69eff6eb10cd9a5d64c54d8f1f4ddfb5175fc584` |
 | Reference manifest | `9f6fc30c5bac7d3625938d6b4dae166270ef0f34c21db603be12c86d5bfd42ab` |
+| Manifest-v2 derived text (`pypdf 6.14.2`) | `6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d` |
+| Reference manifest v2 | `b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91` |
+| Gap decision canonical payload | `f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5` |
 
 The four coarse span bindings are copied from the tracked self-calibration pilot manifest. A
 coarse span does not supply an offset or hash for a narrower rule locator. Every such narrower
-binding remains `span_binding_state: missing`.
+binding remains `span_binding_state: missing` in the immutable matrix projection. The separate
+fine-span attachment supplies machine candidates for review; it does not retroactively reinterpret
+that matrix or close the decision's blocker.
 
 The local V2 replay rehashes the retained implementation source, packet, and receipt and checks
 their internal backlinks. It does not independently recompute the complete Library input tree or
@@ -68,8 +82,8 @@ bind those checks before any candidate can enter statement drafting.
 
 T3 remains blocked until all of the following are recorded through the Builder authority path:
 
-1. exact derived-text spans and hashes for every fine-grained source locator used by the rule
-   interpretation;
+1. authorized visual and semantic review of every attached machine-located span, including
+   reconciliation of the Section 7.5 and universal-right PDF/printed-page locators;
 2. a rule-by-rule source review covering context shape, all side conditions, structural rules,
    cut, and the intentionally absent existential constructors;
 3. an accepted account of the closed-sentence boundary, internal free-variable levels, fresh

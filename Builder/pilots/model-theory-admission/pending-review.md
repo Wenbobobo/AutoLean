@@ -4,10 +4,11 @@ Status: open gap; no candidate selected
 
 Only the following confirmations can change the current disposition:
 
-1. **Fine-grained source spans.** An authorized source reviewer must bind exact derived-text
-   offsets and hashes for the Section 6.8, 6.9, 7.4, 7.5, Proposition 7.23, Proposition 7.31,
-   Definition 10.1, Section 10.3, and soundness locators. Existing coarse spans cannot be reused
-   as if they were exact rule spans.
+1. **Fine-grained source spans.** `fine-source-spans.v2.json` retains machine-located offset/hash
+   candidates for Section 6.8, 6.9, 7.4, 7.5, Proposition 7.23, Proposition 7.31, Definition
+   10.1, Section 10.3, and soundness. An authorized source reviewer must visually reconcile and
+   semantically accept them; the Section 7.5 and universal-right PDF/printed-page pairs remain
+   ambiguous. Machine location does not change the current gap decision.
 2. **Rule inventory and context discipline.** Confirm the complete source rule inventory and the
    exact context shape for identity and implication-left, including whether exchange, weakening,
    contraction, and cut are primitive, derived, admissible, or outside the selected fragment.

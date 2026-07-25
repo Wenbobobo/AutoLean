@@ -1,0 +1,156 @@
+{
+  "schema_version": "autolean.public-t3-fine-source-spans.v2",
+  "artifact_kind": "public_safe_t3_gap_attachment",
+  "decision_binding": {
+    "decision_path": "Builder/pilots/model-theory-admission/decision.v2.json",
+    "decision_canonical_sha256": "f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5",
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "candidate_revision": "t3-boundary-v2",
+    "t3_disposition": "gap",
+    "selection": "not_selected",
+    "statement_contract": "not_frozen",
+    "prover_handoff": "forbidden"
+  },
+  "rule_matrix_binding": {
+    "matrix_path": "Builder/pilots/model-theory-admission/source-rule-matrix.v2.json",
+    "matrix_sha256": "261b95e48aba36e3eb04b0f40fbf46eddbe39685b53bc5d8f2e40a9382662c65",
+    "required_fine_anchor_count": 9
+  },
+  "reference_binding": {
+    "manifest_path": "Builder/references/manifest.v2.json",
+    "manifest_sha256": "b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91",
+    "reference_id": "openlogic-sets-logic-computation-2026-07-12-text-pypdf-6.14.2",
+    "source_artifact_sha256": "6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d",
+    "source_size_bytes": 622790,
+    "parent_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+    "parent_artifact_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+    "extraction_method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+    "extraction_tool_name": "pypdf",
+    "extraction_tool_version": "6.14.2",
+    "contains_source_excerpt": false,
+    "contains_local_cache_path": false
+  },
+  "spans": [
+    {
+      "span_id": "free-bound-occurrences-and-sentences",
+      "requirement_id": "free-bound-occurrences-and-sentences",
+      "segment_id": "items-6-33-through-6-37",
+      "start_offset": 179126,
+      "end_offset": 181333,
+      "raw_sha256": "64f428589823b795bc34afd9d3c2ff15aef3845001cd6840729239cae8c1eb38",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "capture-avoiding-substitution-and-free-for",
+      "requirement_id": "capture-avoiding-substitution-and-free-for",
+      "segment_id": "items-6-38-through-6-41",
+      "start_offset": 181394,
+      "end_offset": 183958,
+      "raw_sha256": "c6ccf6ab7d6868039b0080ad31b474b69b25384d5f6866a7d751225c361948cb",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "open-formula-satisfaction-and-assignment-update",
+      "requirement_id": "open-formula-satisfaction-and-assignment-update",
+      "segment_id": "definitions-7-7-through-7-11",
+      "start_offset": 194309,
+      "end_offset": 197717,
+      "raw_sha256": "f55b3cb6b1f862699259c4076a40d5f53569f9ebfc72d1f736b48361039f7bd7",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "sentence-satisfaction-assignment-independence",
+      "requirement_id": "sentence-satisfaction-assignment-independence",
+      "segment_id": "section-7-5-assignment-independence",
+      "start_offset": 206573,
+      "end_offset": 207405,
+      "raw_sha256": "ce4d882e1d8278ee026573119d3d8c595a14ca97ca75f27c6c312e6a3e7ed0f2",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "semantic-substitution",
+      "requirement_id": "semantic-substitution",
+      "segment_id": "proposition-7-23",
+      "start_offset": 210137,
+      "end_offset": 210988,
+      "raw_sha256": "99af1bebd17a693aaf684454b6c97ec382e2750cfaf079a5b1b86648cc94ad86",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "closed-term-quantifier-instances",
+      "requirement_id": "closed-term-quantifier-instances",
+      "segment_id": "proposition-7-31",
+      "start_offset": 213852,
+      "end_offset": 214192,
+      "raw_sha256": "e941a7d5462fd51ce7f3af2a535e2be1e835e008e069eeda5282f6ea9e4a828f",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "closed-sequent-boundary",
+      "requirement_id": "closed-sequent-boundary",
+      "segment_id": "definition-10-1",
+      "start_offset": 258935,
+      "end_offset": 260021,
+      "raw_sha256": "725c1868c77d08720792753db46043c368a0f94278b9b88bb1cdf379a7f6d793",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "lk-rule-inventory-and-side-conditions",
+      "requirement_id": "lk-rule-inventory-and-side-conditions",
+      "segment_id": "section-10-3-rule-inventory",
+      "start_offset": 261278,
+      "end_offset": 263415,
+      "raw_sha256": "07c35f45f2e933e20de9e061540bea345dee3a4899e2d04a39161dbb50cd60f8",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-statement",
+      "requirement_id": "lk-validity-and-soundness",
+      "segment_id": "definition-10-27-and-theorem-10-28-statement",
+      "start_offset": 283111,
+      "end_offset": 283352,
+      "raw_sha256": "0b6c4e282d9c890aecd14c4062649974ba9ad9e094c8ac29d17eb95835450473",
+      "location_state": "machine_located_pending_review"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-universal-right-case",
+      "requirement_id": "lk-validity-and-soundness",
+      "segment_id": "universal-right-soundness-case",
+      "start_offset": 287999,
+      "end_offset": 289391,
+      "raw_sha256": "be527cf613a1ac2d8050440274d1588c14758c07dcb7945d0edda4be98a4dbff",
+      "location_state": "machine_located_pending_review"
+    }
+  ],
+  "locator_ambiguities": [
+    {
+      "ambiguity_id": "section-7-5-page-pair-unreconciled",
+      "requirement_id": "sentence-satisfaction-assignment-independence",
+      "segment_id": "section-7-5-assignment-independence",
+      "matrix_locator_snapshot": "Section 7.5, Corollary 7.15 and Definitions 7.16-7.17, PDF page 148 / printed page 127",
+      "review_state": "pending_visual_review",
+      "note": "The PDF-page and printed-page pair has not been visually reconciled; the machine span neither affirms nor corrects it."
+    },
+    {
+      "ambiguity_id": "universal-right-page-pair-unreconciled",
+      "requirement_id": "lk-validity-and-soundness",
+      "segment_id": "universal-right-soundness-case",
+      "matrix_locator_snapshot": "Universal-right case at PDF page 208 / printed page 187",
+      "review_state": "pending_visual_review",
+      "note": "The PDF-page and printed-page pair has not been visually reconciled; the machine span neither affirms nor corrects it."
+    }
+  ],
+  "authority_boundary": {
+    "record_kind": "machine_locator_output",
+    "review_state": "machine_located_pending_review",
+    "human_visual_review_present": false,
+    "semantic_review_present": false,
+    "expert_review_present": false,
+    "builder_admission_authority_present": false,
+    "may_change_boundary_decision": false,
+    "may_issue_admission_receipt": false,
+    "may_freeze_statement": false,
+    "may_handoff_to_prover": false
+  },
+  "effect_on_t3": "none_until_authorized_visual_and_semantic_review"
+}
