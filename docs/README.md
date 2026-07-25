@@ -63,6 +63,9 @@ runner reports success.
 23. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
     the local Archon-talk evidence, Danus/Reap audit boundaries, and the resulting isolated
     experiments without treating external performance claims as AutoLean results.
+24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) conditionally prioritizes a
+    pointwise Cea comparison slice and pauses van Kampen without selecting, compiling, or
+    admitting either candidate.
 
 The source audits that informed these decisions live in [audits/](audits/):
 [Archon](audits/archon-audit.md), [AutoArchon](audits/autoarchon-audit.md), and

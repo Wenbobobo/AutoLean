@@ -30,6 +30,11 @@ selection authority. A failed spike is a gap report for its candidate, not a lic
 theorem silently. If neither candidate reaches the required boundary, the pilot moves to the
 Cea-type or van Kampen backup after the same selection process.
 
+The [backup pilot audit](research/backup-pilot-audit-2026-07-25.md) conditionally ranks a
+pointwise Cea comparison slice ahead of van Kampen and records the latter's source-rights and
+active-upstream blockers. It is research input only: it selects, compiles, admits, and freezes no
+candidate.
+
 ## Curvature reference boundary
 
 The former curvature/first-Bianchi proposal is **reference only**. It is blocked by mathlib
