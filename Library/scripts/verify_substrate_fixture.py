@@ -44,6 +44,16 @@ class SourceModule:
     role: str
 
 
+@dataclass(frozen=True)
+class ValidatedProfileBoundary:
+    """Execution inputs retained from one complete profile validation."""
+
+    task_mode: str
+    runtime_modules: tuple[str, ...]
+    forbidden_modules: tuple[str, ...]
+    candidate_path: str
+
+
 MODULES: Final = (
     SourceModule(
         "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core.lean",
@@ -495,7 +505,7 @@ def check_profile(profile: Mapping[str, object], root: Path) -> None:
             fail(f"profile must retain non-admission boundary ({required})")
 
 
-def check(root: Path | None = None) -> None:
+def check(root: Path | None = None) -> dict[str, ValidatedProfileBoundary]:
     fixture_root = FIXTURE_ROOT if root is None else root
     _check_source_modules(fixture_root)
     profile_paths = tuple(fixture_root / "profiles" / filename for filename in PROFILE_FILENAMES)
@@ -517,6 +527,24 @@ def check(root: Path | None = None) -> None:
         or first["statement_sha256"] != second["statement_sha256"]
     ):
         fail("candidate statements are not bound to the same historical closed_sound type")
+    validated: dict[str, ValidatedProfileBoundary] = {}
+    for profile in profiles:
+        task_mode = profile["task_mode"]
+        if not isinstance(task_mode, str):
+            fail("validated task mode is not a string")
+        candidate = _require_mapping(profile["candidate_source"], "candidate source")
+        candidate_path = candidate["path"]
+        if not isinstance(candidate_path, str):
+            fail("validated candidate path is not a string")
+        validated[task_mode] = ValidatedProfileBoundary(
+            task_mode=task_mode,
+            runtime_modules=_require_unique_strings(profile["runtime_modules"], "runtime modules"),
+            forbidden_modules=_require_sorted_unique_strings(
+                profile["forbidden_modules"], "forbidden modules"
+            ),
+            candidate_path=candidate_path,
+        )
+    return validated
 
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:

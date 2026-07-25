@@ -2,8 +2,10 @@ from __future__ import annotations
 
 import importlib.util
 import json
+import os
 import shutil
 import sys
+import tempfile
 from pathlib import Path
 from types import ModuleType
 from typing import Any, cast
@@ -184,27 +186,108 @@ def test_static_fallback_is_explicit_about_what_it_does_not_prove() -> None:
     result = CANARY.static_fallback("unit_test_no_docker")
     assert result["mode"] == "static_fallback"
     assert result["authority"] == "static-structural-preflight-only"
+    assert result["image_inspected"] is False
+    assert result["intended_parent_image"] == VERIFY.SOURCE_V2_IMAGE
+    assert "image" not in result
     assert "no_lean_compile_observation" in result["non_claims"]
     assert "no_proof_admission" in result["non_claims"]
 
 
-def test_real_canary_materializes_only_profile_selected_modules() -> None:
-    independent = CANARY._profile_runtime_modules("independent_reproof")
-    compositional = CANARY._profile_runtime_modules("compositional_bridge")
+def test_real_canary_materializes_only_validated_profile_modules(tmp_path: Path) -> None:
+    profiles = VERIFY.check()
+    independent = profiles["independent_reproof"]
+    compositional = profiles["compositional_bridge"]
 
-    assert independent == (
+    assert independent.runtime_modules == (
         "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core",
         "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude",
         "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude",
     )
-    assert compositional == (
-        *independent,
+    assert compositional.runtime_modules == (
+        *independent.runtime_modules,
         "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.DerivSound",
     )
-    script = CANARY._container_script("independent_reproof", independent)
+    runtime = CANARY._materialize_runtime(FIXTURE_ROOT, tmp_path / "work", independent)
+    materialized = {path.relative_to(runtime).as_posix() for path in runtime.rglob("*.lean")}
+    assert materialized == {
+        "AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core.lean",
+        "AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/RulePrelude.lean",
+        "AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/SemanticPrelude.lean",
+        "Candidate.lean",
+        "DirectDependencyQuery.lean",
+    }
+    script = CANARY._container_script(independent)
     assert "cp -R /fixture/source/" not in script
-    assert "Targets.ClosedSound" in script
-    assert "UniversalLK.Controls" in script
+    for forbidden in independent.forbidden_modules:
+        assert f"import {forbidden}\\n" in script
+    assert script.count("forbidden runtime module unexpectedly imported:") == len(
+        independent.forbidden_modules
+    )
+
+
+def test_real_canary_validates_and_materializes_only_from_snapshot(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    live_root = _fixture_copy(tmp_path)
+    original_copy = CANARY._regular_tree_copy
+    real_temporary_directory = tempfile.TemporaryDirectory
+    observed: list[tuple[Path, Path, Any]] = []
+
+    def copy_then_corrupt_live(source: Path, destination: Path) -> None:
+        assert source == live_root
+        original_copy(source, destination)
+        (live_root / "profiles" / "independent_reproof.profile.v1.json").write_text(
+            "{}\n", encoding="utf-8"
+        )
+
+    def fake_run(
+        snapshot_root: Path,
+        workspace_root: Path,
+        profile: Any,
+    ) -> dict[str, object]:
+        observed.append((snapshot_root, workspace_root, profile))
+        assert snapshot_root != live_root
+        assert snapshot_root.name == "fixture-snapshot"
+        assert workspace_root.name == "workspace"
+        assert profile.candidate_path.startswith("candidates/")
+        return {"task_mode": profile.task_mode}
+
+    monkeypatch.setattr(CANARY, "FIXTURE_ROOT", live_root)
+    monkeypatch.setattr(CANARY, "_docker_available", lambda: (True, "available"))
+    monkeypatch.setattr(CANARY, "_require_ext4", lambda _path: None)
+    monkeypatch.setattr(CANARY, "_regular_tree_copy", copy_then_corrupt_live)
+    monkeypatch.setattr(CANARY, "_run_one_real", fake_run)
+    monkeypatch.setattr(CANARY, "_validate_pair", lambda _observations: {"snapshot": True})
+    monkeypatch.setattr(
+        CANARY.tempfile,
+        "TemporaryDirectory",
+        lambda *args, **kwargs: real_temporary_directory(prefix=kwargs.get("prefix"), dir=tmp_path),
+    )
+
+    result = CANARY.real_canary()
+
+    assert result["pair_validation"] == {"snapshot": True}
+    assert [profile.task_mode for _, _, profile in observed] == [
+        "independent_reproof",
+        "compositional_bridge",
+    ]
+    assert len({snapshot for snapshot, _, _ in observed}) == 1
+
+
+def test_snapshot_copy_rejects_symlinks(tmp_path: Path) -> None:
+    source = tmp_path / "source"
+    source.mkdir()
+    target = source / "target.txt"
+    target.write_text("target\n", encoding="utf-8")
+    link = source / "linked.txt"
+    try:
+        os.symlink(target, link)
+    except OSError:
+        pytest.skip("this Windows environment cannot create a test symlink")
+
+    with pytest.raises(CANARY.CanaryError, match="contains a symlink"):
+        CANARY._regular_tree_copy(source, tmp_path / "snapshot")
 
 
 def test_profile_parser_rejects_unknown_field(tmp_path: Path) -> None:

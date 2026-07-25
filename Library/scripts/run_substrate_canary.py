@@ -29,11 +29,10 @@ from verify_substrate_fixture import (
     EXPECTED_CANDIDATES,
     FIXTURE_ROOT,
     MODULE_BY_NAME,
-    PROFILE_FILENAMES,
     SOUND_DECLARATION,
     SOURCE_V2_IMAGE,
     TARGET_DECLARATION,
-    candidate_source,
+    ValidatedProfileBoundary,
     check,
 )
 
@@ -141,55 +140,75 @@ def _validate_pair(observations: dict[str, dict[str, object]]) -> dict[str, obje
 
 
 def _regular_tree_copy(source: Path, destination: Path) -> None:
-    for path in source.rglob("*"):
-        metadata = path.lstat()
-        if stat.S_ISLNK(metadata.st_mode):
-            fail("staging fixture contains a symlink")
-    shutil.copytree(source, destination, copy_function=shutil.copy2)
+    """Copy a regular-file tree without following or retaining links."""
 
-
-def _profile_runtime_modules(task_mode: str) -> tuple[str, ...]:
-    """Read the same profile data that the structural checker has just bound."""
-
-    for filename in PROFILE_FILENAMES:
-        profile_path = FIXTURE_ROOT / "profiles" / filename
+    def copy_directory(current_source: Path, current_destination: Path) -> None:
         try:
-            profile = json.loads(profile_path.read_text(encoding="utf-8"))
-        except (OSError, json.JSONDecodeError) as error:
-            raise CanaryError("profile is unreadable after structural validation") from error
-        if not isinstance(profile, dict) or profile.get("task_mode") != task_mode:
-            continue
-        runtime = profile.get("runtime_modules")
-        if not isinstance(runtime, list) or any(not isinstance(module, str) for module in runtime):
-            fail(f"{task_mode} runtime modules are malformed")
-        if any(module not in MODULE_BY_NAME for module in runtime):
-            fail(f"{task_mode} profile references an unknown staged module")
-        return tuple(runtime)
-    fail(f"no profile exists for {task_mode}")
+            source_metadata = current_source.lstat()
+        except OSError as error:
+            raise CanaryError("staging fixture is unreadable") from error
+        if stat.S_ISLNK(source_metadata.st_mode) or not stat.S_ISDIR(source_metadata.st_mode):
+            fail("staging fixture root must be an unlinked directory")
+        current_destination.mkdir()
+        try:
+            entries = tuple(os.scandir(current_source))
+        except OSError as error:
+            raise CanaryError("staging fixture directory is unreadable") from error
+        for entry in entries:
+            try:
+                metadata = entry.stat(follow_symlinks=False)
+            except OSError as error:
+                raise CanaryError("staging fixture entry is unreadable") from error
+            target = current_destination / entry.name
+            if stat.S_ISLNK(metadata.st_mode):
+                fail("staging fixture contains a symlink")
+            if stat.S_ISDIR(metadata.st_mode):
+                copy_directory(Path(entry.path), target)
+                continue
+            if not stat.S_ISREG(metadata.st_mode):
+                fail("staging fixture contains a non-regular entry")
+            shutil.copy2(entry.path, target, follow_symlinks=False)
+            if not stat.S_ISREG(target.lstat().st_mode):
+                fail("staging fixture changed while creating the snapshot")
+
+    copy_directory(source, destination)
+
+
+def _require_ext4(path: Path) -> None:
+    completed = _run(
+        ["findmnt", "-n", "-o", "FSTYPE", "-T", str(path)],
+        timeout=10,
+    )
+    if completed.stdout.strip() != "ext4":
+        fail("real canary snapshot must reside on ext4")
 
 
 def _module_source_relative(module: str) -> Path:
     return Path(MODULE_BY_NAME[module].path).relative_to("source")
 
 
-def _materialize_runtime(stage: Path, task_mode: str) -> tuple[Path, tuple[str, ...]]:
+def _materialize_runtime(
+    snapshot_root: Path,
+    workspace_root: Path,
+    profile: ValidatedProfileBoundary,
+) -> Path:
     """Create the profile-selected source view that is the only mounted tree."""
 
-    runtime_modules = _profile_runtime_modules(task_mode)
-    runtime_root = stage / "runtime" / task_mode
-    source_root = stage / "source"
-    for module in runtime_modules:
+    runtime_root = workspace_root / "runtime" / profile.task_mode
+    source_root = snapshot_root / "source"
+    for module in profile.runtime_modules:
         source_relative = _module_source_relative(module)
         source = source_root / source_relative
         destination = runtime_root / source_relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         shutil.copy2(source, destination)
-    candidate = stage / EXPECTED_CANDIDATES[task_mode]
+    candidate = snapshot_root / profile.candidate_path
     shutil.copy2(candidate, runtime_root / "Candidate.lean")
     shutil.copy2(
-        stage / "canary" / "DirectDependencyQuery.lean", runtime_root / "DirectDependencyQuery.lean"
+        snapshot_root / "canary" / "DirectDependencyQuery.lean",
+        runtime_root / "DirectDependencyQuery.lean",
     )
-    return runtime_root, runtime_modules
+    return runtime_root
 
 
 def _docker_base() -> list[str]:
@@ -220,22 +239,16 @@ def _docker_base() -> list[str]:
     ]
 
 
-def _container_script(task_mode: str, runtime_modules: tuple[str, ...]) -> str:
+def _container_script(profile: ValidatedProfileBoundary) -> str:
     compile_lines = "\n".join(
         "lean -o /work/"
         f"{_module_source_relative(module).with_suffix('.olean').as_posix()} "
         f"/work/{_module_source_relative(module).as_posix()}"
-        for module in runtime_modules
+        for module in profile.runtime_modules
     )
-    forbidden_checks: tuple[str, ...] = ()
-    if task_mode == "independent_reproof":
-        forbidden_checks = (
-            "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Controls",
-            "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound",
-        )
     reject_lines = "\n".join(
         line
-        for module in forbidden_checks
+        for module in profile.forbidden_modules
         for line in (
             f"printf 'import {module}\\n' > /work/ForbiddenImport.lean",
             "if lean /work/ForbiddenImport.lean >/dev/null 2>&1; then",
@@ -259,9 +272,13 @@ def _container_script(task_mode: str, runtime_modules: tuple[str, ...]) -> str:
     )
 
 
-def _run_one_real(stage: Path, task_mode: str) -> dict[str, object]:
-    runtime_root, runtime_modules = _materialize_runtime(stage, task_mode)
-    compiled = stage / "compiled" / task_mode
+def _run_one_real(
+    snapshot_root: Path,
+    workspace_root: Path,
+    profile: ValidatedProfileBoundary,
+) -> dict[str, object]:
+    runtime_root = _materialize_runtime(snapshot_root, workspace_root, profile)
+    compiled = workspace_root / "compiled" / profile.task_mode
     compiled.mkdir(parents=True, mode=0o777)
     command = [
         *_docker_base(),
@@ -274,10 +291,10 @@ def _run_one_real(stage: Path, task_mode: str) -> dict[str, object]:
         SOURCE_V2_IMAGE,
         "-eu",
         "-c",
-        _container_script(task_mode, runtime_modules),
+        _container_script(profile),
     ]
     completed = _run(command, timeout=240)
-    return _parse_query(completed.stdout, task_mode=task_mode)
+    return _parse_query(completed.stdout, task_mode=profile.task_mode)
 
 
 def _docker_available() -> tuple[bool, str]:
@@ -300,15 +317,11 @@ def _docker_available() -> tuple[bool, str]:
 
 def static_fallback(reason: str) -> dict[str, object]:
     check()
-    candidates = {mode: candidate_source(mode) for mode in EXPECTED_CANDIDATES}
-    independent = candidates["independent_reproof"]
-    compositional = candidates["compositional_bridge"]
-    if independent["statement_sha256"] != compositional["statement_sha256"]:
-        fail("static candidate statements differ")
     return {
         "authority": "static-structural-preflight-only",
         "fallback_reason": reason,
-        "image": SOURCE_V2_IMAGE,
+        "image_inspected": False,
+        "intended_parent_image": SOURCE_V2_IMAGE,
         "mode": "static_fallback",
         "non_claims": [
             "no_lean_compile_observation",
@@ -320,14 +333,20 @@ def static_fallback(reason: str) -> dict[str, object]:
 
 
 def real_canary() -> dict[str, object]:
-    check()
     available, reason = _docker_available()
     if not available:
         fail(f"real WSL/ext4 canary requires Docker and the pinned image ({reason})")
     with tempfile.TemporaryDirectory(prefix="autolean-library-substrate-", dir="/tmp") as temporary:
-        stage = Path(temporary) / "fixture"
-        _regular_tree_copy(FIXTURE_ROOT, stage)
-        observations = {mode: _run_one_real(stage, mode) for mode in EXPECTED_CANDIDATES}
+        temporary_root = Path(temporary)
+        _require_ext4(temporary_root)
+        snapshot_root = temporary_root / "fixture-snapshot"
+        workspace_root = temporary_root / "workspace"
+        _regular_tree_copy(FIXTURE_ROOT, snapshot_root)
+        profiles = check(snapshot_root)
+        observations = {
+            mode: _run_one_real(snapshot_root, workspace_root, profiles[mode])
+            for mode in EXPECTED_CANDIDATES
+        }
     comparison = _validate_pair(observations)
     return {
         "authority": "operator-local-diagnostic-only",

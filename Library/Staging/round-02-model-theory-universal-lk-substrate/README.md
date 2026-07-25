@@ -3,7 +3,8 @@
 This directory is a staged source split for the accepted
 `library-substrate-v1` architecture.  It is not a selected Builder pilot, a
 frozen statement contract, a compiled Library runtime image, an OCI receipt,
-or a promoted proof result.
+or a promoted proof result.  Its governing architecture decision is
+`docs/library-substrate-decision.md`.
 
 The retained aggregate modules remain immutable historical evidence and are
 forbidden imports here:
