@@ -109,9 +109,7 @@ def _parse_query(raw: str, *, task_mode: str) -> DirectDependencyObservation:
         raw_value: object = json.loads(lines[0])
     except json.JSONDecodeError as error:
         raise CanaryError(f"{task_mode} query did not emit JSON") from error
-    if not isinstance(raw_value, dict) or any(
-        not isinstance(key, str) for key in raw_value
-    ):
+    if not isinstance(raw_value, dict) or any(not isinstance(key, str) for key in raw_value):
         fail(f"{task_mode} query output must be an object")
     value = cast(dict[str, object], raw_value)
     required = {
