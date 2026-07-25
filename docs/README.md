@@ -52,6 +52,9 @@ runner reports success.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
     `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
     independent versus compositional proof-dependency gates. The
+    [image-owned substrate preflight](library-substrate-image-preflight.md) records the exact
+    child build, typed/IR inventory, sealed-Candidate query, and deliberately missing V2 adapter.
+    The
     [executable proof-dependency spike](proof-dependency-gate-spike.md) records a host-mounted
     source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.
     The [Lean 4.28 module-origin API note](lean-module-origin-spike.md) records the imported

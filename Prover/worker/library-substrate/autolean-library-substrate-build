@@ -1,0 +1,264 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-library-substrate-build: $1" >&2
+  exit 2
+}
+
+[ "$#" -eq 10 ] || fail "expected the frozen build argument profile"
+build_input_sha256=$1
+build_tool_sha256=$2
+dockerfile_sha256=$3
+inventory_helper_sha256=$4
+parent_receipt_sha256=$5
+parent_receipt_file_sha256=$6
+query_wrapper_sha256=$7
+receipt_tool_sha256=$8
+runtime_source_checksum_manifest_sha256=$9
+runtime_source_tree_sha256=${10}
+
+for digest in "$@"; do
+  case "$digest" in
+    *[!0-9a-f]*|"") fail "build argument is not a lowercase SHA-256" ;;
+  esac
+  [ "${#digest}" -eq 64 ] || fail "build argument has invalid SHA-256 length"
+done
+
+input=/build/input/build-input.v1.json
+source_checksums=/build/input/runtime-sources.sha256
+source=/build/source
+tools=/build/tools
+compiled=/build/compiled
+final=/build/final
+parent_receipt=/opt/autolean/attestations/mathlib-source-build-receipt.v2.json
+
+core_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core
+semantic_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/SemanticPrelude
+rule_rel=AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/RulePrelude
+
+test "$(sha256sum "$input" | awk '{print $1}')" = "$build_input_sha256"
+test "$(sha256sum "$source_checksums" | awk '{print $1}')" = \
+  "$runtime_source_checksum_manifest_sha256"
+test "$(sha256sum "$tools/autolean-library-substrate-build" | awk '{print $1}')" = \
+  "$build_tool_sha256"
+test "$(sha256sum "$tools/Dockerfile.library-substrate" | awk '{print $1}')" = \
+  "$dockerfile_sha256"
+test "$(sha256sum "$tools/AutoleanLibrarySubstrateInventory.lean" | awk '{print $1}')" = \
+  "$inventory_helper_sha256"
+test "$(sha256sum "$tools/autolean-library-substrate-independent-query" | awk '{print $1}')" = \
+  "$query_wrapper_sha256"
+test "$(sha256sum "$tools/autolean-library-substrate-build-receipt" | awk '{print $1}')" = \
+  "$receipt_tool_sha256"
+test "$(sha256sum "$parent_receipt" | awk '{print $1}')" = \
+  "$parent_receipt_file_sha256"
+test "$(
+  LC_ALL=C sed -n \
+    's/^.*"parent_receipt_canonical_sha256":"\([0-9a-f]\{64\}\)".*$/\1/p' \
+    "$input"
+)" = "$parent_receipt_sha256"
+profile_sha256=$(
+  LC_ALL=C sed -n \
+    's/^.*"profile_sha256":"\([0-9a-f]\{64\}\)".*$/\1/p' \
+    "$input"
+)
+test "${#profile_sha256}" -eq 64
+
+test -z "$(find "$source" ! -type f ! -type d -print -quit)"
+test "$(find "$source" -type f | wc -l | tr -d ' ')" -eq 3
+for relative in "$core_rel" "$semantic_rel" "$rule_rel"; do
+  test -f "$source/$relative.lean"
+  test ! -L "$source/$relative.lean"
+done
+(cd /build && sha256sum --check --strict --status input/runtime-sources.sha256) ||
+  fail "runtime source checksum mismatch"
+input_hash() {
+  field=$1
+  LC_ALL=C sed -n "s/^.*\"$field\":\"\\([0-9a-f]\\{64\\}\)\".*$/\\1/p" "$input"
+}
+source_record() {
+  module=$1
+  relative=$2
+  LC_ALL=C sed -n \
+    "s|^.*\"module\":\"$module\",\"path\":\"$relative\",\"role\":\"[^\"]*\",\"sha256\":\"\\([0-9a-f]\\{64\\}\)\",\"size\":\\([0-9]\\+\\)}.*$|\\1 \\2|p" \
+    "$input"
+}
+source_records=$(
+  LC_ALL=C sed -n 's/^.*"runtime_sources":\(\[.*\]\),"schema_version".*$/\1/p' "$input"
+)
+test -n "$source_records" || fail "runtime source records are unavailable"
+test "$(printf '%s\n' "$source_records" | sha256sum | awk '{print $1}')" = \
+  "$runtime_source_tree_sha256" || fail "runtime source tree argument drifted"
+test "$(input_hash runtime_source_tree_sha256)" = "$runtime_source_tree_sha256" ||
+  fail "runtime source tree is not bound by the build input"
+test "$(input_hash runtime_source_checksum_manifest_sha256)" = \
+  "$runtime_source_checksum_manifest_sha256" ||
+  fail "runtime source checksum manifest is not bound by the build input"
+
+core_source_record=$(source_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core "$core_rel.lean")
+semantic_source_record=$(source_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude "$semantic_rel.lean")
+rule_source_record=$(source_record \
+  AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude "$rule_rel.lean")
+for record in "$core_source_record" "$semantic_source_record" "$rule_source_record"; do
+  set -- $record
+  test "$#" -eq 2 || fail "runtime source record schema drifted"
+  case "$1" in *[!0-9a-f]*|"") fail "runtime source hash is invalid" ;; esac
+  case "$2" in *[!0-9]*|"") fail "runtime source size is invalid" ;; esac
+done
+set -- $core_source_record
+core_source_sha=$1
+core_source_size=$2
+set -- $semantic_source_record
+semantic_source_sha=$1
+semantic_source_size=$2
+set -- $rule_source_record
+rule_source_sha=$1
+rule_source_size=$2
+for relative_and_expected in \
+  "$core_rel.lean:$core_source_sha:$core_source_size" \
+  "$semantic_rel.lean:$semantic_source_sha:$semantic_source_size" \
+  "$rule_rel.lean:$rule_source_sha:$rule_source_size"
+do
+  relative=${relative_and_expected%%:*}
+  remaining=${relative_and_expected#*:}
+  expected_sha=${remaining%%:*}
+  expected_size=${remaining#*:}
+  actual_sha=$(sha256sum "$source/$relative" | awk '{print $1}')
+  actual_size=$(wc -c <"$source/$relative" | tr -d ' ')
+  test "$actual_sha" = "$expected_sha" || fail "runtime source bytes differ from build input"
+  test "$actual_size" = "$expected_size" || fail "runtime source bytes differ from build input"
+done
+expected_source_checksum_sha=$(
+  {
+    printf '%s  source/%s\n' "$core_source_sha" "$core_rel.lean"
+    printf '%s  source/%s\n' "$semantic_source_sha" "$semantic_rel.lean"
+    printf '%s  source/%s\n' "$rule_source_sha" "$rule_rel.lean"
+  } | sha256sum | awk '{print $1}'
+)
+test "$expected_source_checksum_sha" = "$runtime_source_checksum_manifest_sha256" ||
+  fail "runtime source checksum manifest differs from build input"
+
+mkdir -p \
+  "$compiled/$(dirname "$core_rel")" \
+  "$final/bin" \
+  "$final/lib/lean/$(dirname "$core_rel")" \
+  "$final/attestations"
+
+parent_lean_path=$(cat /opt/autolean/environment/lean-path)
+test -n "$parent_lean_path"
+export LEAN_PATH="$compiled:$parent_lean_path"
+
+lean -R "$source" -o "$compiled/$core_rel.olean" "$source/$core_rel.lean"
+lean -R "$source" -o "$compiled/$semantic_rel.olean" "$source/$semantic_rel.lean"
+lean -R "$source" -o "$compiled/$rule_rel.olean" "$source/$rule_rel.lean"
+
+test -z "$(find "$compiled" ! -type f ! -type d -print -quit)"
+test "$(find "$compiled" -type f | wc -l | tr -d ' ')" -eq 3
+
+core_sha=$(sha256sum "$compiled/$core_rel.olean" | awk '{print $1}')
+semantic_sha=$(sha256sum "$compiled/$semantic_rel.olean" | awk '{print $1}')
+rule_sha=$(sha256sum "$compiled/$rule_rel.olean" | awk '{print $1}')
+
+lean --run "$tools/AutoleanLibrarySubstrateInventory.lean" \
+  "$core_sha" "$semantic_sha" "$rule_sha" \
+  >"$final/attestations/declaration-inventory.v1.json" \
+  2>"$final/attestations/declaration-inventory.stderr"
+test ! -s "$final/attestations/declaration-inventory.stderr"
+rm "$final/attestations/declaration-inventory.stderr"
+test "$(wc -l <"$final/attestations/declaration-inventory.v1.json" | tr -d ' ')" -eq 1
+inventory_sha256=$(
+  sha256sum "$final/attestations/declaration-inventory.v1.json" | awk '{print $1}'
+)
+ir_auxiliary_names_sha256=$(
+  LC_ALL=C sed -n \
+    's/^.*"ir_auxiliary_names_sha256":"\([0-9a-f]\{64\}\)".*$/\1/p' \
+    "$final/attestations/declaration-inventory.v1.json"
+)
+test "${#ir_auxiliary_names_sha256}" -eq 64
+
+cp "$compiled/$core_rel.olean" "$final/lib/lean/$core_rel.olean"
+cp "$compiled/$semantic_rel.olean" "$final/lib/lean/$semantic_rel.olean"
+cp "$compiled/$rule_rel.olean" "$final/lib/lean/$rule_rel.olean"
+cp "$input" "$final/attestations/build-input.v1.json"
+cp "$source_checksums" "$final/attestations/runtime-sources.sha256"
+cp "$tools/autolean-library-substrate-independent-query" \
+  "$final/bin/autolean-library-substrate-independent-query"
+cp "$tools/autolean-library-substrate-build-receipt" \
+  "$final/bin/autolean-library-substrate-build-receipt"
+chmod 0555 "$final/bin/"*
+find "$final/lib" -type f -exec chmod 0444 {} \;
+find "$final/attestations" -type f -exec chmod 0444 {} \;
+
+(
+  cd "$final"
+  printf '%s  %s\n' "$core_sha" "lib/lean/$core_rel.olean"
+  printf '%s  %s\n' "$semantic_sha" "lib/lean/$semantic_rel.olean"
+  printf '%s  %s\n' "$rule_sha" "lib/lean/$rule_rel.olean"
+) >"$final/attestations/runtime-files.sha256"
+compiled_tree_sha256=$(
+  sha256sum "$final/attestations/runtime-files.sha256" | awk '{print $1}'
+)
+
+core_size=$(wc -c <"$compiled/$core_rel.olean" | tr -d ' ')
+semantic_size=$(wc -c <"$compiled/$semantic_rel.olean" | tr -d ' ')
+rule_size=$(wc -c <"$compiled/$rule_rel.olean" | tr -d ' ')
+
+{
+  printf '{'
+  printf '"build_input_sha256":"%s",' "$build_input_sha256"
+  printf '"compiled_tree_sha256":"%s",' "$compiled_tree_sha256"
+  printf '"declaration_inventory":'
+  tr -d '\n' <"$final/attestations/declaration-inventory.v1.json"
+  printf ',"declaration_inventory_sha256":"%s",' "$inventory_sha256"
+  printf '"ir_auxiliary_names_sha256":"%s",' "$ir_auxiliary_names_sha256"
+  printf '"mathlib_revision":"8f9d9cff6bd728b17a24e163c9402775d9e6a365",'
+  printf '"parent_image":"autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",'
+  printf '"parent_receipt_canonical_sha256":"%s",' "$parent_receipt_sha256"
+  printf '"parent_receipt_file_sha256":"%s",' "$parent_receipt_file_sha256"
+  printf '"profile_id":"library-substrate-v1-model-theory-universal-lk-independent-reproof",'
+  printf '"profile_sha256":"%s",' "$profile_sha256"
+  printf '"runtime_files":['
+  printf '{"module":"AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core","path":"lib/lean/%s.olean","sha256":"%s","size":%s},' "$core_rel" "$core_sha" "$core_size"
+  printf '{"module":"AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude","path":"lib/lean/%s.olean","sha256":"%s","size":%s},' "$semantic_rel" "$semantic_sha" "$semantic_size"
+  printf '{"module":"AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude","path":"lib/lean/%s.olean","sha256":"%s","size":%s}' "$rule_rel" "$rule_sha" "$rule_size"
+  printf '],'
+  printf '"runtime_modules":["AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core","AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude","AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude"],'
+  printf '"runtime_source_checksum_manifest_sha256":"%s",' "$runtime_source_checksum_manifest_sha256"
+  printf '"runtime_source_tree_sha256":"%s",' "$runtime_source_tree_sha256"
+  printf '"schema_version":"autolean.library-substrate-runtime-manifest.v1",'
+  printf '"task_mode":"independent_reproof"'
+  printf '}\n'
+} >"$final/attestations/runtime-manifest.v1.json"
+
+runtime_manifest_sha256=$(
+  sha256sum "$final/attestations/runtime-manifest.v1.json" | awk '{print $1}'
+)
+{
+  printf '{'
+  printf '"build_input_sha256":"%s",' "$build_input_sha256"
+  printf '"build_tool_sha256":"%s",' "$build_tool_sha256"
+  printf '"compiled_tree_sha256":"%s",' "$compiled_tree_sha256"
+  printf '"declaration_inventory_sha256":"%s",' "$inventory_sha256"
+  printf '"dockerfile_sha256":"%s",' "$dockerfile_sha256"
+  printf '"inventory_helper_sha256":"%s",' "$inventory_helper_sha256"
+  printf '"ir_auxiliary_names_sha256":"%s",' "$ir_auxiliary_names_sha256"
+  printf '"parent_image":"autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",'
+  printf '"parent_receipt_canonical_sha256":"%s",' "$parent_receipt_sha256"
+  printf '"parent_receipt_file_sha256":"%s",' "$parent_receipt_file_sha256"
+  printf '"profile_id":"library-substrate-v1-model-theory-universal-lk-independent-reproof",'
+  printf '"profile_sha256":"%s",' "$profile_sha256"
+  printf '"query_wrapper_sha256":"%s",' "$query_wrapper_sha256"
+  printf '"receipt_tool_sha256":"%s",' "$receipt_tool_sha256"
+  printf '"runtime_manifest_sha256":"%s",' "$runtime_manifest_sha256"
+  printf '"runtime_source_checksum_manifest_sha256":"%s",' "$runtime_source_checksum_manifest_sha256"
+  printf '"runtime_source_tree_sha256":"%s",' "$runtime_source_tree_sha256"
+  printf '"schema_version":"autolean.library-substrate-image-receipt.v1",'
+  printf '"task_mode":"independent_reproof"'
+  printf '}\n'
+} >"$final/attestations/library-substrate-image-receipt.v1.json"
+chmod 0444 "$final/attestations/"*
+
+test -z "$(find "$final" -name '*.lean' -o -name '*.ilean')"
+(cd "$final" && sha256sum --check --strict --status attestations/runtime-files.sha256)
