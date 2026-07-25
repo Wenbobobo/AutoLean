@@ -1,6 +1,9 @@
 from __future__ import annotations
 
 import json
+import os
+import shutil
+import subprocess
 from copy import deepcopy
 from pathlib import Path
 from typing import cast
@@ -17,6 +20,10 @@ from autolean_prover.proof_dependencies import (
 from scripts import proof_dependency_gate
 
 _FIXTURES = Path(__file__).parent / "fixtures" / "proof_dependencies"
+_SOURCE_V2_IMAGE = (
+    "autolean/mathlib-worker@"
+    "sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6"
+)
 
 
 def _record(name: str) -> dict[str, object]:
@@ -25,17 +32,27 @@ def _record(name: str) -> dict[str, object]:
     return cast(dict[str, object], value)
 
 
-def test_exact_allowlist_accepts_independent_proof_closure() -> None:
-    evidence = ProofDependencyEvidence.from_mapping(_record("independent.evidence.json"))
-    policy = ProofDependencyPolicy.from_mapping(_record("independent.policy.json"))
+def test_exact_closure_allowlist_accepts_nonalias_fixture() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("nonalias.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("nonalias.policy.json"))
 
     decision = evaluate_proof_dependency_policy(evidence, policy)
 
     assert decision.accepted is True
-    assert decision.direct_dependency_count == 1
-    assert decision.closure_dependency_count == 1
+    assert evidence.declaration == "AutoLean.ProofDependencyFixture.nonalias"
+    assert decision.direct_dependency_count == 2
+    assert decision.closure_dependency_count == 5
     assert len(decision.policy_sha256) == 64
     assert len(decision.evidence_sha256) == 64
+
+
+def test_known_exact_type_alias_is_rejected_by_explicit_name_denial() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("exact-type-alias.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("exact-type-alias.policy.json"))
+
+    assert evidence.direct_proof_dependencies == ("AutoLean.ProofDependencyFixture.nonalias",)
+    with pytest.raises(ProofDependencyRejected, match="nonalias"):
+        evaluate_proof_dependency_policy(evidence, policy)
 
 
 def test_transitive_closure_rejects_allowed_wrapper_around_denied_theorem() -> None:
@@ -55,6 +72,29 @@ def test_unlisted_ordinary_declaration_fails_closed_without_a_matching_denial() 
 
     with pytest.raises(ProofDependencyRejected, match=r"unapproved.*forbiddenStrong"):
         evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_quotient_declaration_type_adds_quot_mk_to_transitive_closure() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("quotient.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("quotient.policy.json"))
+
+    assert evidence.direct_proof_dependencies == ("Quot.ind",)
+    assert "Quot.mk" not in evidence.direct_proof_dependencies
+    assert "Quot.mk" in evidence.proof_dependency_closure
+    with pytest.raises(ProofDependencyRejected, match=r"Quot\.mk"):
+        evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_candidate_module_intersection_is_diagnostic_not_an_ownership_policy() -> None:
+    record = _record("nonalias.evidence.json")
+    record["candidate_module_dependencies"] = []
+    evidence = ProofDependencyEvidence.from_mapping(record)
+    policy = ProofDependencyPolicy.from_mapping(_record("nonalias.policy.json"))
+
+    decision = evaluate_proof_dependency_policy(evidence, policy)
+
+    assert decision.accepted is True
+    assert evidence.candidate_module_dependencies == ()
 
 
 @pytest.mark.parametrize(
@@ -97,7 +137,7 @@ def test_evidence_shape_and_completeness_invariants_fail_closed(
     elif mutation == "missing-direct-from-closure":
         record["proof_dependency_closure"] = ["AutoLean.ProofDependencyFixture.forbiddenStrong"]
     elif mutation == "candidate-outside-closure":
-        record["candidate_owned_dependencies"] = [
+        record["candidate_module_dependencies"] = [
             "AutoLean.ProofDependencyFixture.allowedWrapper",
             "AutoLean.ProofDependencyFixture.forbiddenStrong",
             "AutoLean.ProofDependencyFixture.other",
@@ -105,7 +145,7 @@ def test_evidence_shape_and_completeness_invariants_fail_closed(
     else:
         record["proof_dependency_closure"] = ["AutoLean.ProofDependencyFixture.disguised"]
         record["direct_proof_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
-        record["candidate_owned_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
+        record["candidate_module_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
 
     with pytest.raises(ProofDependencyEvidenceError, match=message):
         ProofDependencyEvidence.from_mapping(record)
@@ -121,12 +161,12 @@ def test_evidence_shape_and_completeness_invariants_fail_closed(
     ),
 )
 def test_policy_and_target_binding_fail_closed(mutation: str, message: str) -> None:
-    evidence = ProofDependencyEvidence.from_mapping(_record("independent.evidence.json"))
-    record = deepcopy(_record("independent.policy.json"))
+    evidence = ProofDependencyEvidence.from_mapping(_record("nonalias.evidence.json"))
+    record = deepcopy(_record("nonalias.policy.json"))
     if mutation == "missing-target-denial":
-        record["denied_dependencies"] = ["AutoLean.ProofDependencyFixture.forbiddenStrong"]
+        record["denied_dependencies"] = ["AutoLean.ProofDependencyFixture.exactTypeAlias"]
     elif mutation == "overlap":
-        record["allowed_dependencies"] = ["AutoLean.ProofDependencyFixture.forbiddenStrong"]
+        record["allowed_dependencies"] = ["AutoLean.ProofDependencyFixture.exactTypeAlias"]
     elif mutation == "unsorted":
         record["denied_dependencies"] = list(
             reversed(cast(list[object], record["denied_dependencies"]))
@@ -152,9 +192,9 @@ def test_validation_cli_accepts_positive_and_rejects_disguised_fixture(
             [
                 "validate",
                 "--policy",
-                str(_FIXTURES / "independent.policy.json"),
+                str(_FIXTURES / "nonalias.policy.json"),
                 "--evidence",
-                str(_FIXTURES / "independent.evidence.json"),
+                str(_FIXTURES / "nonalias.evidence.json"),
             ]
         )
         == 0
@@ -177,3 +217,27 @@ def test_validation_cli_accepts_positive_and_rejects_disguised_fixture(
     captured = capsys.readouterr()
     assert captured.out == ""
     assert "forbiddenStrong" in captured.err
+
+
+@pytest.mark.integration
+def test_source_v2_helper_replays_committed_query_fixtures() -> None:
+    if os.name != "posix" or shutil.which("docker") is None:
+        pytest.skip("requires Linux Docker and the operator-local source-v2 image")
+    available = subprocess.run(
+        ["docker", "image", "inspect", _SOURCE_V2_IMAGE],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if available.returncode != 0:
+        pytest.skip("operator-local source-v2 image is unavailable")
+
+    observations = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
+
+    assert tuple(item["declaration"] for item in observations) == (
+        "AutoLean.ProofDependencyFixture.nonalias",
+        "AutoLean.ProofDependencyFixture.exactTypeAlias",
+        "AutoLean.ProofDependencyFixture.disguised",
+        "AutoLean.ProofDependencyFixture.quotientProbe",
+    )

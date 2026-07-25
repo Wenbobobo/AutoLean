@@ -1,6 +1,6 @@
 {
-  "candidate_declaration_count": 5,
-  "candidate_owned_dependencies": [
+  "candidate_declaration_count": 7,
+  "candidate_module_dependencies": [
     "AutoLean.ProofDependencyFixture.allowedWrapper",
     "AutoLean.ProofDependencyFixture.forbiddenStrong"
   ],
@@ -12,6 +12,6 @@
     "AutoLean.ProofDependencyFixture.allowedWrapper",
     "AutoLean.ProofDependencyFixture.forbiddenStrong"
   ],
-  "schema_version": "autolean.proof-dependency-query-spike.v1",
+  "schema_version": "autolean.proof-dependency-query-spike.v2",
   "traversal": "target-proof-value-then-declaration-type-and-value-transitive.v1"
 }

@@ -1,0 +1,12 @@
+{
+  "allowed_dependencies": [
+    "Quot",
+    "Quot.ind"
+  ],
+  "denied_dependencies": [
+    "AutoLean.ProofDependencyFixture.quotientProbe",
+    "Quot.mk"
+  ],
+  "schema_version": "autolean.proof-dependency-policy-spike.v1",
+  "target_declaration": "AutoLean.ProofDependencyFixture.quotientProbe"
+}

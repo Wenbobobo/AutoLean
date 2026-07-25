@@ -1,0 +1,15 @@
+{
+  "candidate_declaration_count": 7,
+  "candidate_module_dependencies": [],
+  "declaration": "AutoLean.ProofDependencyFixture.quotientProbe",
+  "direct_proof_dependencies": [
+    "Quot.ind"
+  ],
+  "proof_dependency_closure": [
+    "Quot",
+    "Quot.ind",
+    "Quot.mk"
+  ],
+  "schema_version": "autolean.proof-dependency-query-spike.v2",
+  "traversal": "target-proof-value-then-declaration-type-and-value-transitive.v1"
+}

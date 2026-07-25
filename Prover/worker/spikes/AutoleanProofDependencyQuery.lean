@@ -18,15 +18,14 @@ private def uniqueSortedNames (names : Array Name) : Array Name := Id.run do
 private def namesJson (names : Array Name) : Json :=
   Json.arr <| names.map fun name => Json.str name.toString
 
-private def declarationDependencies : ConstantInfo → Array Name
-  | .axiomInfo value => value.type.getUsedConstants
-  | .defnInfo value => value.type.getUsedConstants ++ value.value.getUsedConstants
-  | .thmInfo value => value.type.getUsedConstants ++ value.value.getUsedConstants
-  | .opaqueInfo value => value.type.getUsedConstants ++ value.value.getUsedConstants
-  | .quotInfo _ => #[]
-  | .ctorInfo value => value.type.getUsedConstants
-  | .recInfo value => value.type.getUsedConstants ++ value.all.toArray
-  | .inductInfo value => value.type.getUsedConstants ++ value.ctors
+private def nameSetToArray (names : NameSet) : Array Name := Id.run do
+  let mut result := #[]
+  for name in names do
+    result := result.push name
+  return result
+
+private def declarationDependencies (info : ConstantInfo) : Array Name :=
+  nameSetToArray info.getUsedConstantsAsSet
 
 private def checkedDeclaration (environment : Environment) (name : Name) : IO ConstantInfo := do
   let some info := environment.checked.get.find? name
@@ -69,15 +68,15 @@ private def query (declarationText : String) : IO Json := do
   let proofValue ← theoremProofValue environment declaration
   let direct := uniqueSortedNames proofValue.getUsedConstants
   let closure ← dependencyClosure environment direct
-  let candidateOwned := closure.filter fun dependency =>
+  let candidateModuleDependencies := closure.filter fun dependency =>
     candidate.constNames.any (· == dependency)
   return Json.mkObj [
     ("candidate_declaration_count", Json.num candidate.constNames.size),
-    ("candidate_owned_dependencies", namesJson candidateOwned),
+    ("candidate_module_dependencies", namesJson candidateModuleDependencies),
     ("declaration", Json.str declarationText),
     ("direct_proof_dependencies", namesJson direct),
     ("proof_dependency_closure", namesJson closure),
-    ("schema_version", Json.str "autolean.proof-dependency-query-spike.v1"),
+    ("schema_version", Json.str "autolean.proof-dependency-query-spike.v2"),
     ("traversal",
       Json.str "target-proof-value-then-declaration-type-and-value-transitive.v1")
   ]

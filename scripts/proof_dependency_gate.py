@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import re
@@ -27,6 +28,16 @@ _IMAGE = re.compile(r"^.+@sha256:[0-9a-f]{64}$")
 _TARGET = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$")
 _MAX_SOURCE_BYTES: Final[int] = 16 * 1024 * 1024
 _QUERY_HELPER = _REPO_ROOT / "Prover" / "worker" / "spikes" / "AutoleanProofDependencyQuery.lean"
+_QUERY_FIXTURE = (
+    _REPO_ROOT / "Prover" / "worker" / "tests" / "fixtures" / "ProofDependencyClosure.lean"
+)
+_EVIDENCE_FIXTURES = _REPO_ROOT / "Prover" / "tests" / "fixtures" / "proof_dependencies"
+_REPLAY_TARGETS: Final[tuple[tuple[str, str], ...]] = (
+    ("nonalias.evidence.json", "AutoLean.ProofDependencyFixture.nonalias"),
+    ("exact-type-alias.evidence.json", "AutoLean.ProofDependencyFixture.exactTypeAlias"),
+    ("disguised.evidence.json", "AutoLean.ProofDependencyFixture.disguised"),
+    ("quotient.evidence.json", "AutoLean.ProofDependencyFixture.quotientProbe"),
+)
 
 
 class ProofDependencySpikeError(RuntimeError):
@@ -87,6 +98,17 @@ def _load_json(path: Path, *, label: str) -> dict[str, object]:
     except (OSError, UnicodeError) as error:
         raise ProofDependencyEvidenceError(f"{label} is unreadable UTF-8") from error
     return _strict_json(raw, label=label)
+
+
+def _sha256_file(path: Path) -> str:
+    digest = hashlib.sha256()
+    try:
+        with path.open("rb") as stream:
+            while chunk := stream.read(1024 * 1024):
+                digest.update(chunk)
+    except OSError as error:
+        raise ProofDependencySpikeError("proof dependency input is unreadable") from error
+    return digest.hexdigest()
 
 
 def _docker_base() -> list[str]:
@@ -253,6 +275,98 @@ def query_dependencies(
         )
 
 
+def replay_fixture_evidence(*, image: str) -> tuple[dict[str, object], ...]:
+    """Run the real helper and require exact agreement with every committed fixture."""
+
+    observations: list[dict[str, object]] = []
+    for fixture_name, declaration in _REPLAY_TARGETS:
+        observed = query_dependencies(
+            image=image,
+            candidate=_QUERY_FIXTURE,
+            declaration=declaration,
+        )
+        expected = ProofDependencyEvidence.from_mapping(
+            _load_json(
+                _EVIDENCE_FIXTURES / fixture_name,
+                label=f"committed proof dependency fixture {fixture_name}",
+            )
+        )
+        if observed != expected:
+            _fail(f"proof dependency query drifted from committed fixture: {fixture_name}")
+        observations.append(
+            {
+                "declaration": declaration,
+                "fixture_path": (
+                    Path("Prover") / "tests" / "fixtures" / "proof_dependencies" / fixture_name
+                ).as_posix(),
+                "query_output_sha256": observed.canonical_sha256(),
+            }
+        )
+    return tuple(observations)
+
+
+def write_operator_observation(*, image: str, output: Path) -> dict[str, object]:
+    """Record a non-authoritative local replay below the ignored release-evidence root."""
+
+    release_root = (_REPO_ROOT / "release-evidence").resolve()
+    destination = (output if output.is_absolute() else _REPO_ROOT / output).resolve()
+    if destination.suffix != ".json" or not destination.is_relative_to(release_root):
+        _fail("operator observation must be a JSON file below release-evidence")
+    observations = replay_fixture_evidence(image=image)
+    output_hashes = tuple(cast(str, item["query_output_sha256"]) for item in observations)
+    outputs_sha256 = hashlib.sha256(
+        json.dumps(
+            output_hashes,
+            ensure_ascii=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+    relative_output = destination.relative_to(_REPO_ROOT).as_posix()
+    record: dict[str, object] = {
+        "authority": "operator-local-observation-only",
+        "candidate_sha256": _sha256_file(_QUERY_FIXTURE),
+        "command": [
+            "uv",
+            "run",
+            "python",
+            "scripts/proof_dependency_gate.py",
+            "observe-fixtures",
+            "--image",
+            image,
+            "--output",
+            relative_output,
+        ],
+        "fixture_replay_passed": True,
+        "helper_identity": "host-mounted",
+        "image": image,
+        "observations": list(observations),
+        "outputs_sha256": outputs_sha256,
+        "promotion_state": "not-admission-evidence",
+        "query_helper_sha256": _sha256_file(_QUERY_HELPER),
+        "schema_version": "autolean.proof-dependency-operator-observation.v1",
+    }
+    encoded = (
+        json.dumps(
+            record,
+            ensure_ascii=True,
+            sort_keys=True,
+            indent=2,
+        )
+        + "\n"
+    ).encode("utf-8")
+    try:
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        with destination.open("xb") as stream:
+            stream.write(encoded)
+            stream.flush()
+            os.fsync(stream.fileno())
+    except OSError as error:
+        raise ProofDependencySpikeError(
+            "operator observation could not be written exclusively"
+        ) from error
+    return record
+
+
 def _wsl_path(path: Path) -> str:
     completed = _run(
         ["wsl.exe", "-d", WSL_DISTRIBUTION, "-e", "wslpath", "-a", str(path)],
@@ -290,6 +404,30 @@ def _delegate_query(arguments: argparse.Namespace) -> int:
     return subprocess.run(command, check=False).returncode
 
 
+def _delegate_observation(arguments: argparse.Namespace) -> int:
+    repo_root = Path(__file__).resolve().parents[1]
+    command = [
+        "wsl.exe",
+        "-d",
+        WSL_DISTRIBUTION,
+        "--cd",
+        _wsl_path(repo_root),
+        "--",
+        "env",
+        f"PYTHONPATH={_wsl_path(repo_root / 'Prover' / 'src')}",
+        "python3",
+        "-m",
+        "scripts.proof_dependency_gate",
+        "observe-fixtures",
+        "--native",
+        "--image",
+        cast(str, arguments.image),
+        "--output",
+        _wsl_path(cast(Path, arguments.output).resolve()),
+    ]
+    return subprocess.run(command, check=False).returncode
+
+
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="action", required=True)
@@ -298,6 +436,10 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     query.add_argument("--candidate", required=True, type=Path)
     query.add_argument("--declaration", required=True)
     query.add_argument("--native", action="store_true", help=argparse.SUPPRESS)
+    observe = subparsers.add_parser("observe-fixtures")
+    observe.add_argument("--image", required=True)
+    observe.add_argument("--output", required=True, type=Path)
+    observe.add_argument("--native", action="store_true", help=argparse.SUPPRESS)
     validate = subparsers.add_parser("validate")
     validate.add_argument("--policy", required=True, type=Path)
     validate.add_argument("--evidence", required=True, type=Path)
@@ -318,6 +460,23 @@ def main(argv: list[str] | None = None) -> int:
             print(
                 json.dumps(
                     evidence.to_mapping(),
+                    ensure_ascii=True,
+                    sort_keys=True,
+                    separators=(",", ":"),
+                )
+            )
+            return 0
+
+        if arguments.action == "observe-fixtures":
+            if os.name == "nt" and not arguments.native:
+                return _delegate_observation(arguments)
+            observation = write_operator_observation(
+                image=cast(str, arguments.image),
+                output=cast(Path, arguments.output),
+            )
+            print(
+                json.dumps(
+                    observation,
                     ensure_ascii=True,
                     sort_keys=True,
                     separators=(",", ":"),

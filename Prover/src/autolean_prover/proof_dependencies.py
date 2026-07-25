@@ -13,7 +13,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from typing import Final, NoReturn
 
-PROOF_DEPENDENCY_QUERY_SCHEMA: Final[str] = "autolean.proof-dependency-query-spike.v1"
+PROOF_DEPENDENCY_QUERY_SCHEMA: Final[str] = "autolean.proof-dependency-query-spike.v2"
 PROOF_DEPENDENCY_POLICY_SCHEMA: Final[str] = "autolean.proof-dependency-policy-spike.v1"
 PROOF_DEPENDENCY_TRAVERSAL: Final[str] = (
     "target-proof-value-then-declaration-type-and-value-transitive.v1"
@@ -24,7 +24,7 @@ _TARGET = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$")
 _EVIDENCE_FIELDS: Final[frozenset[str]] = frozenset(
     {
         "candidate_declaration_count",
-        "candidate_owned_dependencies",
+        "candidate_module_dependencies",
         "declaration",
         "direct_proof_dependencies",
         "proof_dependency_closure",
@@ -90,13 +90,17 @@ def _canonical_sha256(payload: Mapping[str, object]) -> str:
 
 @dataclass(frozen=True, slots=True)
 class ProofDependencyEvidence:
-    """Strictly parsed output from the experimental Lean dependency query."""
+    """Strictly parsed output from the experimental Lean dependency query.
+
+    ``candidate_module_dependencies`` is only a diagnostic intersection with the declarations
+    defined by ``Candidate.olean``. It is not a trusted AutoLean ownership classification.
+    """
 
     declaration: str
     candidate_declaration_count: int
     direct_proof_dependencies: tuple[str, ...]
     proof_dependency_closure: tuple[str, ...]
-    candidate_owned_dependencies: tuple[str, ...]
+    candidate_module_dependencies: tuple[str, ...]
     schema_version: str = PROOF_DEPENDENCY_QUERY_SCHEMA
     traversal: str = PROOF_DEPENDENCY_TRAVERSAL
 
@@ -127,17 +131,17 @@ class ProofDependencyEvidence:
             raw.get("proof_dependency_closure"),
             label="proof dependency closure",
         )
-        candidate_owned = _name_list(
-            raw.get("candidate_owned_dependencies"),
-            label="candidate-owned dependencies",
+        candidate_module = _name_list(
+            raw.get("candidate_module_dependencies"),
+            label="Candidate-module dependencies",
         )
         closure_set = set(closure)
         if not set(direct) <= closure_set:
             _reject("proof dependency closure omits a direct dependency")
-        if not set(candidate_owned) <= closure_set:
-            _reject("candidate-owned dependencies are outside the proof dependency closure")
-        if len(candidate_owned) > count:
-            _reject("candidate-owned dependency count exceeds the Candidate module")
+        if not set(candidate_module) <= closure_set:
+            _reject("Candidate-module dependencies are outside the proof dependency closure")
+        if len(candidate_module) > count:
+            _reject("Candidate-module dependency count exceeds the Candidate module")
         if declaration in closure_set:
             _reject("proof dependency closure refers to its own target declaration")
         return cls(
@@ -145,13 +149,13 @@ class ProofDependencyEvidence:
             candidate_declaration_count=count,
             direct_proof_dependencies=direct,
             proof_dependency_closure=closure,
-            candidate_owned_dependencies=candidate_owned,
+            candidate_module_dependencies=candidate_module,
         )
 
     def to_mapping(self) -> dict[str, object]:
         return {
             "candidate_declaration_count": self.candidate_declaration_count,
-            "candidate_owned_dependencies": list(self.candidate_owned_dependencies),
+            "candidate_module_dependencies": list(self.candidate_module_dependencies),
             "declaration": self.declaration,
             "direct_proof_dependencies": list(self.direct_proof_dependencies),
             "proof_dependency_closure": list(self.proof_dependency_closure),
@@ -165,10 +169,11 @@ class ProofDependencyEvidence:
 
 @dataclass(frozen=True, slots=True)
 class ProofDependencyPolicy:
-    """Exact, frozen allow/deny boundary for one target declaration.
+    """Exact allow/deny boundary for one target declaration in the conservative spike.
 
     Every declaration in the transitive closure must be explicitly allowed. Denials take
     precedence and the target itself must be denied, making accidental recursion or reuse explicit.
+    The policy is not frozen authoritatively unless a successor contract binds its digest.
     """
 
     target_declaration: str

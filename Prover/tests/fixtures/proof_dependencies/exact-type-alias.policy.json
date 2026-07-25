@@ -1,0 +1,15 @@
+{
+  "allowed_dependencies": [
+    "And",
+    "And.intro",
+    "And.left",
+    "And.right",
+    "AutoLean.ProofDependencyFixture.allowedHelper"
+  ],
+  "denied_dependencies": [
+    "AutoLean.ProofDependencyFixture.exactTypeAlias",
+    "AutoLean.ProofDependencyFixture.nonalias"
+  ],
+  "schema_version": "autolean.proof-dependency-policy-spike.v1",
+  "target_declaration": "AutoLean.ProofDependencyFixture.exactTypeAlias"
+}
