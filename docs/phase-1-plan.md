@@ -26,6 +26,7 @@ star, a pilot-selection oracle, or a substitute for a multi-file formal library.
 | Backups | Abstract Cea-type variational-PDE and van Kampen-style slices | The same rights, alignment, and pinned-Library selection gates |
 | Calibration order | Multi-agent self-calibration and textbook/open-problem alignment first; manual Builder calibration later | A recorded candidate selection and normal rights/domain-review readiness |
 | Formal work record | Independent `Library/` is the main formal-work record and upstream staging surface | Never replaced by benchmark files, worker logs, or a mutable local checkout |
+| Prover Library substrate | Use a new side-by-side `library-substrate-v1` image with a target-free AutoLean declaration closure over the locked Semantics Mathlib closure; keep source-v2 and T4 immutable | A general `mathlib-substrate-v1` remains undecided until a measured default-target/closure preflight; external `/deps` waits for the V3 trigger |
 | HF archive | Operator confirmed deletion; no archive is a migration source | Separate provider-side access and credential-rotation evidence is still required for incident closure |
 
 ## Gate order
@@ -76,8 +77,9 @@ The milestones above remain the release-level sequence. The following tasks are 
 implementation batch; they exist to make the critical path assignable and independently
 verifiable without turning each local defect into a new subsystem. T2 and the local test-only T4
 profile are technically complete. T3 now has a replayable gap record rather than an admission;
-the immediate frontier is resolving that boundary or evaluating a backup. T5 and therefore T6
-remain blocked downstream.
+the immediate frontier is resolving that boundary or evaluating a backup. The target-free
+[Library substrate decision](library-substrate-decision.md) fixes the execution design without
+claiming admission. T5 and therefore T6 remain blocked downstream.
 
 | Task | Why now | Output and acceptance | Depends on | Explicitly out of scope |
 | --- | --- | --- | --- | --- |
@@ -85,8 +87,8 @@ remain blocked downstream.
 | T2: Lean freshness micro-slice | Technically complete for the bounded fragment | Kernel-checked level-indexed syntax/context, weakening, capture-avoiding instantiation, universal rules, soundness, level-zero bridge, and negative capture/freshness controls under the pinned Library lock | T1 | A complete textbook calculus, `Promoted/`, or selecting a candidate merely because it compiles |
 | T3: pilot admission | V2 consistently records the current candidate as `gap/not_selected`; exact source-v2 technical evidence now exposes, rather than resolves, its formal-profile mismatch | Keep the V2 decision immutable. Review the fine spans and semantics, explicitly decide the image/`Init`/axiom policy in a successor profile, and obtain authenticated authority; otherwise record the selected backup | T1 and T2 | Freezing a statement, issuing a Prover bundle, silently rewriting the old decision, or treating local replay or Agent agreement as authority |
 | T4: mathlib-in-image authority | Exact source-v2 build and declaration query complete, local test-only | The 889/889 network-disabled build produced digest `3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6`. Query artifact SHA `167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a` binds 46 declarations and a 2,744-module closure; 41 declarations have nonempty axiom sets, and `Deriv.closed_sound` uses `Classical.choice`, `Quot.sound`, and `propext` | Existing OCI V2 protocol and Library lock | Registry publication, production signer, KMS/mTLS, promotion attestation, admission, RC, a frozen-bundle/gateway run against this profile, or claiming the pure-worker adversarial V3 suite ran against it |
-| T5: first calibrated contract slice | A real Builder--Prover result requires an admitted source boundary; the current T3 gap cannot be frozen | After T3 admission, a coherent three-node source slice with separate `StatementContractV1` revisions; reverse rendering, non-vacuity, positive/negative examples, mutations, Library review, and named semantic review all pass before freeze. Backup evaluation may run before admission, but freeze may not | T3 admission and reviewer/rights readiness | Phase 2 batch conversion, freezing the current gap, or allowing Prover to alter a statement |
-| T6: frozen-to-verified result | This is the first meaningful proof that the two engines preserve one immutable statement across their boundary | After T5, bind the retained 2,744-module closure and exact declaration evidence into the frozen contract, then run `claim -> submit_proof` or `report_gap -> verify_submission` using the source-v2 image; retain at least one accepted target and rejected controls while revision, type, imports, and axioms remain identical | T4 and T5 | Silent repair of a failed contract; failures emit only a gap or change request |
+| T5: first calibrated contract slice | A real Builder--Prover result requires an admitted source boundary; the current T3 gap cannot be frozen | After T3 admission, a coherent three-node source slice with separate `StatementContractV1` revisions; each node declares `independent_reproof` or `compositional_bridge`, exact formal-body dependencies, reverse rendering, non-vacuity, positive/negative examples, mutations, Library review, and named semantic review before freeze. Backup evaluation may run before admission, but freeze may not | T3 admission, reviewer/rights readiness, and the target-free substrate interface | Phase 2 batch conversion, freezing the current gap, importing the full `UniversalLK` oracle, or allowing Prover to alter a statement |
+| T6: frozen-to-verified result | This is the first meaningful proof that the two engines preserve one immutable statement across their boundary | After T5, use a new `library-substrate-v1` image/environment revision that contains only the manifest-bound target-free AutoLean closure over the locked Semantics Mathlib closure. Run `claim -> submit_proof` or `report_gap -> verify_submission`; retain at least one accepted target plus target-leak, dependency-drift, axiom-drift, and mutation rejections while revision, type, imports, dependencies, and axioms remain identical | T4, T5, and the substrate rejection gates | Reusing source-v2/T4 evidence for the split closure, silently repairing a failed contract, enabling unbound `/deps`, or treating a compositional bridge as an independent reproof |
 | T7: real project-scale loop | The current 20-node fixture tests scheduling but does not compile a Lean library | At least four files and 20 real declarations with dependency-frontier, lease-conflict, API-revision propagation, clean integration, and per-node verification evidence | T3, T4, and T6 | Routing or throughput optimization before correctness |
 | T8: repository and Phase 1 decisions | Code visibility and mathematical release are different decisions | Two decisions bound to one commit: repository visibility after complete reachable-history checks, and RC/no-RC after T1--T7 plus the registered release gates; failed and unrun gates remain explicit | History audit can run now; RC depends on T1--T7 | Publishing source caches, raw model output, recovered data, or treating public code as a promoted theorem |
 
@@ -98,6 +100,12 @@ Capability-adaptive `direct`/`light`/`full` routing remains in shadow evaluation
 benchmark or Dashboard improvement cannot close M1--M3. External model runs start only after the
 operator-owned authorization and endpoint evidence are ready; no API is required to resolve the
 local T3 evidence gaps or assess a backup. T5 cannot begin while T3 remains `not_selected`.
+
+The focused `library-substrate-v1` does not decide how a future general
+`mathlib-substrate-v1` is built. Before choosing Mathlib's full default target, run an isolated
+preflight that records build time, module count, runtime size, and replay cost against reviewed
+per-import closures. Do not enable external `/deps` until the V3 manifest, tree, evidence, and
+gateway bindings in the substrate decision are implemented.
 
 After M5, Phase 2 begins with a 4--6 week Builder discovery/calibration cycle. It selects a weak
 field by current library overlap, source rights, expert access, and dependency leverage rather
