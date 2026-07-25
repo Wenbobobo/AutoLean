@@ -47,17 +47,20 @@ runner reports success.
     decision loop that precedes manual Builder calibration.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
-17. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
-   deliberately narrow evidence boundary.
-18. [Operations and release](operations-release.md) defines evidence collection and the conditions
-   that block a release candidate.
-19. [Continuous integration](ci.md) defines the offline Windows/Linux gate and separates its
-   manual readiness preflight from authoritative Lean/OCI evidence.
-20. [Public repository release](public-release.md) defines the tracked-tree, license, and
-   restricted-payload checks required before changing GitHub visibility.
-21. [Open questions](open-questions.md) records decisions that require an operator,
-   mathematical reviewer, or project owner.
-22. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
+17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
+    `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
+    independent versus compositional proof-dependency gates.
+18. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
+    deliberately narrow evidence boundary.
+19. [Operations and release](operations-release.md) defines evidence collection and the conditions
+    that block a release candidate.
+20. [Continuous integration](ci.md) defines the offline Windows/Linux gate and separates its
+    manual readiness preflight from authoritative Lean/OCI evidence.
+21. [Public repository release](public-release.md) defines the tracked-tree, license, and
+    restricted-payload checks required before changing GitHub visibility.
+22. [Open questions](open-questions.md) records decisions that require an operator,
+    mathematical reviewer, or project owner.
+23. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
     the local Archon-talk evidence, Danus/Reap audit boundaries, and the resulting isolated
     experiments without treating external performance claims as AutoLean results.
 
