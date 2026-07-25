@@ -1,10 +1,12 @@
 from __future__ import annotations
 
 import copy
+import subprocess
 from pathlib import Path
 from typing import cast
 
 import pytest
+from autolean_contracts import OciVerifierExecutionPolicyV2
 
 from Library.scripts import library_substrate_image as substrate
 from Library.scripts.verify_substrate_fixture import (
@@ -135,9 +137,10 @@ def test_stage_build_context_contains_only_runtime_sources(
     prepared, arguments = substrate.stage_build_context(tmp_path / "context")
 
     inventory = cast(dict[str, str], prepared["context_inventory"])
-    assert len(inventory) == 10
+    assert len(inventory) == 12
     assert set(path for path in inventory if path.endswith(".lean")) == {
         "helpers/AutoleanLibrarySubstrateInventory.lean",
+        "helpers/AutoleanLibrarySubstrateV2Query.lean",
         *(f"source/{cast(str, source['path'])}" for source in sources),
     }
     assert not any(
@@ -372,3 +375,235 @@ def test_query_wrapper_does_not_claim_v2_gateway_compatibility() -> None:
     assert "autolean.oci-lean-wrapper.v2" not in wrapper
     assert "runtime_manifest_sha256" in wrapper
     assert "image_receipt_sha256" in wrapper
+
+
+def test_v2_facade_bindings_reject_receipt_and_manifest_drift() -> None:
+    wrapper_sha256 = "a" * 64
+    helper_sha256 = "b" * 64
+    manifest_file_sha256 = "c" * 64
+    build_input: dict[str, object] = {
+        "assets": {
+            "V2_FACADE_QUERY_HELPER_SHA256": helper_sha256,
+            "V2_FACADE_WRAPPER_SHA256": wrapper_sha256,
+        },
+        "target": {
+            "canonical_type_sha256": substrate.TARGET_TYPE_SHA256,
+            "declaration": TARGET_DECLARATION,
+            "forbidden_ordinary_dependency": SOUND_DECLARATION,
+        },
+    }
+    receipt: dict[str, object] = {
+        "runtime_manifest_sha256": manifest_file_sha256,
+        "v2_facade_query_helper_sha256": helper_sha256,
+        "v2_facade_wrapper_sha256": wrapper_sha256,
+    }
+
+    substrate._validate_v2_facade_bindings(
+        receipt,
+        build_input,
+        runtime_manifest_file_sha256=manifest_file_sha256,
+        facade_wrapper_sha256=wrapper_sha256,
+        facade_query_helper_sha256=helper_sha256,
+    )
+
+    receipt_drift = copy.deepcopy(receipt)
+    receipt_drift["v2_facade_wrapper_sha256"] = "c" * 64
+    with pytest.raises(substrate.SubstrateImageError, match="v2_facade_wrapper_sha256"):
+        substrate._validate_v2_facade_bindings(
+            receipt_drift,
+            build_input,
+            runtime_manifest_file_sha256=manifest_file_sha256,
+            facade_wrapper_sha256=wrapper_sha256,
+            facade_query_helper_sha256=helper_sha256,
+        )
+
+    with pytest.raises(substrate.SubstrateImageError, match="runtime manifest"):
+        substrate._validate_v2_facade_bindings(
+            receipt,
+            build_input,
+            runtime_manifest_file_sha256="d" * 64,
+            facade_wrapper_sha256=wrapper_sha256,
+            facade_query_helper_sha256=helper_sha256,
+        )
+
+
+def test_host_asset_binding_rejects_checkout_drift(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    assets = {
+        "DOCKERFILE_SHA256": "a" * 64,
+        "V2_FACADE_QUERY_HELPER_SHA256": "b" * 64,
+        "V2_FACADE_WRAPPER_SHA256": "c" * 64,
+    }
+    monkeypatch.setattr(substrate, "_asset_hashes", lambda: assets)
+
+    substrate._validate_host_asset_binding({"assets": dict(sorted(assets.items()))})
+
+    drifted = dict(assets)
+    drifted["V2_FACADE_WRAPPER_SHA256"] = "d" * 64
+    with pytest.raises(substrate.SubstrateImageError, match="current host helper assets"):
+        substrate._validate_host_asset_binding({"assets": drifted})
+
+
+def test_v2_facade_keeps_the_existing_runner_protocol_and_runs_preflight() -> None:
+    facade = (substrate.HELPER_ROOT / "autolean-library-substrate-v2-facade").read_text(
+        encoding="utf-8"
+    )
+    independent_query = (
+        substrate.HELPER_ROOT / "autolean-library-substrate-independent-query"
+    ).read_text(encoding="utf-8")
+
+    assert '"--protocol"' in facade
+    assert '"autolean.oci-lean-wrapper.v2"' in facade
+    assert '"--candidate"' in facade
+    assert '"--compiled"' in facade
+    assert '"--type-format"' in facade
+    assert '"autolean.lean-pp-expr.v1"' in facade
+    assert '"$preflight_query" --phase query' in facade
+    assert "phase=$failure_phase failed" in facade
+    assert "head -c 4096" in facade
+    assert "targetTypeSha256" in independent_query
+    assert "forbidden Deriv.sound declaration" in independent_query
+    assert (
+        "Candidate direct imports differ from the independent substrate profile"
+        in independent_query
+    )
+
+
+def test_v2_facade_argv_matches_the_complete_v2_policy() -> None:
+    policy = OciVerifierExecutionPolicyV2(worker_image_digest="sha256:" + "a" * 64)
+
+    assert substrate._v2_compile_wrapper_argv() == policy.compile_wrapper_argv()
+    assert substrate._v2_query_wrapper_argv() == policy.wrapper_argv(TARGET_DECLARATION)
+
+
+def test_v2_negative_candidate_sources_have_frozen_hashes() -> None:
+    compositional = (
+        FIXTURE_ROOT / "candidates" / "compositional_bridge" / "Candidate.lean"
+    ).read_bytes()
+
+    assert substrate._sha256_bytes(compositional) == substrate.V2_COMPOSITIONAL_CANDIDATE_SHA256
+    assert (
+        substrate._sha256_bytes(substrate.V2_TARGET_IMPORT_SOURCE.encode("utf-8"))
+        == substrate.V2_TARGET_IMPORT_SOURCE_SHA256
+    )
+    assert (
+        substrate._sha256_bytes(substrate.V2_WRONG_TARGET_TYPE_SOURCE.encode("utf-8"))
+        == substrate.V2_WRONG_TARGET_TYPE_SOURCE_SHA256
+    )
+
+
+def test_v2_rejection_observation_requires_exact_phase_reason_rc_and_source() -> None:
+    prefix = "autolean-library-substrate-v2-facade: phase=query failed"
+    marker = "Candidate target type differs from the historical frozen hash"
+    result = subprocess.CompletedProcess(
+        args=("docker", "run"),
+        returncode=21,
+        stdout="",
+        stderr=f"{prefix}\nautolean-library-substrate-independent-query: {marker}\n",
+    )
+    expected_hash = "a" * 64
+
+    observation = substrate._v2_rejection_observation(
+        result,
+        label="wrong-target-type",
+        actual_phase="query",
+        expected_phase="query",
+        expected_returncode=21,
+        reason_marker=marker,
+        candidate_source_sha256=expected_hash,
+        expected_candidate_source_sha256=expected_hash,
+    )
+
+    assert observation == {
+        "candidate_source_sha256": expected_hash,
+        "reason_marker": marker,
+        "rejection_phase": "query",
+        "returncode": 21,
+        "stderr_summary": result.stderr.strip(),
+    }
+
+    with pytest.raises(substrate.SubstrateImageError, match="expected query"):
+        substrate._v2_rejection_observation(
+            result,
+            label="wrong-target-type",
+            actual_phase="compile",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker=marker,
+            candidate_source_sha256=expected_hash,
+            expected_candidate_source_sha256=expected_hash,
+        )
+    with pytest.raises(substrate.SubstrateImageError, match="returned 21, expected 20"):
+        substrate._v2_rejection_observation(
+            result,
+            label="wrong-target-type",
+            actual_phase="query",
+            expected_phase="query",
+            expected_returncode=20,
+            reason_marker=marker,
+            candidate_source_sha256=expected_hash,
+            expected_candidate_source_sha256=expected_hash,
+        )
+    with pytest.raises(substrate.SubstrateImageError, match="source hash drifted"):
+        substrate._v2_rejection_observation(
+            result,
+            label="wrong-target-type",
+            actual_phase="query",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker=marker,
+            candidate_source_sha256="b" * 64,
+            expected_candidate_source_sha256=expected_hash,
+        )
+    missing_reason = subprocess.CompletedProcess(
+        args=result.args,
+        returncode=21,
+        stdout="",
+        stderr=f"{prefix}\nunrelated failure\n",
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="reason is unavailable"):
+        substrate._v2_rejection_observation(
+            missing_reason,
+            label="wrong-target-type",
+            actual_phase="query",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker=marker,
+            candidate_source_sha256=expected_hash,
+            expected_candidate_source_sha256=expected_hash,
+        )
+    stdout_failure = subprocess.CompletedProcess(
+        args=result.args,
+        returncode=21,
+        stdout="unexpected output\n",
+        stderr=result.stderr,
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="failure emitted stdout"):
+        substrate._v2_rejection_observation(
+            stdout_failure,
+            label="wrong-target-type",
+            actual_phase="query",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker=marker,
+            candidate_source_sha256=expected_hash,
+            expected_candidate_source_sha256=expected_hash,
+        )
+    unbounded_failure = subprocess.CompletedProcess(
+        args=result.args,
+        returncode=21,
+        stdout="",
+        stderr=f"{prefix}\n{marker}\n{'x' * 5000}",
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="reason is unavailable or unbounded"):
+        substrate._v2_rejection_observation(
+            unbounded_failure,
+            label="wrong-target-type",
+            actual_phase="query",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker=marker,
+            candidate_source_sha256=expected_hash,
+            expected_candidate_source_sha256=expected_hash,
+        )

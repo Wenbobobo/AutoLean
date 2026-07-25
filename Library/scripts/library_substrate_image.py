@@ -18,7 +18,7 @@ import sys
 import tempfile
 from collections.abc import Mapping, Sequence
 from pathlib import Path, PurePosixPath
-from typing import Final, NoReturn, cast
+from typing import Final, Literal, NoReturn, cast
 
 if __package__ in {None, ""}:
     repository_root = str(Path(__file__).resolve().parents[2])
@@ -52,9 +52,11 @@ DOCKERFILE: Final = WORKER_ROOT / "Dockerfile.library-substrate"
 HELPER_ROOT: Final = WORKER_ROOT / "library-substrate"
 ASSETS: Final = {
     "AutoleanLibrarySubstrateInventory.lean": "INVENTORY_HELPER_SHA256",
+    "AutoleanLibrarySubstrateV2Query.lean": "V2_FACADE_QUERY_HELPER_SHA256",
     "autolean-library-substrate-build": "BUILD_TOOL_SHA256",
     "autolean-library-substrate-build-receipt": "RECEIPT_TOOL_SHA256",
     "autolean-library-substrate-independent-query": "QUERY_WRAPPER_SHA256",
+    "autolean-library-substrate-v2-facade": "V2_FACADE_WRAPPER_SHA256",
 }
 RUNTIME_MANIFEST_SCHEMA: Final = "autolean.library-substrate-runtime-manifest.v1"
 DECLARATION_INVENTORY_SCHEMA: Final = "autolean.library-substrate-declaration-inventory.v1"
@@ -63,6 +65,34 @@ QUERY_SCHEMA: Final = "autolean.library-substrate-independent-query.v1"
 CANARY_SCHEMA: Final = "autolean.library-substrate-independent-canary.v1"
 RUNTIME_SOURCE_CHECKSUM_FILENAME: Final = "runtime-sources.sha256"
 RUNTIME_FILE_CHECKSUM_FILENAME: Final = "runtime-files.sha256"
+V2_FACADE_CANARY_SCHEMA: Final = "autolean.library-substrate-v2-facade-canary.v2"
+V2_WRAPPER_PATH: Final = "/opt/autolean/bin/autolean-lean-wrapper"
+V2_QUERY_HELPER_PATH: Final = "/opt/autolean/lib/AutoleanLeanQuery.lean"
+V2_RESULT_SCHEMA: Final = "autolean.oci-lean-wrapper.v2"
+V2_LAKE_MANIFEST_SHA256: Final = "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89"
+V2_FACADE_FAILURE_DIAGNOSTIC_LIMIT: Final = 4096
+V2_COMPOSITIONAL_CANDIDATE_SHA256: Final = (
+    "98cd1d2ae8f48ca368d19c64ddec447185bf13753a8d87dbf79df49bf33a7f78"
+)
+V2_TARGET_IMPORT_SOURCE: Final = (
+    "import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound\n"
+)
+V2_TARGET_IMPORT_SOURCE_SHA256: Final = (
+    "c1725f40b0091501aaf465cefe318231af157b51ab3ffef9a8669bcb09ee4d4a"
+)
+V2_WRONG_TARGET_TYPE_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude
+
+namespace AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK
+
+theorem Deriv.closed_sound : True := by
+  trivial
+
+end AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK
+"""
+V2_WRONG_TARGET_TYPE_SOURCE_SHA256: Final = (
+    "f938b08d4e6d9de5e0288207f68ccc3122a5bd96dc08c885b71ba98a52919323"
+)
 
 
 class SubstrateImageError(RuntimeError):
@@ -604,6 +634,23 @@ def _image_file_sha256_and_size(image: str, path: str, *, label: str) -> tuple[s
     return digest_fields[0], int(size_fields[0])
 
 
+def _image_file_sha256(image: str, path: str, *, label: str) -> str:
+    output = _run(
+        [
+            *_docker_run_base(),
+            "--entrypoint",
+            "/usr/bin/sha256sum",
+            image,
+            path,
+        ],
+        timeout=120,
+    ).stdout.strip()
+    fields = output.split(maxsplit=1)
+    if len(fields) != 2 or not SHA256_RE.fullmatch(fields[0]):
+        fail(f"{label} hash is unavailable")
+    return fields[0]
+
+
 def _sorted_unique_strings(value: object, *, label: str) -> tuple[str, ...]:
     if not isinstance(value, list) or any(not isinstance(item, str) for item in value):
         fail(f"{label} must be a string array")
@@ -920,6 +967,53 @@ def _validate_image_build_input(
     return records, source_tree_sha256
 
 
+def _validate_host_asset_binding(build_input: Mapping[str, object]) -> None:
+    expected_assets = dict(sorted(_asset_hashes().items()))
+    if build_input.get("assets") != expected_assets:
+        fail("image-owned build input differs from the current host helper assets")
+
+
+def _validate_v2_facade_bindings(
+    receipt: Mapping[str, object],
+    build_input: Mapping[str, object],
+    *,
+    runtime_manifest_file_sha256: str,
+    facade_wrapper_sha256: str,
+    facade_query_helper_sha256: str,
+) -> None:
+    """Bind the standard V2 paths to the same immutable substrate receipt.
+
+    The facade has no protocol extension in its stdout, so its identity must be checked from the
+    image-owned receipt/build input before a host canary treats a V2 record as substrate evidence.
+    """
+
+    for field, actual in (
+        ("v2_facade_wrapper_sha256", facade_wrapper_sha256),
+        ("v2_facade_query_helper_sha256", facade_query_helper_sha256),
+    ):
+        recorded = receipt.get(field)
+        if not isinstance(recorded, str) or not SHA256_RE.fullmatch(recorded) or recorded != actual:
+            fail(f"image receipt does not bind the {field}")
+    assets = build_input.get("assets")
+    if not isinstance(assets, dict):
+        fail("substrate build input assets are unavailable")
+    expected_assets = {
+        "V2_FACADE_WRAPPER_SHA256": facade_wrapper_sha256,
+        "V2_FACADE_QUERY_HELPER_SHA256": facade_query_helper_sha256,
+    }
+    if any(assets.get(name) != digest for name, digest in expected_assets.items()):
+        fail("substrate build input does not bind the V2 facade assets")
+    target = build_input.get("target")
+    if target != {
+        "canonical_type_sha256": TARGET_TYPE_SHA256,
+        "declaration": TARGET_DECLARATION,
+        "forbidden_ordinary_dependency": SOUND_DECLARATION,
+    }:
+        fail("substrate build input target boundary differs from the V2 facade scope")
+    if receipt.get("runtime_manifest_sha256") != runtime_manifest_file_sha256:
+        fail("V2 facade receipt is not bound to the runtime manifest")
+
+
 def verify(image: str) -> dict[str, object]:
     inspected = _inspect(image)
     actual_reference = _child_image_reference(inspected)
@@ -949,6 +1043,8 @@ def verify(image: str) -> dict[str, object]:
         "runtime_source_tree_sha256",
         "schema_version",
         "task_mode",
+        "v2_facade_query_helper_sha256",
+        "v2_facade_wrapper_sha256",
     }
     if set(receipt) != expected_receipt_fields:
         fail("image receipt schema drifted")
@@ -1006,6 +1102,7 @@ def verify(image: str) -> dict[str, object]:
         "/opt/autolean/library-substrate/attestations/build-input.v1.json",
         label="substrate build input",
     )
+    _validate_host_asset_binding(build_input)
     profile, _ = _profile()
     source_checksums = _read_image_text(
         image,
@@ -1029,6 +1126,23 @@ def verify(image: str) -> dict[str, object]:
         or build_input.get("runtime_sources") != source_records
     ):
         fail("image-owned build input differs from the verified profile and parent")
+    facade_wrapper_sha256 = _image_file_sha256(
+        image,
+        V2_WRAPPER_PATH,
+        label="image-owned V2 facade wrapper",
+    )
+    facade_query_helper_sha256 = _image_file_sha256(
+        image,
+        V2_QUERY_HELPER_PATH,
+        label="image-owned V2 facade query helper",
+    )
+    _validate_v2_facade_bindings(
+        receipt,
+        build_input,
+        runtime_manifest_file_sha256=manifest_file_sha256,
+        facade_wrapper_sha256=facade_wrapper_sha256,
+        facade_query_helper_sha256=facade_query_helper_sha256,
+    )
     runtime_files, records, auxiliary = _validate_manifest(manifest, receipt=receipt)
     verified_runtime_files = _validate_runtime_file_closure(
         image,
@@ -1041,6 +1155,10 @@ def verify(image: str) -> dict[str, object]:
         "image": image,
         "image_id": image_id,
         "image_receipt_sha256": image_receipt_sha256,
+        "v2_facade_identity": {
+            "query_helper_sha256": facade_query_helper_sha256,
+            "wrapper_sha256": facade_wrapper_sha256,
+        },
         "parent_receipt_canonical_sha256": current_parent_receipt_sha256,
         "receipt": receipt,
         "runtime_file_count": len(runtime_files),
@@ -1107,6 +1225,252 @@ def _query_candidate(image: str, compiled: Path) -> dict[str, object]:
     ]
     output = _run(command, timeout=300).stdout
     return _json_record(output, label="independent Candidate query")
+
+
+def _v2_compile_candidate(image: str, candidate: Path, output: Path) -> Path:
+    output.mkdir()
+    output.chmod(0o777)
+    _run(
+        [
+            *_docker_run_base(),
+            "--mount",
+            f"type=bind,src={candidate.parent},dst=/input,readonly",
+            "--mount",
+            f"type=bind,src={output},dst=/output",
+            image,
+            *_v2_compile_wrapper_argv(),
+        ],
+        timeout=300,
+    )
+    compiler_output = output / "Candidate.olean"
+    if (
+        compiler_output.is_symlink()
+        or not compiler_output.is_file()
+        or compiler_output.stat().st_size <= 0
+        or compiler_output.stat().st_size > 64 * 1024 * 1024
+    ):
+        fail("V2 facade compiler did not emit a regular Candidate.olean")
+    sealed_root = output.parent / "sealed"
+    sealed_root.mkdir(mode=0o700)
+    sealed = sealed_root / "Candidate.olean"
+    sealed.write_bytes(compiler_output.read_bytes())
+    sealed.chmod(0o444)
+    return sealed
+
+
+def _v2_query_candidate(image: str, compiled: Path) -> dict[str, object]:
+    output = _run(
+        [
+            *_docker_run_base(),
+            "--mount",
+            f"type=bind,src={compiled},dst=/compiled/Candidate.olean,readonly",
+            image,
+            *_v2_query_wrapper_argv(),
+        ],
+        timeout=300,
+    ).stdout
+    return _json_record(output, label="V2 facade Candidate query")
+
+
+def _v2_compile_wrapper_argv() -> tuple[str, ...]:
+    return (
+        V2_WRAPPER_PATH,
+        "--protocol",
+        V2_RESULT_SCHEMA,
+        "--phase",
+        "compile",
+        "--candidate",
+        "/input/Candidate.lean",
+        "--output",
+        "/output/Candidate.olean",
+    )
+
+
+def _v2_query_wrapper_argv() -> tuple[str, ...]:
+    return (
+        V2_WRAPPER_PATH,
+        "--protocol",
+        V2_RESULT_SCHEMA,
+        "--phase",
+        "query",
+        "--compiled",
+        "/compiled/Candidate.olean",
+        "--declaration",
+        TARGET_DECLARATION,
+        "--type-format",
+        "autolean.lean-pp-expr.v1",
+    )
+
+
+def _v2_rejection_observation(
+    result: subprocess.CompletedProcess[str],
+    *,
+    label: str,
+    actual_phase: Literal["compile", "query"],
+    expected_phase: Literal["compile", "query"],
+    expected_returncode: int,
+    reason_marker: str,
+    candidate_source_sha256: str,
+    expected_candidate_source_sha256: str,
+) -> dict[str, object]:
+    if candidate_source_sha256 != expected_candidate_source_sha256:
+        fail(f"V2 facade {label} candidate source hash drifted")
+    if actual_phase != expected_phase:
+        fail(f"V2 facade {label} rejected during {actual_phase}, expected {expected_phase}")
+    if result.returncode != expected_returncode:
+        fail(f"V2 facade {label} returned {result.returncode}, expected {expected_returncode}")
+    if result.stdout:
+        fail(f"V2 facade {label} failure emitted stdout")
+    prefix = f"autolean-library-substrate-v2-facade: phase={expected_phase} failed"
+    stderr = result.stderr
+    maximum_bytes = len(prefix.encode("utf-8")) + V2_FACADE_FAILURE_DIAGNOSTIC_LIMIT + 8
+    if (
+        not stderr
+        or len(stderr.encode("utf-8")) > maximum_bytes
+        or prefix not in stderr
+        or reason_marker not in stderr
+    ):
+        fail(f"V2 facade {label} failure reason is unavailable or unbounded")
+    return {
+        "candidate_source_sha256": candidate_source_sha256,
+        "reason_marker": reason_marker,
+        "rejection_phase": actual_phase,
+        "returncode": result.returncode,
+        "stderr_summary": stderr.strip(),
+    }
+
+
+def _expect_v2_candidate_rejected(
+    image: str,
+    candidate: Path,
+    *,
+    label: str,
+    expected_phase: Literal["compile", "query"],
+    expected_returncode: int,
+    reason_marker: str,
+    expected_candidate_source_sha256: str,
+) -> dict[str, object]:
+    candidate_source_sha256 = _sha256_bytes(
+        _regular_bytes(candidate, label=f"V2 facade {label} candidate source")
+    )
+    with tempfile.TemporaryDirectory(
+        prefix="autolean-library-substrate-v2-negative-", dir="/tmp"
+    ) as raw:
+        output = Path(raw) / "output"
+        output.mkdir(mode=0o777)
+        output.chmod(0o777)
+        compile_result = subprocess.run(
+            [
+                *_docker_run_base(),
+                "--mount",
+                f"type=bind,src={candidate.parent},dst=/input,readonly",
+                "--mount",
+                f"type=bind,src={output},dst=/output",
+                image,
+                *_v2_compile_wrapper_argv(),
+            ],
+            check=False,
+            capture_output=True,
+            errors="replace",
+            timeout=300,
+            text=True,
+        )
+        if compile_result.returncode != 0:
+            return _v2_rejection_observation(
+                compile_result,
+                label=label,
+                actual_phase="compile",
+                expected_phase=expected_phase,
+                expected_returncode=expected_returncode,
+                reason_marker=reason_marker,
+                candidate_source_sha256=candidate_source_sha256,
+                expected_candidate_source_sha256=expected_candidate_source_sha256,
+            )
+        compiler_output = output / "Candidate.olean"
+        if (
+            compiler_output.is_symlink()
+            or not compiler_output.is_file()
+            or compiler_output.stat().st_size <= 0
+            or compiler_output.stat().st_size > 64 * 1024 * 1024
+        ):
+            fail(f"V2 facade {label} compile did not emit a regular Candidate.olean")
+        sealed_root = Path(raw) / "sealed"
+        sealed_root.mkdir(mode=0o700)
+        sealed = sealed_root / "Candidate.olean"
+        sealed.write_bytes(compiler_output.read_bytes())
+        sealed.chmod(0o444)
+        query_result = subprocess.run(
+            [
+                *_docker_run_base(),
+                "--mount",
+                f"type=bind,src={sealed},dst=/compiled/Candidate.olean,readonly",
+                image,
+                *_v2_query_wrapper_argv(),
+            ],
+            check=False,
+            capture_output=True,
+            errors="replace",
+            timeout=300,
+            text=True,
+        )
+    if query_result.returncode == 0:
+        fail("V2 facade accepted a candidate that the substrate policy must reject")
+    return _v2_rejection_observation(
+        query_result,
+        label=label,
+        actual_phase="query",
+        expected_phase=expected_phase,
+        expected_returncode=expected_returncode,
+        reason_marker=reason_marker,
+        candidate_source_sha256=candidate_source_sha256,
+        expected_candidate_source_sha256=expected_candidate_source_sha256,
+    )
+
+
+def _validate_v2_facade_record(
+    record: Mapping[str, object], *, identity: Mapping[str, str]
+) -> dict[str, object]:
+    expected_fields = {
+        "schema_version",
+        "declaration",
+        "canonical_type",
+        "lean_version",
+        "mathlib_revision",
+        "lake_manifest_hash",
+        "observed_axioms",
+        "image_identity",
+    }
+    if set(record) != expected_fields:
+        fail("V2 facade query record schema drifted")
+    canonical_type = record.get("canonical_type")
+    if (
+        not isinstance(canonical_type, str)
+        or _sha256_bytes(canonical_type.encode("utf-8")) != TARGET_TYPE_SHA256
+    ):
+        fail("V2 facade did not preserve the historical target type hash")
+    axioms = _sorted_unique_strings(record.get("observed_axioms"), label="V2 facade axioms")
+    expected_identity = {
+        "schema_version": "autolean.image-owned-verifier-identity.v2",
+        "wrapper_path": V2_WRAPPER_PATH,
+        "wrapper_sha256": identity["wrapper_sha256"],
+        "query_helper_path": V2_QUERY_HELPER_PATH,
+        "query_helper_sha256": identity["query_helper_sha256"],
+    }
+    if (
+        record.get("schema_version") != V2_RESULT_SCHEMA
+        or record.get("declaration") != TARGET_DECLARATION
+        or record.get("lean_version") != "v4.28.0"
+        or record.get("mathlib_revision") != EXPECTED_MATHLIB_REVISION
+        or record.get("lake_manifest_hash") != V2_LAKE_MANIFEST_SHA256
+        or axioms != EXPECTED_TARGET_AXIOMS
+        or record.get("image_identity") != expected_identity
+    ):
+        fail("V2 facade record differs from the fixed independent substrate profile")
+    return {
+        "canonical_type_sha256": TARGET_TYPE_SHA256,
+        "observed_axioms": list(axioms),
+        "standard_v2_record": True,
+    }
 
 
 def _validate_query(
@@ -1273,7 +1637,6 @@ def canary(image: str) -> dict[str, object]:
             "no_contract_or_gateway_integration",
             "no_external_dependency_capsule",
             "no_formal_asset_admission",
-            "no_oci_lean_runner_v2_adapter",
             "no_provider_execution",
             "no_v2_evidence_or_gateway_receipt",
         ],
@@ -1281,6 +1644,100 @@ def canary(image: str) -> dict[str, object]:
         "parent_receipt_canonical_sha256": verified["parent_receipt_canonical_sha256"],
         "receipt_canonical_sha256": _sha256_bytes(_canonical_json_bytes(receipt)),
         "schema_version": CANARY_SCHEMA,
+        "task_mode": "independent_reproof",
+    }
+
+
+def v2_facade_canary(image: str) -> dict[str, object]:
+    """Exercise the unchanged V2 argv and result shape against one recorded child digest."""
+
+    verified = verify(image)
+    identity = cast(dict[str, str], verified["v2_facade_identity"])
+    with tempfile.TemporaryDirectory(
+        prefix="autolean-library-substrate-v2-facade-", dir="/tmp"
+    ) as raw:
+        root = Path(raw)
+        candidate, candidate_sha256 = _snapshot_candidate(root / "independent")
+        compiled = _v2_compile_candidate(image, candidate, root / "compiled")
+        record = _v2_query_candidate(image, compiled)
+
+        compositional_root = root / "compositional"
+        compositional_root.mkdir()
+        compositional_candidate = compositional_root / "Candidate.lean"
+        compositional_candidate.write_bytes(
+            _regular_bytes(
+                FIXTURE_ROOT / "candidates" / "compositional_bridge" / "Candidate.lean",
+                label="compositional Candidate source",
+            )
+        )
+        compositional_candidate.chmod(0o444)
+        compositional_rejection = _expect_v2_candidate_rejected(
+            image,
+            compositional_candidate,
+            label="compositional",
+            expected_phase="compile",
+            expected_returncode=20,
+            reason_marker="Targets/DerivSound.olean",
+            expected_candidate_source_sha256=V2_COMPOSITIONAL_CANDIDATE_SHA256,
+        )
+
+        target_import_root = root / "target-import"
+        target_import_root.mkdir()
+        target_import_candidate = target_import_root / "Candidate.lean"
+        target_import_candidate.write_text(
+            V2_TARGET_IMPORT_SOURCE,
+            encoding="utf-8",
+            newline="\n",
+        )
+        target_import_candidate.chmod(0o444)
+        target_import_rejection = _expect_v2_candidate_rejected(
+            image,
+            target_import_candidate,
+            label="target-import",
+            expected_phase="compile",
+            expected_returncode=20,
+            reason_marker="Targets/ClosedSound.olean",
+            expected_candidate_source_sha256=V2_TARGET_IMPORT_SOURCE_SHA256,
+        )
+
+        wrong_target_type_root = root / "wrong-target-type"
+        wrong_target_type_root.mkdir()
+        wrong_target_type_candidate = wrong_target_type_root / "Candidate.lean"
+        wrong_target_type_candidate.write_text(
+            V2_WRONG_TARGET_TYPE_SOURCE,
+            encoding="utf-8",
+            newline="\n",
+        )
+        wrong_target_type_candidate.chmod(0o444)
+        wrong_target_type_rejection = _expect_v2_candidate_rejected(
+            image,
+            wrong_target_type_candidate,
+            label="wrong-target-type",
+            expected_phase="query",
+            expected_returncode=21,
+            reason_marker="Candidate target type differs from the historical frozen hash",
+            expected_candidate_source_sha256=V2_WRONG_TARGET_TYPE_SOURCE_SHA256,
+        )
+
+    observation = _validate_v2_facade_record(record, identity=identity)
+    return {
+        "authority": "operator-local-v2-compatible-preflight-only",
+        "candidate_source_sha256": candidate_sha256,
+        "image": image,
+        "image_id": verified["image_id"],
+        "negative_cases": {
+            "compositional_candidate": compositional_rejection,
+            "target_import_candidate": target_import_rejection,
+            "wrong_target_type_candidate": wrong_target_type_rejection,
+        },
+        "non_claims": [
+            "no_contract_or_gateway_integration",
+            "no_formal_asset_admission",
+            "no_provider_execution",
+            "no_t6_completion",
+        ],
+        "observation": observation,
+        "schema_version": V2_FACADE_CANARY_SCHEMA,
         "task_mode": "independent_reproof",
     }
 
@@ -1317,11 +1774,11 @@ def _delegate_to_wsl(arguments: argparse.Namespace) -> int:
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("build", "verify", "canary", "all"))
+    parser.add_argument("action", choices=("build", "verify", "canary", "facade-canary", "all"))
     parser.add_argument("--image")
     parser.add_argument("--native", action="store_true", help=argparse.SUPPRESS)
     parsed = parser.parse_args(arguments)
-    if parsed.action in {"verify", "canary"} and parsed.image is None:
+    if parsed.action in {"verify", "canary", "facade-canary"} and parsed.image is None:
         parser.error(f"{parsed.action} requires --image")
     if parsed.action in {"build", "all"} and parsed.image is not None:
         parser.error(f"{parsed.action} does not accept --image")
@@ -1339,11 +1796,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
             result = verify(cast(str, parsed.image))
         elif parsed.action == "canary":
             result = canary(cast(str, parsed.image))
+        elif parsed.action == "facade-canary":
+            result = v2_facade_canary(cast(str, parsed.image))
         else:
             build_result = build()
             result = {
                 "build": build_result,
                 "canary": canary(cast(str, build_result["image"])),
+                "v2_facade_canary": v2_facade_canary(cast(str, build_result["image"])),
                 "schema_version": "autolean.library-substrate-image-all.v1",
             }
         print(json.dumps(result, ensure_ascii=True, sort_keys=True))

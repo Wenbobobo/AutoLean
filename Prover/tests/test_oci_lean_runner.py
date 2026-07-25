@@ -8,7 +8,12 @@ from collections.abc import Callable
 from pathlib import Path
 
 import pytest
-from autolean_contracts import HashKindV1, ProofSubmissionV1, digest_text
+from autolean_contracts import (
+    HashKindV1,
+    OciVerifierExecutionPolicyV2,
+    ProofSubmissionV1,
+    digest_text,
+)
 from autolean_prover.errors import ValidationError
 from autolean_prover.execution import (
     MaterializedWorkspace,
@@ -186,33 +191,12 @@ def test_oci_lean_runner_uses_fixed_wrapper_argv_and_emits_execution_evidence(tm
     assert len(harness.requests) == 2
     compile_argv = harness.requests[0].argv
     query_argv = harness.requests[1].argv
+    policy = workspace.bundle.contract.formal.environment.verifier_execution_policy
+    assert isinstance(policy, OciVerifierExecutionPolicyV2)
     compile_image_index = compile_argv.index(spec.image)
-    assert compile_argv[compile_image_index:] == (
-        spec.image,
-        "/opt/autolean/bin/autolean-lean-wrapper",
-        "--protocol",
-        "autolean.oci-lean-wrapper.v2",
-        "--phase",
-        "compile",
-        "--candidate",
-        "/input/Candidate.lean",
-        "--output",
-        "/output/Candidate.olean",
-    )
-    image_index = query_argv.index(spec.image)
-    assert query_argv[image_index:] == (
-        spec.image,
-        "/opt/autolean/bin/autolean-lean-wrapper",
-        "--protocol",
-        "autolean.oci-lean-wrapper.v2",
-        "--phase",
-        "query",
-        "--compiled",
-        "/compiled/Candidate.olean",
-        "--declaration",
-        bundle.proof_boundary.expected_declaration,
-        "--type-format",
-        "autolean.lean-pp-expr.v1",
+    assert compile_argv[compile_image_index + 1 :] == policy.compile_wrapper_argv()
+    assert query_argv[query_argv.index(spec.image) + 1 :] == policy.wrapper_argv(
+        bundle.proof_boundary.expected_declaration
     )
     for argv in (compile_argv, query_argv):
         assert (argv[argv.index("--network")], argv[argv.index("--network") + 1]) == (

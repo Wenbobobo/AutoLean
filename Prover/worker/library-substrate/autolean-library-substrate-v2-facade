@@ -1,0 +1,104 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-library-substrate-v2-facade: $1" >&2
+  exit 2
+}
+
+emit_phase_failure() {
+  failure_phase=$1
+  failure_stdout=$2
+  failure_stderr=$3
+  printf '%s\n' \
+    "autolean-library-substrate-v2-facade: phase=$failure_phase failed" >&2
+  {
+    cat "$failure_stdout"
+    cat "$failure_stderr"
+  } | head -c 4096 >&2
+  printf '\n' >&2
+}
+
+[ "$#" -ge 4 ] || fail "expected the frozen V2 wrapper argument profile"
+[ "$1" = "--protocol" ] || fail "missing protocol argument"
+[ "$2" = "autolean.oci-lean-wrapper.v2" ] || fail "unsupported protocol"
+[ "$3" = "--phase" ] || fail "missing phase argument"
+phase=$4
+
+root=/opt/autolean/library-substrate
+receipt_tool=$root/bin/autolean-library-substrate-build-receipt
+preflight_query=$root/bin/autolean-library-substrate-independent-query
+runtime=$root/lib/lean
+parent_lean_path=$(cat /opt/autolean/environment/lean-path)
+[ -n "$parent_lean_path" ] || fail "image-owned parent LEAN_PATH is unavailable"
+lean_path="$runtime:$parent_lean_path"
+
+# The receipt checker binds this facade and its V2 helper to the build input and runtime manifest
+# before either phase can accept a candidate artifact.
+"$receipt_tool" >/dev/null || fail "image-owned substrate receipt verification failed"
+
+wrapper_sha256=$(sha256sum /opt/autolean/bin/autolean-lean-wrapper | awk '{print $1}')
+query_helper_sha256=$(sha256sum /opt/autolean/lib/AutoleanLeanQuery.lean | awk '{print $1}')
+case "$wrapper_sha256:$query_helper_sha256" in
+  *[!0-9a-f:]*|*:|:*|*::* ) fail "image-owned verifier hashes are malformed" ;;
+esac
+
+scratch=$(mktemp -d /tmp/autolean-library-substrate-v2.XXXXXX)
+cleanup() {
+  rm -rf "$scratch"
+}
+trap cleanup EXIT HUP INT TERM
+
+case "$phase" in
+  compile)
+    [ "$#" -eq 8 ] || fail "expected the frozen V2 compile argument profile"
+    [ "$5" = "--candidate" ] || fail "missing candidate argument"
+    [ "$6" = "/input/Candidate.lean" ] || fail "candidate path is not frozen"
+    [ "$7" = "--output" ] || fail "missing output argument"
+    [ "$8" = "/output/Candidate.olean" ] || fail "compiled output path is not frozen"
+    test -f /input/Candidate.lean && test ! -L /input/Candidate.lean ||
+      fail "candidate source is unavailable"
+    test -d /output && test ! -L /output || fail "compiler output is unavailable"
+    if ! LEAN_PATH="$lean_path" lean -R /input -o /output/Candidate.olean \
+      /input/Candidate.lean >"$scratch/compiler.stdout" 2>"$scratch/compiler.stderr"
+    then
+      emit_phase_failure compile "$scratch/compiler.stdout" "$scratch/compiler.stderr"
+      exit 20
+    fi
+    ;;
+  query)
+    [ "$#" -eq 10 ] || fail "expected the frozen V2 query argument profile"
+    [ "$5" = "--compiled" ] || fail "missing compiled candidate argument"
+    [ "$6" = "/compiled/Candidate.olean" ] || fail "compiled candidate path is not frozen"
+    [ "$7" = "--declaration" ] || fail "missing declaration argument"
+    declaration=$8
+    [ "$9" = "--type-format" ] || fail "missing type-format argument"
+    [ "${10}" = "autolean.lean-pp-expr.v1" ] || fail "unsupported type format"
+    [ "$declaration" = "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound" ] ||
+      fail "unsupported substrate target declaration"
+    test -f /compiled/Candidate.olean && test ! -L /compiled/Candidate.olean ||
+      fail "sealed Candidate.olean is unavailable"
+
+    # This preflight owns all substrate-specific semantics; stdout is intentionally discarded so
+    # the externally visible protocol remains the unchanged V2 single-record result.
+    if ! LEAN_PATH="/compiled:$lean_path" "$preflight_query" --phase query \
+      --target "$declaration" >"$scratch/preflight.stdout" 2>"$scratch/preflight.stderr"
+    then
+      emit_phase_failure query "$scratch/preflight.stdout" "$scratch/preflight.stderr"
+      exit 21
+    fi
+    if ! LEAN_PATH="/compiled:$lean_path" lean --run /opt/autolean/lib/AutoleanLeanQuery.lean \
+      "$declaration" "$wrapper_sha256" "$query_helper_sha256" \
+      >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+    then
+      emit_phase_failure query "$scratch/query.stdout" "$scratch/query.stderr"
+      exit 22
+    fi
+    [ "$(wc -l <"$scratch/query.stdout" | tr -d ' ')" -eq 1 ] ||
+      fail "V2 query helper did not emit exactly one record"
+    cat "$scratch/query.stdout"
+    ;;
+  *)
+    fail "unsupported phase"
+    ;;
+esac

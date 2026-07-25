@@ -49,6 +49,8 @@ check_hash runtime_source_checksum_manifest_sha256 "$runtime_sources"
 check_hash query_wrapper_sha256 \
   "$root/bin/autolean-library-substrate-independent-query"
 check_hash receipt_tool_sha256 "$root/bin/autolean-library-substrate-build-receipt"
+check_hash v2_facade_wrapper_sha256 /opt/autolean/bin/autolean-lean-wrapper
+check_hash v2_facade_query_helper_sha256 /opt/autolean/lib/AutoleanLeanQuery.lean
 check_hash parent_receipt_file_sha256 \
   /opt/autolean/attestations/mathlib-source-build-receipt.v2.json
 

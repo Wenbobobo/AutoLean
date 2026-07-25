@@ -12,6 +12,8 @@ ARG QUERY_WRAPPER_SHA256
 ARG RECEIPT_TOOL_SHA256
 ARG RUNTIME_SOURCE_CHECKSUM_MANIFEST_SHA256
 ARG RUNTIME_SOURCE_TREE_SHA256
+ARG V2_FACADE_QUERY_HELPER_SHA256
+ARG V2_FACADE_WRAPPER_SHA256
 
 COPY build-input.v1.json /build/input/build-input.v1.json
 COPY runtime-sources.sha256 /build/input/runtime-sources.sha256
@@ -20,6 +22,8 @@ COPY helpers/AutoleanLibrarySubstrateInventory.lean /build/tools/AutoleanLibrary
 COPY helpers/autolean-library-substrate-build /build/tools/autolean-library-substrate-build
 COPY helpers/autolean-library-substrate-independent-query /build/tools/autolean-library-substrate-independent-query
 COPY helpers/autolean-library-substrate-build-receipt /build/tools/autolean-library-substrate-build-receipt
+COPY helpers/AutoleanLibrarySubstrateV2Query.lean /build/tools/AutoleanLibrarySubstrateV2Query.lean
+COPY helpers/autolean-library-substrate-v2-facade /build/tools/autolean-library-substrate-v2-facade
 COPY Dockerfile.library-substrate /build/tools/Dockerfile.library-substrate
 
 RUN /build/tools/autolean-library-substrate-build \
@@ -32,7 +36,9 @@ RUN /build/tools/autolean-library-substrate-build \
       "${QUERY_WRAPPER_SHA256}" \
       "${RECEIPT_TOOL_SHA256}" \
       "${RUNTIME_SOURCE_CHECKSUM_MANIFEST_SHA256}" \
-      "${RUNTIME_SOURCE_TREE_SHA256}"
+      "${RUNTIME_SOURCE_TREE_SHA256}" \
+      "${V2_FACADE_QUERY_HELPER_SHA256}" \
+      "${V2_FACADE_WRAPPER_SHA256}"
 
 FROM autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6
 
@@ -51,10 +57,20 @@ LABEL org.opencontainers.image.title="AutoLean library-substrate-v1 preflight" \
 
 COPY --from=library-substrate-builder --chown=0:0 \
   /build/final/ /opt/autolean/library-substrate/
+COPY --from=library-substrate-builder --chown=0:0 \
+  /build/final/bin/autolean-library-substrate-v2-facade \
+  /opt/autolean/bin/autolean-lean-wrapper
+COPY --from=library-substrate-builder --chown=0:0 \
+  /build/tools/AutoleanLibrarySubstrateV2Query.lean \
+  /opt/autolean/lib/AutoleanLeanQuery.lean
 
 RUN test -x /opt/autolean/library-substrate/bin/autolean-library-substrate-build-receipt \
     && test -x /opt/autolean/library-substrate/bin/autolean-library-substrate-independent-query \
+    && test -x /opt/autolean/bin/autolean-lean-wrapper \
+    && test -f /opt/autolean/lib/AutoleanLeanQuery.lean \
     && test -z "$(find /opt/autolean/library-substrate -name '*.lean' -o -name '*.ilean')" \
+    && chmod 0555 /opt/autolean/bin/autolean-lean-wrapper \
+    && chmod 0444 /opt/autolean/lib/AutoleanLeanQuery.lean \
     && /opt/autolean/library-substrate/bin/autolean-library-substrate-build-receipt >/dev/null
 
 USER 65532:65532
