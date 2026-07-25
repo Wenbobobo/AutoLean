@@ -34,6 +34,8 @@ ARG MATHLIB_REVISION
 ARG DOCKERFILE_SHA256
 ARG QUERY_HELPER_SOURCE_SHA256
 ARG WRAPPER_SHA256
+ARG DECLARATION_QUERY_HELPER_SOURCE_SHA256
+ARG DECLARATION_QUERY_WRAPPER_SHA256
 ARG BUILD_RECEIPT_TOOL_SHA256
 
 COPY --from=lean-archive-verifier /lean-archive.sha256 /opt/lean-archive.sha256
@@ -56,6 +58,8 @@ COPY sources/ /tmp/autolean-build/sources/
 COPY Dockerfile.mathlib /tmp/autolean-build/Dockerfile.mathlib
 COPY AutoleanMathlibQuery.lean /tmp/autolean-build/AutoleanMathlibQuery.lean
 COPY autolean-mathlib-wrapper /tmp/autolean-build/autolean-mathlib-wrapper
+COPY AutoleanMathlibDeclarationQuery.lean /tmp/autolean-build/AutoleanMathlibDeclarationQuery.lean
+COPY autolean-mathlib-declaration-query /tmp/autolean-build/autolean-mathlib-declaration-query
 COPY autolean-mathlib-build-receipt /tmp/autolean-build/autolean-mathlib-build-receipt
 
 RUN printf '%s  %s\n' \
@@ -72,6 +76,10 @@ RUN printf '%s  %s\n' \
       "${DOCKERFILE_SHA256}" /tmp/autolean-build/Dockerfile.mathlib \
       "${QUERY_HELPER_SOURCE_SHA256}" /tmp/autolean-build/AutoleanMathlibQuery.lean \
       "${WRAPPER_SHA256}" /tmp/autolean-build/autolean-mathlib-wrapper \
+      "${DECLARATION_QUERY_HELPER_SOURCE_SHA256}" \
+        /tmp/autolean-build/AutoleanMathlibDeclarationQuery.lean \
+      "${DECLARATION_QUERY_WRAPPER_SHA256}" \
+        /tmp/autolean-build/autolean-mathlib-declaration-query \
       "${BUILD_RECEIPT_TOOL_SHA256}" /tmp/autolean-build/autolean-mathlib-build-receipt \
       | sha256sum --check --strict - \
     && test "$(find /tmp/autolean-build/sources -type f | wc -l)" -eq 9 \
@@ -165,16 +173,23 @@ RUN mkdir -p /opt/autolean/bin /opt/autolean/lib /opt/autolean/environment \
     && test -s /opt/autolean/environment/lean-path
 
 COPY AutoleanMathlibQuery.lean /opt/autolean/lib/AutoleanLeanQuery.lean
+COPY AutoleanMathlibDeclarationQuery.lean /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean
 COPY autolean-mathlib-wrapper /opt/autolean/bin/autolean-lean-wrapper
+COPY autolean-mathlib-declaration-query /opt/autolean/bin/autolean-mathlib-declaration-query
 COPY autolean-mathlib-build-receipt /opt/autolean/bin/autolean-mathlib-build-receipt
 
 WORKDIR /
 RUN chmod 0444 /opt/autolean/lib/AutoleanLeanQuery.lean \
+      /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean \
     && chmod 0555 /opt/autolean/bin/autolean-lean-wrapper \
+      /opt/autolean/bin/autolean-mathlib-declaration-query \
       /opt/autolean/bin/autolean-mathlib-build-receipt \
     && LEAN_PATH="$(cat /opt/autolean/environment/lean-path)" lean \
       -o /opt/autolean/lib/AutoleanLeanQuery.olean \
       /opt/autolean/lib/AutoleanLeanQuery.lean \
+    && LEAN_PATH="$(cat /opt/autolean/environment/lean-path)" lean \
+      -o /opt/autolean/lib/AutoleanMathlibDeclarationQuery.olean \
+      /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean \
     && LEAN_PATH="$(cat /opt/autolean/environment/lean-path)" lean --deps \
       /opt/autolean/lib/AutoleanLeanQuery.lean \
       > /tmp/autolean-build/mathlib-import-paths.txt \
@@ -209,10 +224,18 @@ RUN cp /tmp/autolean-build/mathlib-source-lock.v1.json \
          | awk '{print $1}')" \
     && helper_olean_sha256="$(sha256sum \
          /opt/autolean/lib/AutoleanLeanQuery.olean | awk '{print $1}')" \
+    && declaration_query_helper_olean_sha256="$(sha256sum \
+         /opt/autolean/lib/AutoleanMathlibDeclarationQuery.olean | awk '{print $1}')" \
     && printf '%s  %s\n' \
       "${QUERY_HELPER_SOURCE_SHA256}" /opt/autolean/lib/AutoleanLeanQuery.lean \
       "${helper_olean_sha256}" /opt/autolean/lib/AutoleanLeanQuery.olean \
       "${WRAPPER_SHA256}" /opt/autolean/bin/autolean-lean-wrapper \
+      "${DECLARATION_QUERY_HELPER_SOURCE_SHA256}" \
+        /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean \
+      "${declaration_query_helper_olean_sha256}" \
+        /opt/autolean/lib/AutoleanMathlibDeclarationQuery.olean \
+      "${DECLARATION_QUERY_WRAPPER_SHA256}" \
+        /opt/autolean/bin/autolean-mathlib-declaration-query \
       "${BUILD_RECEIPT_TOOL_SHA256}" /opt/autolean/bin/autolean-mathlib-build-receipt \
       "${BUILD_RESOURCE_LOCK_SHA256}" \
         /opt/autolean/attestations/mathlib-build-resource-lock.v1.json \
@@ -232,8 +255,10 @@ RUN cp /tmp/autolean-build/mathlib-source-lock.v1.json \
     && runtime_files_sha256="$(sha256sum \
          /opt/autolean/attestations/runtime-files.sha256 | awk '{print $1}')" \
     && printf \
-      '{"build_resource_lock_sha256":"%s","build_receipt_tool_sha256":"%s","dockerfile_sha256":"%s","helper_olean_sha256":"%s","helper_source_sha256":"%s","lake_manifest_sha256":"%s","lean_archive_sha256":"%s","mathlib_build_target":"%s","mathlib_import_closure_count":%s,"mathlib_import_closure_sha256":"%s","mathlib_local_path_manifest_sha256":"%s","mathlib_revision":"%s","mathlib_source_manifest_sha256":"%s","mathlib_target":"Mathlib.ModelTheory.Semantics","mathlib_target_olean_sha256":"%s","proofwidgets_js_file_count":%s,"proofwidgets_js_manifest_sha256":"%s","proofwidgets_js_unpacked_bytes":%s,"proofwidgets_release_asset_name":"%s","proofwidgets_release_asset_sha256":"%s","proofwidgets_release_asset_size":%s,"proofwidgets_release_tag":"%s","proofwidgets_revision":"%s","runtime_files_manifest_sha256":"%s","schema_version":"autolean.mathlib-source-build-receipt.v1","source_inputs_sha256":"%s","source_lock_sha256":"%s","wrapper_sha256":"%s"}\n' \
+      '{"build_resource_lock_sha256":"%s","build_receipt_tool_sha256":"%s","declaration_query_helper_olean_sha256":"%s","declaration_query_helper_source_sha256":"%s","declaration_query_wrapper_sha256":"%s","dockerfile_sha256":"%s","helper_olean_sha256":"%s","helper_source_sha256":"%s","lake_manifest_sha256":"%s","lean_archive_sha256":"%s","mathlib_build_target":"%s","mathlib_import_closure_count":%s,"mathlib_import_closure_sha256":"%s","mathlib_local_path_manifest_sha256":"%s","mathlib_revision":"%s","mathlib_source_manifest_sha256":"%s","mathlib_target":"Mathlib.ModelTheory.Semantics","mathlib_target_olean_sha256":"%s","proofwidgets_js_file_count":%s,"proofwidgets_js_manifest_sha256":"%s","proofwidgets_js_unpacked_bytes":%s,"proofwidgets_release_asset_name":"%s","proofwidgets_release_asset_sha256":"%s","proofwidgets_release_asset_size":%s,"proofwidgets_release_tag":"%s","proofwidgets_revision":"%s","runtime_files_manifest_sha256":"%s","schema_version":"autolean.mathlib-source-build-receipt.v2","source_inputs_sha256":"%s","source_lock_sha256":"%s","wrapper_sha256":"%s"}\n' \
       "${BUILD_RESOURCE_LOCK_SHA256}" "${BUILD_RECEIPT_TOOL_SHA256}" \
+      "${declaration_query_helper_olean_sha256}" \
+      "${DECLARATION_QUERY_HELPER_SOURCE_SHA256}" "${DECLARATION_QUERY_WRAPPER_SHA256}" \
       "${DOCKERFILE_SHA256}" \
       "${helper_olean_sha256}" "${QUERY_HELPER_SOURCE_SHA256}" \
       "${LAKE_MANIFEST_SHA256}" "${LEAN_ARCHIVE_SHA256}" \
@@ -248,7 +273,7 @@ RUN cp /tmp/autolean-build/mathlib-source-lock.v1.json \
       "${runtime_files_sha256}" \
       "${SOURCE_INPUTS_SHA256}" \
       "${SOURCE_LOCK_SHA256}" "${WRAPPER_SHA256}" \
-      > /opt/autolean/attestations/mathlib-source-build-receipt.v1.json \
+      > /opt/autolean/attestations/mathlib-source-build-receipt.v2.json \
     && /opt/autolean/bin/autolean-mathlib-build-receipt > /dev/null
 
 FROM ubuntu:24.04@sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90
@@ -268,10 +293,12 @@ ARG PROOFWIDGETS_REVISION
 ARG DOCKERFILE_SHA256
 ARG QUERY_HELPER_SOURCE_SHA256
 ARG WRAPPER_SHA256
+ARG DECLARATION_QUERY_HELPER_SOURCE_SHA256
+ARG DECLARATION_QUERY_WRAPPER_SHA256
 
 LABEL org.opencontainers.image.title="AutoLean source-built mathlib verifier worker" \
       org.opencontainers.image.description="Lean 4.28.0 plus source-built Mathlib.ModelTheory.Semantics closure" \
-      org.opencontainers.image.version="4.28.0-model-theory-source-v1" \
+      org.opencontainers.image.version="4.28.0-model-theory-source-v2" \
       org.opencontainers.image.base.digest="sha256:4fbb8e6a8395de5a7550b33509421a2bafbc0aab6c06ba2cef9ebffbc7092d90" \
       org.autolean.lean.archive.sha256="${LEAN_ARCHIVE_SHA256}" \
       org.autolean.mathlib.revision="${MATHLIB_REVISION}" \
@@ -290,6 +317,8 @@ LABEL org.opencontainers.image.title="AutoLean source-built mathlib verifier wor
       org.autolean.build.dockerfile.sha256="${DOCKERFILE_SHA256}" \
       org.autolean.verifier.helper-source.sha256="${QUERY_HELPER_SOURCE_SHA256}" \
       org.autolean.verifier.wrapper.sha256="${WRAPPER_SHA256}" \
+      org.autolean.verifier.declaration-query-helper-source.sha256="${DECLARATION_QUERY_HELPER_SOURCE_SHA256}" \
+      org.autolean.verifier.declaration-query-wrapper.sha256="${DECLARATION_QUERY_WRAPPER_SHA256}" \
       org.autolean.wrapper.protocol="autolean.oci-lean-wrapper.v2"
 
 COPY --from=mathlib-source-builder /opt/lean-4.28.0-linux /opt/lean-4.28.0-linux

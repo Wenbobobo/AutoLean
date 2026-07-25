@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import hashlib
 import json
+import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -14,6 +15,7 @@ from scripts import (
     mathlib_source_lock,
     oci_mathlib_worker,
     oci_worker,
+    oci_worker_canary,
 )
 
 
@@ -141,9 +143,13 @@ def test_mathlib_profile_is_separate_and_source_build_assets_are_frozen() -> Non
     assert oci_mathlib_worker.BUILD_ASSETS == (
         "Dockerfile.mathlib",
         "AutoleanMathlibQuery.lean",
+        "AutoleanMathlibDeclarationQuery.lean",
         "autolean-mathlib-wrapper",
+        "autolean-mathlib-declaration-query",
         "autolean-mathlib-build-receipt",
     )
+    assert oci_mathlib_worker.IMAGE_TAG.endswith("source-v2")
+    assert oci_mathlib_worker.BUILD_RECEIPT_SCHEMA.endswith(".v2")
 
 
 def test_mathlib_source_manifest_must_match_all_locked_dependencies() -> None:
@@ -266,7 +272,13 @@ def test_dockerfile_checks_all_source_hashes_before_extracting_and_builds_offlin
     worker = Path(__file__).resolve().parents[2] / "Prover" / "worker"
     dockerfile = (worker / "Dockerfile.mathlib").read_text(encoding="utf-8")
     helper = (worker / "AutoleanMathlibQuery.lean").read_text(encoding="utf-8")
+    declaration_helper = (worker / "AutoleanMathlibDeclarationQuery.lean").read_text(
+        encoding="utf-8"
+    )
     wrapper = (worker / "autolean-mathlib-wrapper").read_text(encoding="utf-8")
+    declaration_wrapper = (worker / "autolean-mathlib-declaration-query").read_text(
+        encoding="utf-8"
+    )
     receipt_tool = (worker / "autolean-mathlib-build-receipt").read_text(encoding="utf-8")
 
     assert dockerfile.index("sha256sum --check --strict source-archives.sha256") < (
@@ -279,6 +291,8 @@ def test_dockerfile_checks_all_source_hashes_before_extracting_and_builds_offlin
     assert "mathlib-build-resource-lock.v1.json" in dockerfile
     assert "proofwidgets-release/js/" in dockerfile
     assert "proofwidgets-js.sha256" in dockerfile
+    assert '"lake_manifest_sha256":"%s"' in dockerfile
+    assert '"lake_manifest_hash":"%s"' not in dockerfile
     assert "lake build --no-build widgetJsAll" in dockerfile
     assert "lake build widgetJsAll" in dockerfile
     assert "test ! -e widget/node_modules" in dockerfile
@@ -298,7 +312,16 @@ def test_dockerfile_checks_all_source_hashes_before_extracting_and_builds_offlin
     assert "git clone" not in dockerfile
     assert "import Mathlib.ModelTheory.Semantics" in helper
     assert oci_mathlib_worker.MATHLIB_REVISION in helper
+    assert "readModuleData" in declaration_helper
+    assert "candidate.constNames.any" in declaration_helper
+    assert "declaration is not defined by Candidate" in declaration_helper
+    assert "allImportedModuleNames" in declaration_helper
+    assert "AutoleanMathlibDeclarationQuery.olean" in dockerfile
+    assert "autolean-mathlib-declaration-query" in dockerfile
     assert "/deps" not in wrapper
+    assert "declarations must be sorted" in declaration_wrapper
+    assert "--compiled" in declaration_wrapper
+    assert 'LEAN_PATH="/compiled:$lean_path" lean --run' in declaration_wrapper
     assert "sha256sum --check --strict --status" in receipt_tool
     assert "proofwidgets-js.sha256" in receipt_tool
     assert "find js -type f -print | LC_ALL=C sort" in receipt_tool
@@ -316,6 +339,7 @@ def test_receipt_tool_rejects_false_dynamic_claims(tmp_path: Path) -> None:
     script.write_bytes((worker / "autolean-mathlib-build-receipt").read_bytes())
     artifacts = {
         "helper.olean": b"helper",
+        "declaration-helper.olean": b"declaration helper",
         "closure.sha256": b"a" * 64 + b"  /opt/mathlib/A.olean\n",
         "target.olean": b"target",
         "runtime.sha256": b"b" * 64 + b"  /opt/autolean/file\n",
@@ -323,6 +347,9 @@ def test_receipt_tool_rejects_false_dynamic_claims(tmp_path: Path) -> None:
     for name, content in artifacts.items():
         (tmp_path / name).write_bytes(content)
     receipt = {
+        "declaration_query_helper_olean_sha256": hashlib.sha256(
+            artifacts["declaration-helper.olean"]
+        ).hexdigest(),
         "helper_olean_sha256": hashlib.sha256(artifacts["helper.olean"]).hexdigest(),
         "mathlib_import_closure_count": 1,
         "mathlib_import_closure_sha256": hashlib.sha256(artifacts["closure.sha256"]).hexdigest(),
@@ -340,7 +367,8 @@ def test_receipt_tool_rejects_false_dynamic_claims(tmp_path: Path) -> None:
         "-c",
         (
             "AUTOLEAN_RECEIPT_VERIFY_DYNAMIC_ONLY=1 /bin/sh receipt "
-            "receipt.json helper.olean closure.sha256 target.olean runtime.sha256"
+            "receipt.json helper.olean declaration-helper.olean closure.sha256 "
+            "target.olean runtime.sha256"
         ),
     ]
 
@@ -455,10 +483,19 @@ def test_image_receipt_verifier_binds_labels_static_inputs_and_dynamic_outputs(
         oci_mathlib_worker.LABEL_DOCKERFILE: assets["Dockerfile.mathlib"],
         oci_mathlib_worker.LABEL_HELPER: assets["AutoleanMathlibQuery.lean"],
         oci_mathlib_worker.LABEL_WRAPPER: assets["autolean-mathlib-wrapper"],
+        oci_mathlib_worker.LABEL_DECLARATION_QUERY_HELPER: assets[
+            "AutoleanMathlibDeclarationQuery.lean"
+        ],
+        oci_mathlib_worker.LABEL_DECLARATION_QUERY_WRAPPER: assets[
+            "autolean-mathlib-declaration-query"
+        ],
     }
     receipt = {
         "build_resource_lock_sha256": prepared.build_resource_lock_sha256,
         "build_receipt_tool_sha256": assets["autolean-mathlib-build-receipt"],
+        "declaration_query_helper_olean_sha256": "0" * 64,
+        "declaration_query_helper_source_sha256": assets["AutoleanMathlibDeclarationQuery.lean"],
+        "declaration_query_wrapper_sha256": assets["autolean-mathlib-declaration-query"],
         "dockerfile_sha256": assets["Dockerfile.mathlib"],
         "helper_olean_sha256": "1" * 64,
         "helper_source_sha256": assets["AutoleanMathlibQuery.lean"],
@@ -513,3 +550,441 @@ def test_image_receipt_verifier_binds_labels_static_inputs_and_dynamic_outputs(
     labels[oci_mathlib_worker.LABEL_SOURCE_LOCK] = "0" * 64
     with pytest.raises(oci_mathlib_worker.MathlibWorkerError, match="source-lock"):
         oci_mathlib_worker.verify_image_receipt(repo_root, image, prepared)
+
+
+def _declaration_query_record(
+    prepared: oci_mathlib_worker.PreparedInputs,
+    assets: dict[str, str],
+    declarations: tuple[str, ...],
+) -> dict[str, object]:
+    return {
+        "candidate_direct_imports": ["Mathlib.ModelTheory.Semantics"],
+        "declarations": [
+            {
+                "canonical_type": f"Type for {declaration}",
+                "declaration": declaration,
+                "observed_axioms": [],
+            }
+            for declaration in declarations
+        ],
+        "image_identity": {
+            "query_helper_path": oci_mathlib_worker.DECLARATION_QUERY_HELPER,
+            "query_helper_sha256": assets["AutoleanMathlibDeclarationQuery.lean"],
+            "schema_version": "autolean.image-owned-declaration-query-identity.v1",
+            "wrapper_path": oci_mathlib_worker.DECLARATION_QUERY_EXECUTABLE,
+            "wrapper_sha256": assets["autolean-mathlib-declaration-query"],
+        },
+        "lake_manifest_hash": prepared.lake_manifest_sha256,
+        "lean_version": "v4.28.0",
+        "mathlib_revision": oci_mathlib_worker.MATHLIB_REVISION,
+        "module_import_closure": ["Candidate", "Mathlib.ModelTheory.Semantics"],
+        "schema_version": oci_mathlib_worker.DECLARATION_QUERY_SCHEMA,
+        "type_format": "autolean.lean-pp-expr.v1",
+    }
+
+
+def test_declaration_query_record_binds_image_identity_types_axioms_and_closure(
+    tmp_path: Path,
+) -> None:
+    prepared = _prepared(tmp_path)
+    repo_root = Path(__file__).resolve().parents[2]
+    assets = oci_mathlib_worker._asset_hashes(repo_root / "Prover" / "worker")
+    declarations = ("AutoLean.Test.alpha", "AutoLean.Test.beta")
+    record = _declaration_query_record(prepared, assets, declarations)
+
+    observed = oci_mathlib_worker._declaration_query_record(
+        json.dumps(record, separators=(",", ":")),
+        declarations=declarations,
+        prepared=prepared,
+        assets=assets,
+    )
+
+    assert observed["candidate_direct_imports"] == ["Mathlib.ModelTheory.Semantics"]
+    assert observed["module_import_closure"] == ["Candidate", "Mathlib.ModelTheory.Semantics"]
+    observed_declarations = cast(list[dict[str, object]], observed["declarations"])
+    assert [item["declaration"] for item in observed_declarations] == list(declarations)
+    assert all(
+        len(cast(str, item["canonical_type_sha256"])) == 64 for item in observed_declarations
+    )
+
+    record["module_import_closure"] = ["Mathlib.ModelTheory.Semantics"]
+    with pytest.raises(oci_mathlib_worker.MathlibWorkerError, match="omits the compiled candidate"):
+        oci_mathlib_worker._declaration_query_record(
+            json.dumps(record, separators=(",", ":")),
+            declarations=declarations,
+            prepared=prepared,
+            assets=assets,
+        )
+
+
+@pytest.mark.parametrize(
+    "case",
+    (
+        "extra-stdout-line",
+        "nested-duplicate-json-key",
+        "declaration-order",
+        "declaration-replaced",
+        "image-helper-hash-replaced",
+        "lake-manifest-replaced",
+        "mathlib-revision-replaced",
+        "field-added",
+        "field-deleted",
+        "field-wrong-type",
+    ),
+)
+def test_declaration_query_record_rejects_protocol_mutations(
+    tmp_path: Path,
+    case: str,
+) -> None:
+    prepared = _prepared(tmp_path)
+    repo_root = Path(__file__).resolve().parents[2]
+    assets = oci_mathlib_worker._asset_hashes(repo_root / "Prover" / "worker")
+    declarations = ("AutoLean.Test.alpha", "AutoLean.Test.beta")
+    record = _declaration_query_record(prepared, assets, declarations)
+    rendered: str
+
+    if case == "extra-stdout-line":
+        rendered = f"{json.dumps(record)}\n{json.dumps(record)}"
+    elif case == "nested-duplicate-json-key":
+        rendered = json.dumps(record).replace(
+            '"image_identity": {',
+            '"image_identity": {"query_helper_sha256": "' + "0" * 64 + '", ',
+            1,
+        )
+    else:
+        if case == "declaration-order":
+            record["declarations"] = list(reversed(cast(list[object], record["declarations"])))
+        elif case == "declaration-replaced":
+            result = cast(list[dict[str, object]], record["declarations"])
+            result[0]["declaration"] = "AutoLean.Test.replaced"
+        elif case == "image-helper-hash-replaced":
+            identity = cast(dict[str, object], record["image_identity"])
+            identity["query_helper_sha256"] = "0" * 64
+        elif case == "lake-manifest-replaced":
+            record["lake_manifest_hash"] = "0" * 64
+        elif case == "mathlib-revision-replaced":
+            record["mathlib_revision"] = "0" * 40
+        elif case == "field-added":
+            record["unexpected"] = True
+        elif case == "field-deleted":
+            del record["type_format"]
+        elif case == "field-wrong-type":
+            record["module_import_closure"] = "not-a-list"
+        else:
+            raise AssertionError(f"unknown protocol mutation {case}")
+        rendered = json.dumps(record)
+
+    with pytest.raises(oci_mathlib_worker.MathlibWorkerError):
+        oci_mathlib_worker._declaration_query_record(
+            rendered,
+            declarations=declarations,
+            prepared=prepared,
+            assets=assets,
+        )
+
+
+def test_declaration_query_command_and_cli_require_sorted_fully_qualified_names(
+    tmp_path: Path,
+) -> None:
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    candidate = tmp_path / "Candidate.olean"
+    candidate.write_bytes(b"fixture")
+    declarations = ("AutoLean.Test.alpha", "AutoLean.Test.beta")
+
+    command = oci_mathlib_worker._declaration_query_command(
+        image,
+        candidate,
+        "fixture-query",
+        declarations,
+    )
+
+    assert command[command.index("--network") :][:2] == ["--network", "none"]
+    assert "--read-only" in command
+    assert command[command.index("--compiled") :][:2] == [
+        "--compiled",
+        "/compiled/Candidate.olean",
+    ]
+    assert any("dst=/compiled/Candidate.olean,readonly" in item for item in command)
+    assert command[-4:] == [
+        "--declaration",
+        "AutoLean.Test.alpha",
+        "--declaration",
+        "AutoLean.Test.beta",
+    ]
+    parsed = oci_mathlib_worker.parse_args(
+        [
+            "query-declarations",
+            "--image",
+            image,
+            "--candidate",
+            str(candidate),
+            "--declaration",
+            declarations[0],
+            "--declaration",
+            declarations[1],
+        ]
+    )
+    assert tuple(parsed.declaration) == declarations
+    with pytest.raises(SystemExit):
+        oci_mathlib_worker.parse_args(
+            [
+                "query-declarations",
+                "--image",
+                image,
+                "--candidate",
+                str(candidate),
+                "--declaration",
+                "AutoLean.Test.beta",
+                "--declaration",
+                "AutoLean.Test.alpha",
+            ]
+        )
+    with pytest.raises(SystemExit):
+        oci_mathlib_worker.parse_args(
+            [
+                "query-declarations",
+                "--image",
+                image,
+                "--candidate",
+                str(candidate),
+                "--declaration",
+                "not-qualified",
+            ]
+        )
+
+
+class _FakeDeclarationQueryWorker:
+    SEALED_CANDIDATE_MAX_BYTES = oci_worker_canary.SEALED_CANDIDATE_MAX_BYTES
+
+    def __init__(self, observation: str) -> None:
+        self._observation = observation
+        self._candidate: Path | None = None
+        self._compiler_output: Path | None = None
+        self.compiled_source: bytes | None = None
+        self.calls: list[tuple[list[str], str]] = []
+
+    def _compile_command(
+        self,
+        image: str,
+        candidate: Path,
+        compiler_output: Path,
+        container_name: str,
+    ) -> list[str]:
+        self._candidate = candidate
+        self._compiler_output = compiler_output
+        return ["compile", image, container_name]
+
+    def _seal_direct_olean(
+        self,
+        compiler_output: Path,
+        sealed_directory: Path,
+    ) -> tuple[Path, str]:
+        assert compiler_output == self._compiler_output
+        sealed = sealed_directory / "Candidate.olean"
+        sealed.write_bytes((compiler_output / "Candidate.olean").read_bytes())
+        return sealed, hashlib.sha256(sealed.read_bytes()).hexdigest()
+
+    def _run_phase(
+        self,
+        command: list[str],
+        container_name: str,
+    ) -> subprocess.CompletedProcess[str]:
+        self.calls.append((command, container_name))
+        if command[0] == "compile":
+            assert self._compiler_output is not None
+            assert self._candidate is not None
+            self.compiled_source = self._candidate.read_bytes()
+            (self._compiler_output / "Candidate.olean").write_bytes(
+                b"compiled:" + self.compiled_source
+            )
+            return subprocess.CompletedProcess(command, 0, stdout="", stderr="")
+        return subprocess.CompletedProcess(command, 0, stdout=self._observation, stderr="")
+
+
+def _fixture_source_snapshot(
+    candidate: Path,
+    snapshot_directory: Path,
+) -> oci_mathlib_worker.CandidateSourceSnapshot:
+    snapshot_directory.mkdir(mode=0o700)
+    destination = snapshot_directory / "Candidate.lean"
+    content = candidate.read_bytes()
+    destination.write_bytes(content)
+    destination.chmod(0o444)
+    return oci_mathlib_worker.CandidateSourceSnapshot(
+        path=destination,
+        sha256=hashlib.sha256(content).hexdigest(),
+    )
+
+
+def test_declaration_query_action_compiles_frozen_source_and_has_stable_policy(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    prepared = _prepared(tmp_path)
+    repo_root = Path(__file__).resolve().parents[2]
+    assets = oci_mathlib_worker._asset_hashes(repo_root / "Prover" / "worker")
+    declarations = ("AutoLean.Test.alpha", "AutoLean.Test.beta")
+    observation = json.dumps(_declaration_query_record(prepared, assets, declarations))
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    candidate = (
+        repo_root / "Prover" / "worker" / "tests" / "fixtures" / "CandidateWithMathlibImport.lean"
+    )
+    candidate_source = candidate.read_bytes()
+    assert b"import Mathlib.ModelTheory.Semantics" in candidate_source
+    assert b"theorem candidateOwned" in candidate_source
+    fake_worker = _FakeDeclarationQueryWorker(observation)
+
+    monkeypatch.setattr(oci_mathlib_worker, "_oci_worker_canary", lambda: fake_worker)
+    if getattr(os, "O_NOFOLLOW", None) is None:
+        monkeypatch.setattr(
+            oci_mathlib_worker,
+            "_snapshot_candidate",
+            _fixture_source_snapshot,
+        )
+    monkeypatch.setattr(
+        oci_mathlib_worker,
+        "prepare_inputs",
+        lambda _repo, _source, _resources: prepared,
+    )
+    monkeypatch.setattr(
+        oci_mathlib_worker,
+        "verify_image_receipt",
+        lambda _repo, _image, _prepared: ({}, {"schema_version": "fixture"}),
+    )
+    monkeypatch.setattr(oci_mathlib_worker, "_asset_hashes", lambda _worker: assets)
+
+    result = oci_mathlib_worker.query_declarations(
+        repo_root,
+        tmp_path / "sources",
+        tmp_path / "resources",
+        image,
+        candidate,
+        declarations,
+    )
+
+    assert len(fake_worker.calls) == 2
+    assert fake_worker.calls[0][0][0] == "compile"
+    assert (
+        fake_worker.calls[1][0][
+            fake_worker.calls[1][0].index(oci_mathlib_worker.DECLARATION_QUERY_EXECUTABLE)
+        ]
+        == oci_mathlib_worker.DECLARATION_QUERY_EXECUTABLE
+    )
+    assert fake_worker.compiled_source == candidate_source
+    assert result["source_snapshot_sha256"] == hashlib.sha256(candidate_source).hexdigest()
+    assert (
+        result["sealed_candidate_sha256"]
+        == hashlib.sha256(b"compiled:" + candidate_source).hexdigest()
+    )
+    assert result["observation"] == oci_mathlib_worker._declaration_query_record(
+        observation,
+        declarations=declarations,
+        prepared=prepared,
+        assets=assets,
+    )
+    second_worker = _FakeDeclarationQueryWorker(observation)
+    monkeypatch.setattr(oci_mathlib_worker, "_oci_worker_canary", lambda: second_worker)
+    second_result = oci_mathlib_worker.query_declarations(
+        repo_root,
+        tmp_path / "sources",
+        tmp_path / "resources",
+        image,
+        candidate,
+        declarations,
+    )
+
+    policy_json = json.dumps(result["execution_policy"], sort_keys=True)
+    policy = cast(dict[str, object], result["execution_policy"])
+    phases = cast(list[dict[str, object]], policy["phases"])
+    assert result["execution_policy"] == second_result["execution_policy"]
+    assert result["execution_policy_sha256"] == second_result["execution_policy_sha256"]
+    assert policy["image"] == image
+    assert cast(dict[str, object], policy["container_policy"])["network"] == "none"
+    assert cast(dict[str, object], policy["container_policy"])["read_only_rootfs"] is True
+    assert [phase["name"] for phase in phases] == ["compile", "seal", "query"]
+    assert cast(list[dict[str, object]], phases[0]["mounts"])[0]["role"] == "source_snapshot"
+    assert cast(list[dict[str, object]], phases[2]["mounts"])[0]["role"] == "sealed_candidate"
+    assert phases[1]["sealed_candidate_max_bytes"] == oci_worker_canary.SEALED_CANDIDATE_MAX_BYTES
+    assert phases[2]["declarations"] == list(declarations)
+    assert "compile_command_sha256" not in result
+    assert "query_command_sha256" not in result
+    assert str(tmp_path) not in policy_json
+    getuid = getattr(os, "getuid", None)
+    if callable(getuid):
+        assert str(getuid()) not in policy_json
+    for _, container_name in [*fake_worker.calls, *second_worker.calls]:
+        assert container_name not in policy_json
+
+
+@pytest.mark.integration
+@pytest.mark.skipif(os.name != "posix", reason="source-v2 OCI integration is Linux-only")
+def test_source_v2_image_enforces_candidate_declaration_ownership() -> None:
+    image = os.environ.get("AUTOLEAN_TEST_MATHLIB_SOURCE_V2_IMAGE")
+    if image is None:
+        pytest.skip("AUTOLEAN_TEST_MATHLIB_SOURCE_V2_IMAGE is not configured")
+    repo_root = Path(__file__).resolve().parents[2]
+    candidate = (
+        repo_root / "Prover" / "worker" / "tests" / "fixtures" / "CandidateWithMathlibImport.lean"
+    )
+    owned_declaration = "AutoLean.OCI.Ownership.candidateOwned"
+
+    owned = oci_mathlib_worker.query_declarations(
+        repo_root,
+        mathlib_source_lock.DEFAULT_CACHE,
+        mathlib_build_resources.DEFAULT_CACHE,
+        image,
+        candidate,
+        (owned_declaration,),
+    )
+
+    observation = cast(dict[str, object], owned["observation"])
+    owned_records = cast(list[dict[str, object]], observation["declarations"])
+    assert [record["declaration"] for record in owned_records] == [owned_declaration]
+    with pytest.raises(
+        oci_mathlib_worker.MathlibWorkerError,
+        match=r"declaration is not defined by Candidate: Nat\.add_comm",
+    ):
+        oci_mathlib_worker.query_declarations(
+            repo_root,
+            mathlib_source_lock.DEFAULT_CACHE,
+            mathlib_build_resources.DEFAULT_CACHE,
+            image,
+            candidate,
+            ("Nat.add_comm",),
+        )
+
+
+@pytest.mark.skipif(not hasattr(os, "O_NOFOLLOW"), reason="requires O_NOFOLLOW")
+def test_source_snapshot_does_not_mix_a_to_b_to_a_path_swap(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    candidate = tmp_path / "Candidate.lean"
+    candidate_source = b"theorem candidateA : True := trivial\n"
+    candidate.write_bytes(candidate_source)
+    replacement = tmp_path / "Candidate-B.lean"
+    replacement.write_bytes(b"theorem candidateB : False := by contradiction\n")
+    restored = tmp_path / "Candidate-A-restored.lean"
+    restored.write_bytes(candidate_source)
+    original_read = os.read
+    swapped = False
+
+    def read_after_path_swap(descriptor: int, count: int) -> bytes:
+        nonlocal swapped
+        if not swapped:
+            os.replace(replacement, candidate)
+            os.replace(restored, candidate)
+            swapped = True
+        return original_read(descriptor, count)
+
+    monkeypatch.setattr(os, "read", read_after_path_swap)
+
+    try:
+        snapshot = oci_mathlib_worker._snapshot_candidate(candidate, tmp_path / "snapshot")
+    except oci_mathlib_worker.MathlibWorkerError as error:
+        assert "changed during snapshot" in str(error)
+    else:
+        assert snapshot.path.read_bytes() == candidate_source
+        assert snapshot.sha256 == hashlib.sha256(candidate_source).hexdigest()
+        assert snapshot.path.stat().st_mode & 0o222 == 0
+    assert swapped
