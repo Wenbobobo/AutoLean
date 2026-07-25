@@ -57,7 +57,8 @@ rejects the ordinary-dependency decision.
 
 ## What this does not establish
 
-- The probe is not an image-owned runtime helper and is not covered by an OCI image receipt.
+- Neither the unretained ad hoc observation nor this API note supplies an image-owned runtime
+  helper or OCI image receipt.
 - A module name is not source provenance: it does not bind source bytes, a compiled file, import closure, build command, or runtime tree.
 - It does not establish Candidate ownership, declaration kind, canonical type identity, axiom policy, target absence, or complete ordinary-dependency closure.
 - It does not change a statement contract, prove a theorem, authorize a proof submission, or satisfy the `independent_reproof` gate.
