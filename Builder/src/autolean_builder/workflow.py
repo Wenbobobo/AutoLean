@@ -7,6 +7,7 @@ cross-engine value it emits is a frozen contract or its immutable task bundle.
 from __future__ import annotations
 
 from dataclasses import dataclass, replace
+from datetime import datetime
 from enum import StrEnum
 
 from autolean_contracts import (
@@ -31,6 +32,7 @@ from autolean_contracts import (
     builder_attestation_payload,
     digest_model,
     stable_identifier,
+    utc_now,
 )
 from autolean_contracts.models import FreezeRecordV1
 
@@ -270,6 +272,7 @@ def _freeze_reviewed_contract(
     source_preparation: SourcePreparationRecordV1,
     frozen_by: str,
     gate: FreezeGate | None = None,
+    frozen_at: datetime | None = None,
 ) -> StatementContractV1:
     """Freeze a Harness-reviewed draft without changing its stable ID or revision."""
 
@@ -300,6 +303,7 @@ def _freeze_reviewed_contract(
         statement_source_hash=reviewed.formal.statement_source_hash,
         elaborated_type_hash=reviewed.formal.elaborated_type_hash,
         frozen_by=frozen_by,
+        frozen_at=frozen_at or utc_now(),
     )
     frozen_payload = reviewed.model_dump(mode="python", round_trip=True)
     frozen_payload.update({"status": StatementStatusV1.FROZEN, "freeze": record})
@@ -315,6 +319,7 @@ def _bridge_frozen_contract(
     attestor: AttestationSignerV1,
     evidence_identity: str,
     attestation_ttl_seconds: float = 3600,
+    bundle_issued_at: datetime | None = None,
 ) -> FormalizationTaskBundleV1:
     """Create the sole immutable Builder-to-Prover handoff with Builder authority.
 
@@ -345,6 +350,7 @@ def _bridge_frozen_contract(
         graph_snapshot_hash=digest_model(HashKindV1.GRAPH_SNAPSHOT, graphs),
         proof_boundary=build_proof_boundary(contract),
         fidelity_evidence=fidelity_evidence,
+        issued_at=bundle_issued_at or utc_now(),
     )
     try:
         attestation = attestor.issue(

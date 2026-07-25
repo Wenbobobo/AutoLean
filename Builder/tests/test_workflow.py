@@ -364,6 +364,18 @@ def _evaluation(
     )
 
 
+def test_statement_fidelity_harness_rejects_naive_clock() -> None:
+    contract = _contract()
+    with pytest.raises(FidelityHarnessError, match=r"clock.*timezone-aware"):
+        StatementFidelityHarness(clock=lambda: datetime(2026, 7, 25, 12, 0)).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=FakeMutationSuiteAgent(),
+            reviewer=FakeSemanticReviewer(),
+        )
+
+
 def test_harness_freeze_and_bridge_preserve_the_reviewed_boundary() -> None:
     draft = _contract()
     evaluation = _evaluation(draft)

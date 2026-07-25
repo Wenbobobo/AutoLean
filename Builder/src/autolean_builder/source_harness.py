@@ -3,8 +3,9 @@
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import asdict, dataclass
-from datetime import datetime
+from datetime import UTC, datetime
 from pathlib import Path
 
 from autolean_contracts import (
@@ -33,6 +34,7 @@ from autolean_contracts import (
     canonical_json_bytes,
     digest_text,
     stable_identifier,
+    utc_now,
 )
 
 from .fidelity_harness import (
@@ -368,10 +370,12 @@ class SourceToStatementHarness:
         preparation_ledger: SourcePreparationLedger,
         fidelity_harness: StatementFidelityHarness | None = None,
         pilot_manifest: PilotManifestV1 | None = None,
+        clock: Callable[[], datetime] = utc_now,
     ) -> None:
         self.cache = cache
         self.preparation_ledger = preparation_ledger
-        self.fidelity_harness = fidelity_harness or StatementFidelityHarness()
+        self._clock = clock
+        self.fidelity_harness = fidelity_harness or StatementFidelityHarness(clock=clock)
         default_manifest = (
             Path(__file__).resolve().parents[2]
             / "pilots"
@@ -559,6 +563,8 @@ class SourceToStatementHarness:
         """
 
         self._assert_packet(packet)
+        frozen_at = self._now("freeze")
+        self._validate_fidelity_before_freeze(evaluation, frozen_at)
         preparation = packet.preparation_record()
         return _freeze_reviewed_contract(
             packet.contract,
@@ -566,6 +572,7 @@ class SourceToStatementHarness:
             source_preparation=preparation,
             frozen_by=frozen_by,
             gate=gate,
+            frozen_at=frozen_at,
         )
 
     def revalidate_freeze_and_bridge(
@@ -590,6 +597,12 @@ class SourceToStatementHarness:
             frozen_by=frozen_by,
             gate=gate,
         )
+        bundle_issued_at = self._now("bundle issue")
+        if frozen.freeze is None:
+            raise SourceHarnessError("freeze record is absent after Builder freeze")
+        frozen_at = self._require_aware(frozen.freeze.frozen_at, "freeze record")
+        if frozen_at > bundle_issued_at:
+            raise SourceHarnessError("freeze timestamp is later than bundle issue timestamp")
         return _bridge_frozen_contract(
             frozen,
             graphs,
@@ -598,7 +611,43 @@ class SourceToStatementHarness:
             attestor=attestor,
             evidence_identity=evidence_identity,
             attestation_ttl_seconds=attestation_ttl_seconds,
+            bundle_issued_at=bundle_issued_at,
         )
+
+    def _now(self, stage: str) -> datetime:
+        return self._require_aware(self._clock(), f"{stage} clock")
+
+    @staticmethod
+    def _require_aware(value: object, label: str) -> datetime:
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise SourceHarnessError(f"{label} must be a timezone-aware datetime")
+        return value.astimezone(UTC)
+
+    @classmethod
+    def _validate_fidelity_before_freeze(
+        cls,
+        evaluation: FidelityEvaluation,
+        frozen_at: datetime,
+    ) -> None:
+        generated_at = cls._require_aware(
+            evaluation.report.generated_at,
+            "fidelity report timestamp",
+        )
+        if generated_at > frozen_at:
+            raise SourceHarnessError("fidelity report timestamp is later than freeze timestamp")
+        for signoff in evaluation.report.signoffs:
+            reviewed_at = cls._require_aware(
+                signoff.reviewed_at,
+                "fidelity signoff timestamp",
+            )
+            if reviewed_at > generated_at:
+                raise SourceHarnessError(
+                    "fidelity signoff timestamp is later than fidelity report timestamp"
+                )
+            if reviewed_at > frozen_at:
+                raise SourceHarnessError(
+                    "fidelity signoff timestamp is later than freeze timestamp"
+                )
 
     def _assert_packet(self, packet: StatementDraftPacket) -> None:
         packet.assert_binds(self.cache, self.preparation_ledger)

@@ -160,17 +160,22 @@ artifact; another machine must rebuild or consume a separately attested registry
 
 The explicit canary runs a real Lean compile under `--network none`, `--read-only`,
 `--cap-drop ALL`, `--security-opt no-new-privileges`, fixed pids/memory limits, and a no-exec
-temporary filesystem. It then exercises the repository path
-`OciLeanRunner -> TrustedLeanVerifier.observe -> test-only signing gateway`. Before the fixture
-gateway may attest, its independent canary verifier performs a second digest-pinned
-Docker-wrapper execution and returns an authenticated test-only execution receipt bound to the
-signing request and execution evidence.
+temporary filesystem. Its public source-backed fixture follows
+`Builder prepare -> fidelity -> freeze -> bridge -> register -> claim`, materializes the immutable
+solver workspace, and then exercises
+`OciLeanRunner -> TrustedLeanVerifier.observe -> test-only signing gateway -> terminal accepted`.
+Before the fixture gateway may attest, its independent canary verifier performs a second
+digest-pinned Docker-wrapper execution and returns an authenticated test-only execution receipt
+bound to the signing request and execution evidence.
 
 The current fixture requires:
 
 - exact declaration `AutoLean.OCI.fixture`;
 - canonical type `forall` rendered as `∀ (n : Nat), @Eq.{1} Nat n n`;
 - empty observed axiom set;
+- a public Builder handoff produced without the unreviewed-bundle bypass, with source preparation
+  hash `312be270ddb575ce036a7b286199027a2995d867c3e31acd935d70d9911b685d` and bundle handoff hash
+  `770ad9dab1fabd15722aba6cdc938d2172de4fe7a9e166ff508aa219cbc71375`;
 - kernel, build, dependency, and clean-environment gates all true;
 - a changed-to-`True` declaration produces a different authoritative type;
 - host-side candidate replacement is rejected before OCI execution;
@@ -188,7 +193,7 @@ The generated `release-evidence/oci-worker/build.v1.json` and `canary.v2.json` f
 deliberately ignored by Git. They bind the actual image, command policy, command, candidate,
 trusted statement, bundle manifest, and public test-only receipt binding without retaining
 source, proof text, diagnostics, host paths, or credentials. The current policy-V2 canary file
-has SHA-256 `8aa49896f153b763d5887a88b7ee646f0842e72d61f8c0379442332e8eb324b2`.
+has SHA-256 `a83e703add32f9c896b3dbcd5f81982dabcfe5d036799a70cf5b5f9cd500a62e`.
 The V2 execution record separately binds the compile argv hash, query argv hash, sealed
 `Candidate.olean` SHA-256, and `autolean.oci-compile-query-handoff.v1`; its aggregate command hash
 is the canonical transcript hash of those fields. The phase hashes remain attempt-specific because
@@ -218,12 +223,17 @@ profile is not inherited by relabeling the mathlib image.
 
 ## Evidence Boundary
 
-The pure-Lean canary produces verifier-owned execution evidence and uses the lease-bound signing
-gateway only with a local, authenticated **test-only** receipt authority. It records
+The pure-Lean source-backed canary uses synthetic fixture source but a real digest-pinned Lean
+execution. The unchanged frozen bundle passes the public Builder handoff, claim and lease,
+immutable workspace, OCI verifier, independently rerun gateway receipt, and terminal control-plane
+acceptance. It produces verifier-owned execution evidence and uses the lease-bound signing gateway
+only with a local, authenticated **test-only** receipt authority. It records
 `test_gateway_attestation_created=true` and
 `control_plane_accepted_test_fixture=true`, but also records
-`promotion_attestation_created=false`. It does not establish reproducible registry publication,
-mathlib compatibility, FATE success, semantic statement fidelity, or model proof-search quality.
+`execution_authority_class=test-only-local`, `promotion_state=not_a_promotion`, and
+`promotion_attestation_created=false`. It grants no production authority and does not establish
+reproducible registry publication, mathlib compatibility, FATE success, real-source semantic
+statement fidelity, or model proof-search quality.
 The second Docker execution establishes an important anti-spoofing software boundary; it does not
 make two processes operated by one local fixture authority independent in the production sense.
 The pure profile establishes its two-container boundary, while the mathlib profile adds a

@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import asdict, dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
 from threading import Barrier
+from types import SimpleNamespace
 from typing import BinaryIO, cast
 
 import autolean_builder
@@ -40,11 +43,14 @@ from autolean_builder import (
     load_pilot_manifest,
 )
 from autolean_contracts import (
+    AttestationSignerV1,
     AxiomProfileV1,
     DecisionV1,
     EndpointClassV1,
+    FidelityEvidenceArtifactRefV1,
     FidelityRiskV1,
     FormalSpecificationV1,
+    GraphBundleV1,
     HashKindV1,
     LeanEnvironmentV1,
     MathematicalSpecificationV1,
@@ -201,7 +207,9 @@ def _harness(
     tmp_path: Path,
     cache: ReferenceCache | None = None,
     pilot_manifest: PilotManifestV1 | None = None,
+    clock: Callable[[], datetime] | None = None,
 ) -> SourceToStatementHarness:
+    active_clock = clock or (lambda: datetime.now(UTC))
     return SourceToStatementHarness(
         cache or _cache(tmp_path),
         preparation_ledger=SourcePreparationLedger(
@@ -209,6 +217,23 @@ def _harness(
             confinement_root=tmp_path,
         ),
         pilot_manifest=pilot_manifest,
+        clock=active_clock,
+    )
+
+
+def _timestamp_only_evaluation(
+    *,
+    generated_at: datetime,
+    reviewed_at: datetime,
+) -> FidelityEvaluation:
+    return cast(
+        FidelityEvaluation,
+        SimpleNamespace(
+            report=SimpleNamespace(
+                generated_at=generated_at,
+                signoffs=(SimpleNamespace(reviewed_at=reviewed_at),),
+            )
+        ),
     )
 
 
@@ -623,6 +648,13 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
 def test_raw_freeze_and_bridge_primitives_are_not_public_package_api() -> None:
     assert not hasattr(autolean_builder, "freeze_contract")
     assert not hasattr(autolean_builder, "bridge_frozen_contract")
+    freeze_parameters = inspect.signature(SourceToStatementHarness.revalidate_and_freeze).parameters
+    bridge_parameters = inspect.signature(
+        SourceToStatementHarness.revalidate_freeze_and_bridge
+    ).parameters
+    assert "frozen_at" not in freeze_parameters
+    assert "frozen_at" not in bridge_parameters
+    assert "bundle_issued_at" not in bridge_parameters
 
 
 def test_blocked_pilot_reference_cannot_bypass_the_supported_draft_entry(
@@ -918,10 +950,14 @@ def test_freeze_wrapper_delegates_only_after_revalidation(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    frozen_at = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
     cache = _cache(tmp_path)
-    harness = _harness(tmp_path, cache)
+    harness = _harness(tmp_path, cache, clock=lambda: frozen_at)
     packet = harness.prepare_draft(_TEXT_ID, _request())
-    evaluation = cast(FidelityEvaluation, object())
+    evaluation = _timestamp_only_evaluation(
+        generated_at=frozen_at,
+        reviewed_at=frozen_at,
+    )
     observed: dict[str, object] = {}
 
     def fake_freeze(
@@ -931,6 +967,7 @@ def test_freeze_wrapper_delegates_only_after_revalidation(
         source_preparation,
         frozen_by,
         gate,
+        frozen_at,
     ):
         observed.update(
             {
@@ -939,6 +976,7 @@ def test_freeze_wrapper_delegates_only_after_revalidation(
                 "source_preparation": source_preparation,
                 "frozen_by": frozen_by,
                 "gate": gate,
+                "frozen_at": frozen_at,
             }
         )
         return contract
@@ -957,4 +995,106 @@ def test_freeze_wrapper_delegates_only_after_revalidation(
         "source_preparation": packet.preparation_record(),
         "frozen_by": "local-structural-test",
         "gate": None,
+        "frozen_at": frozen_at,
     }
+
+
+def test_freeze_rejects_naive_harness_clock(tmp_path: Path) -> None:
+    naive = datetime(2026, 7, 25, 12, 0)
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache, clock=lambda: naive)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+    evaluation = _timestamp_only_evaluation(
+        generated_at=datetime(2026, 7, 25, 11, 59, tzinfo=UTC),
+        reviewed_at=datetime(2026, 7, 25, 11, 59, tzinfo=UTC),
+    )
+
+    with pytest.raises(SourceHarnessError, match=r"freeze clock.*timezone-aware"):
+        harness.revalidate_and_freeze(
+            packet,
+            evaluation=evaluation,
+            frozen_by="local-structural-test",
+        )
+
+
+@pytest.mark.parametrize(
+    ("generated_at", "reviewed_at", "message"),
+    (
+        (
+            datetime(2026, 7, 25, 12, 0, 1, tzinfo=UTC),
+            datetime(2026, 7, 25, 11, 59, tzinfo=UTC),
+            "fidelity report timestamp is later",
+        ),
+        (
+            datetime(2026, 7, 25, 11, 59, tzinfo=UTC),
+            datetime(2026, 7, 25, 12, 0, 1, tzinfo=UTC),
+            "fidelity signoff timestamp is later than fidelity report",
+        ),
+        (
+            datetime(2026, 7, 25, 11, 59, tzinfo=UTC),
+            datetime(2026, 7, 25, 11, 59, 30, tzinfo=UTC),
+            "fidelity signoff timestamp is later than fidelity report",
+        ),
+    ),
+)
+def test_freeze_rejects_future_fidelity_evidence(
+    tmp_path: Path,
+    generated_at: datetime,
+    reviewed_at: datetime,
+    message: str,
+) -> None:
+    frozen_at = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache, clock=lambda: frozen_at)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+
+    with pytest.raises(SourceHarnessError, match=message):
+        harness.revalidate_and_freeze(
+            packet,
+            evaluation=_timestamp_only_evaluation(
+                generated_at=generated_at,
+                reviewed_at=reviewed_at,
+            ),
+            frozen_by="local-structural-test",
+        )
+
+
+def test_bridge_rejects_issue_time_before_freeze(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    frozen_at = datetime(2026, 7, 25, 12, 0, tzinfo=UTC)
+    issued_at = datetime(2026, 7, 25, 11, 59, 59, tzinfo=UTC)
+    times = iter((frozen_at, issued_at))
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache, clock=lambda: next(times))
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+    evaluation = _timestamp_only_evaluation(
+        generated_at=frozen_at,
+        reviewed_at=frozen_at,
+    )
+
+    def fake_freeze(
+        contract,
+        *,
+        evaluation,
+        source_preparation,
+        frozen_by,
+        gate,
+        frozen_at,
+    ):
+        del contract, evaluation, source_preparation, frozen_by, gate
+        return SimpleNamespace(freeze=SimpleNamespace(frozen_at=frozen_at))
+
+    monkeypatch.setattr(source_harness_module, "_freeze_reviewed_contract", fake_freeze)
+    with pytest.raises(SourceHarnessError, match="later than bundle issue"):
+        harness.revalidate_freeze_and_bridge(
+            packet,
+            evaluation=evaluation,
+            frozen_by="local-structural-test",
+            graphs=cast(GraphBundleV1, object()),
+            bundle_key="source-time-order-test",
+            fidelity_evidence=cast(FidelityEvidenceArtifactRefV1, object()),
+            attestor=cast(AttestationSignerV1, object()),
+            evidence_identity="artifact:sha256:test-only",
+        )

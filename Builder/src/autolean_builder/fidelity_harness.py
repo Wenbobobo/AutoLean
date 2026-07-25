@@ -9,7 +9,9 @@ Builder freeze gate.
 from __future__ import annotations
 
 import hashlib
+from collections.abc import Callable
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from enum import StrEnum
 from typing import Protocol
 
@@ -31,6 +33,7 @@ from autolean_contracts import (
     digest_bytes,
     digest_text,
     stable_identifier,
+    utc_now,
 )
 
 
@@ -661,6 +664,9 @@ class FidelityEvaluation:
 class StatementFidelityHarness:
     """Run independent translation, mutation, semantic review, and evidence assembly."""
 
+    def __init__(self, *, clock: Callable[[], datetime] = utc_now) -> None:
+        self._clock = clock
+
     def run(
         self,
         contract: StatementContractV1,
@@ -776,6 +782,7 @@ class StatementFidelityHarness:
         additional_signoffs: tuple[ReviewerSignoffV1, ...],
     ) -> FidelityReportV1:
         marker = f"harness_evidence_sha256={evidence_hash.value}"
+        recorded_at = self._now()
         candidates_accepted = all(
             item.decision is DecisionV1.ACCEPT for item in review.candidate_verdicts
         )
@@ -874,6 +881,7 @@ class StatementFidelityHarness:
             decision=review.decision,
             independent=review.independent,
             rationale=f"{marker}; {review.rationale}",
+            reviewed_at=recorded_at,
         )
         return FidelityReportV1(
             report_id=stable_identifier("builder-fidelity-report", evidence_hash.value),
@@ -882,7 +890,16 @@ class StatementFidelityHarness:
             checks=checks,
             mutation_results=mutation_results,
             signoffs=(signoff, *additional_signoffs),
+            generated_at=recorded_at,
         )
+
+    def _now(self) -> datetime:
+        value = self._clock()
+        if not isinstance(value, datetime) or value.tzinfo is None or value.utcoffset() is None:
+            raise FidelityHarnessError(
+                "statement fidelity clock must return a timezone-aware datetime"
+            )
+        return value.astimezone(UTC)
 
 
 def _candidate_structure_checks(
