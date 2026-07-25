@@ -25,6 +25,9 @@ _REVIEW_PATH = _ADMISSION_ROOT / "review-evidence.v2.json"
 _MATRIX_PATH = _ADMISSION_ROOT / "source-rule-matrix.v2.json"
 _T4_ATTACHMENT_PATH = _ADMISSION_ROOT / "t4-exact-image-attachment.v1.json"
 _T4_QUERY_PATH = _ADMISSION_ROOT / "t4-declaration-query.v1.json"
+_HUMAN_REVIEW_ROOT = _ADMISSION_ROOT / "human-review"
+_HUMAN_REVIEW_PACKET_PATH = _HUMAN_REVIEW_ROOT / "packet.v1.json"
+_HUMAN_REVIEW_RESPONSE_PATH = _HUMAN_REVIEW_ROOT / "response.template.v1.json"
 _PILOT_MANIFEST_PATH = _ROOT / "Builder" / "pilots" / "self-calibration" / "pilot-manifest.v1.json"
 _REFERENCE_MANIFEST_PATH = _ROOT / "Builder" / "references" / "manifest.v1.json"
 _REFERENCE_CACHE_ROOT = _ROOT / ".cache" / "references"
@@ -334,6 +337,209 @@ def test_t4_exact_image_attachment_replays_query_and_keeps_gap_open() -> None:
     }
     assert authority and all(value is False for value in authority.values())
     assert decision.disposition is PilotBoundaryDispositionV2.GAP
+    assert not (_ADMISSION_ROOT / "admission-receipt.v2.json").exists()
+
+
+def test_t3_human_review_packet_and_unfilled_response_replay_without_authority() -> None:
+    decision = load_pilot_boundary_decision(_DECISION_PATH)
+    packet_bytes = _HUMAN_REVIEW_PACKET_PATH.read_bytes()
+    packet = _load_json_object(_HUMAN_REVIEW_PACKET_PATH)
+    response = _load_json_object(_HUMAN_REVIEW_RESPONSE_PATH)
+    fine = _load_json_object(_ADMISSION_ROOT / "fine-source-spans.v2.json")
+    t4 = _load_json_object(_T4_ATTACHMENT_PATH)
+
+    assert hashlib.sha256(packet_bytes).hexdigest() == (
+        "53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b"
+    )
+    assert packet["schema_version"] == "autolean.model-theory-t3-human-review-packet.v1"
+    assert packet["artifact_kind"] == "public_safe_advisory_review_packet"
+    assert packet["review_effect"] == "advisory_only"
+
+    decision_binding = packet["decision_binding"]
+    assert isinstance(decision_binding, dict)
+    assert (
+        decision_binding["file_sha256"] == hashlib.sha256(_DECISION_PATH.read_bytes()).hexdigest()
+    )
+    assert decision_binding["canonical_sha256"] == decision.canonical_sha256()
+    assert decision_binding["candidate_id"] == decision.candidate.candidate_id
+    assert decision_binding["candidate_revision"] == decision.candidate.revision
+    assert decision_binding["candidate_sha256"] == decision.candidate.candidate_sha256
+    assert decision_binding["disposition"] == "gap"
+    assert decision_binding["selection"] == "not_selected"
+    assert decision_binding["statement_contract"] == "not_frozen"
+
+    evidence = packet["evidence_bindings"]
+    assert isinstance(evidence, dict)
+    fine_binding = evidence["fine_source_spans"]
+    pending_binding = evidence["pending_review"]
+    manifest_binding = evidence["reference_manifest"]
+    implementation = evidence["implementation"]
+    t4_binding = evidence["t4_exact_image"]
+    assert isinstance(fine_binding, dict)
+    assert isinstance(pending_binding, dict)
+    assert isinstance(manifest_binding, dict)
+    assert isinstance(implementation, dict)
+    assert isinstance(t4_binding, dict)
+    assert (
+        fine_binding["file_sha256"]
+        == hashlib.sha256((_ADMISSION_ROOT / "fine-source-spans.v2.json").read_bytes()).hexdigest()
+    )
+    assert (
+        pending_binding["file_sha256"]
+        == hashlib.sha256((_ADMISSION_ROOT / "pending-review.md").read_bytes()).hexdigest()
+    )
+    assert (
+        manifest_binding["file_sha256"]
+        == hashlib.sha256(
+            (_ROOT / "Builder" / "references" / "manifest.v2.json").read_bytes()
+        ).hexdigest()
+    )
+    assert (
+        implementation["sha256"]
+        == hashlib.sha256((_ROOT / decision.implementation.source_path).read_bytes()).hexdigest()
+    )
+    assert implementation["sha256"] == decision.implementation.source_sha256
+    assert implementation["declaration_count"] == len(decision.implementation.declarations) == 46
+    assert (
+        t4_binding["attachment_sha256"]
+        == hashlib.sha256(_T4_ATTACHMENT_PATH.read_bytes()).hexdigest()
+    )
+    assert t4_binding["query_sha256"] == hashlib.sha256(_T4_QUERY_PATH.read_bytes()).hexdigest()
+    assert t4_binding["worker_image"] == t4["execution_binding"]["worker_image"]
+    assert (
+        t4_binding["module_import_closure_sha256"]
+        == t4["observation_summary"]["module_import_closure_sha256"]
+    )
+    assert t4_binding["decision_profile_compatible"] is False
+
+    spans = packet["span_reviews"]
+    fine_spans = fine["spans"]
+    assert isinstance(spans, list)
+    assert isinstance(fine_spans, list)
+    assert len(spans) == len(fine_spans) == 10
+    for review, bound_span in zip(spans, fine_spans, strict=True):
+        assert isinstance(review, dict)
+        assert isinstance(bound_span, dict)
+        assert review["span_id"] == bound_span["span_id"]
+        assert review["requirement_id"] == bound_span["requirement_id"]
+        assert review["segment_id"] == bound_span["segment_id"]
+        assert review["start_offset"] == bound_span["start_offset"]
+        assert review["end_offset"] == bound_span["end_offset"]
+        assert review["raw_sha256"] == bound_span["raw_sha256"]
+        assert review["required_verdicts"] == [
+            "visual_locator_verdict",
+            "semantic_fidelity_verdict",
+        ]
+        assert review["review_effect"] == "advisory_only"
+
+    ambiguities = packet["page_ambiguity_reviews"]
+    fine_ambiguities = fine["locator_ambiguities"]
+    assert isinstance(ambiguities, list)
+    assert isinstance(fine_ambiguities, list)
+    assert len(ambiguities) == len(fine_ambiguities) == 2
+    expected_claims = [(148, 147, "127"), (208, 207, "187")]
+    for review, bound_ambiguity, expected_claim in zip(
+        ambiguities, fine_ambiguities, expected_claims, strict=True
+    ):
+        assert isinstance(review, dict)
+        assert isinstance(bound_ambiguity, dict)
+        assert review["ambiguity_id"] == bound_ambiguity["ambiguity_id"]
+        assert review["locator_snapshot"] == bound_ambiguity["matrix_locator_snapshot"]
+        claimed_page = review["claimed_page"]
+        assert isinstance(claimed_page, dict)
+        assert (
+            claimed_page["pdf_page_1_based"],
+            claimed_page["pdf_page_0_based"],
+            claimed_page["printed_page_label"],
+        ) == expected_claim
+        assert review["required_evidence_fields"] == [
+            "pdf_page_1_based",
+            "pdf_page_0_based",
+            "printed_page_label",
+            "page_render_sha256",
+            "page_label_region_sha256",
+        ]
+        assert review["review_effect"] == "advisory_only"
+
+    verdicts = packet["verdict_enums"]
+    assert isinstance(verdicts, dict)
+    assert "pending" in verdicts["visual_locator_verdict"]
+    assert "insufficient_context" in verdicts["visual_locator_verdict"]
+    assert verdicts["semantic_fidelity_verdict"] == [
+        "pending",
+        "supports",
+        "supports_with_scope_change",
+        "contradicts",
+        "insufficient_evidence",
+    ]
+    assert verdicts["representation_verdict"] == verdicts["semantic_fidelity_verdict"]
+    assert "recommend_admission_review" in verdicts["overall_recommendation"]
+    for key in (
+        "fragment_naming_review",
+        "fin_n_freshness_review",
+        "init_axiom_policy_review",
+        "overall_review",
+        "page_coordinate_policy",
+    ):
+        review = packet[key]
+        assert isinstance(review, dict)
+        assert review["review_effect"] == "advisory_only"
+
+    response_binding = response["packet_binding"]
+    assert isinstance(response_binding, dict)
+    assert response_binding["packet_id"] == packet["packet_id"]
+    assert response_binding["packet_sha256"] == hashlib.sha256(packet_bytes).hexdigest()
+    assert response["submission_state"] == "unfilled_template"
+    assert response["review_effect"] == "advisory_only"
+    response_spans = response["span_reviews"]
+    assert isinstance(response_spans, list)
+    assert len(response_spans) == 10
+    for response_row, packet_row in zip(response_spans, spans, strict=True):
+        assert isinstance(response_row, dict)
+        assert isinstance(packet_row, dict)
+        assert response_row["span_id"] == packet_row["span_id"]
+        assert response_row["visual_locator_verdict"] == "pending"
+        assert response_row["semantic_fidelity_verdict"] == "pending"
+        correction = response_row["locator_correction"]
+        assert isinstance(correction, dict)
+        assert set(correction) == set(packet["locator_correction_fields"])
+        assert all(value is None for value in correction.values())
+        assert response_row["review_effect"] == "advisory_only"
+
+    response_ambiguities = response["page_ambiguity_reviews"]
+    assert isinstance(response_ambiguities, list)
+    assert len(response_ambiguities) == 2
+    for response_row, packet_row in zip(response_ambiguities, ambiguities, strict=True):
+        assert isinstance(response_row, dict)
+        assert isinstance(packet_row, dict)
+        assert response_row["ambiguity_id"] == packet_row["ambiguity_id"]
+        assert response_row["page_ambiguity_verdict"] == "pending"
+        for field in packet_row["required_evidence_fields"]:
+            assert response_row[field] is None
+        assert response_row["review_effect"] == "advisory_only"
+
+    for artifact in (packet, response):
+        authority = artifact["authority_boundary"]
+        assert isinstance(authority, dict)
+        assert authority and all(value is False for value in authority.values())
+    assert packet["public_safety"] == {
+        "contains_textbook_excerpt": False,
+        "contains_local_cache_path": False,
+        "contains_prompt_or_raw_model_output": False,
+        "contains_credentials": False,
+        "page_images_are_generated_locally_and_ignored": True,
+    }
+    public_files = b"\n".join(
+        path.read_bytes()
+        for path in (
+            _HUMAN_REVIEW_PACKET_PATH,
+            _HUMAN_REVIEW_RESPONSE_PATH,
+            _HUMAN_REVIEW_ROOT / "REVIEW-FORM.md",
+            _HUMAN_REVIEW_ROOT / "README.md",
+        )
+    )
+    for forbidden in (b"C:\\\\", b"/home/", b"/Users/", b"/mnt/"):
+        assert forbidden not in public_files
     assert not (_ADMISSION_ROOT / "admission-receipt.v2.json").exists()
 
 

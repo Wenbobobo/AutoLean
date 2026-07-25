@@ -1,0 +1,250 @@
+{
+  "schema_version": "autolean.model-theory-t3-human-review-response.v1",
+  "artifact_kind": "unfilled_advisory_review_response",
+  "submission_state": "unfilled_template",
+  "review_effect": "advisory_only",
+  "packet_binding": {
+    "packet_id": "model-theory-t3-human-review-v1",
+    "packet_path": "Builder/pilots/model-theory-admission/human-review/packet.v1.json",
+    "packet_sha256": "53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b"
+  },
+  "reviewer_record": {
+    "reviewer_id": null,
+    "reviewed_at": null,
+    "qualification_note": null,
+    "identity_authenticated": false,
+    "qualification_authenticated": false,
+    "independence_authenticated": false
+  },
+  "span_reviews": [
+    {
+      "span_id": "free-bound-occurrences-and-sentences",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "capture-avoiding-substitution-and-free-for",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "open-formula-satisfaction-and-assignment-update",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "sentence-satisfaction-assignment-independence",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "semantic-substitution",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "closed-term-quantifier-instances",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "closed-sequent-boundary",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-rule-inventory-and-side-conditions",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-statement",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-universal-right-case",
+      "visual_locator_verdict": "pending",
+      "semantic_fidelity_verdict": "pending",
+      "locator_correction": {
+        "corrected_start_offset": null,
+        "corrected_end_offset": null,
+        "corrected_raw_sha256": null,
+        "pdf_page_1_based": null,
+        "pdf_page_0_based": null,
+        "printed_page_label": null,
+        "page_render_sha256": null
+      },
+      "notes": null,
+      "review_effect": "advisory_only"
+    }
+  ],
+  "page_ambiguity_reviews": [
+    {
+      "ambiguity_id": "section-7-5-page-pair-unreconciled",
+      "page_ambiguity_verdict": "pending",
+      "pdf_page_1_based": null,
+      "pdf_page_0_based": null,
+      "printed_page_label": null,
+      "page_render_sha256": null,
+      "page_label_region_sha256": null,
+      "notes": null,
+      "review_effect": "advisory_only"
+    },
+    {
+      "ambiguity_id": "universal-right-page-pair-unreconciled",
+      "page_ambiguity_verdict": "pending",
+      "pdf_page_1_based": null,
+      "pdf_page_0_based": null,
+      "printed_page_label": null,
+      "page_render_sha256": null,
+      "page_label_region_sha256": null,
+      "notes": null,
+      "review_effect": "advisory_only"
+    }
+  ],
+  "fragment_naming_review": {
+    "fragment_scope_verdict": "pending",
+    "proposed_exact_name": null,
+    "accepted_scope_exclusions": [],
+    "notes": null,
+    "review_effect": "advisory_only"
+  },
+  "fin_n_freshness_review": {
+    "fin_n_representation_verdict": "pending",
+    "freshness_encoding_verdict": "pending",
+    "notes": null,
+    "review_effect": "advisory_only"
+  },
+  "init_axiom_policy_review": {
+    "init_import_policy_verdict": "pending",
+    "axiom_policy_verdict": "pending",
+    "accepted_axioms": [],
+    "notes": null,
+    "review_effect": "advisory_only"
+  },
+  "overall_review": {
+    "overall_recommendation": "pending",
+    "rationale": null,
+    "remaining_blockers": [],
+    "review_effect": "advisory_only",
+    "cannot_issue_admission": true
+  },
+  "public_safety_confirmation": {
+    "contains_textbook_excerpt": false,
+    "contains_local_cache_path": false,
+    "contains_prompt_or_raw_model_output": false,
+    "contains_credentials": false
+  },
+  "authority_boundary": {
+    "human_identity_authenticated": false,
+    "expert_qualification_authenticated": false,
+    "independence_authenticated": false,
+    "builder_admission_authority_present": false,
+    "may_change_boundary_decision": false,
+    "may_issue_admission_receipt": false,
+    "may_freeze_statement": false,
+    "may_handoff_to_prover": false,
+    "may_promote": false,
+    "may_claim_open_problem_progress": false
+  }
+}

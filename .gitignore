@@ -27,6 +27,7 @@ benchmarks/results/
 release-evidence/
 raw-artifacts/
 raw-artifact-manifest.json
+/tmp/pdfs/model-theory-t3-review/
 .env
 *.env
 !.env.example

@@ -1,0 +1,380 @@
+{
+  "schema_version": "autolean.model-theory-t3-human-review-packet.v1",
+  "artifact_kind": "public_safe_advisory_review_packet",
+  "packet_id": "model-theory-t3-human-review-v1",
+  "review_effect": "advisory_only",
+  "decision_binding": {
+    "path": "Builder/pilots/model-theory-admission/decision.v2.json",
+    "file_sha256": "ac0e66857405f0f948641d8579457ded2fab89b19fc5bd37409b95c3919eba57",
+    "canonical_sha256": "f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5",
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "candidate_revision": "t3-boundary-v2",
+    "candidate_sha256": "9e2b9535414bad0c3c9adf55446d60a70452f9052258dcf4cef3105dbe4b2530",
+    "disposition": "gap",
+    "selection": "not_selected",
+    "statement_contract": "not_frozen"
+  },
+  "evidence_bindings": {
+    "fine_source_spans": {
+      "path": "Builder/pilots/model-theory-admission/fine-source-spans.v2.json",
+      "file_sha256": "a6aa79b8d35bf5695acbecac241cb2a15d102f06c34c5ccb441b16327a2356b7",
+      "schema_version": "autolean.public-t3-fine-source-spans.v2",
+      "span_count": 10,
+      "page_ambiguity_count": 2
+    },
+    "pending_review": {
+      "path": "Builder/pilots/model-theory-admission/pending-review.md",
+      "file_sha256": "118bcf1c9e01e142cc246d4c8f7366775b632504672ffb686dd49c5b8032179f"
+    },
+    "reference_manifest": {
+      "path": "Builder/references/manifest.v2.json",
+      "file_sha256": "b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91",
+      "schema_version": "autolean.reference-manifest.v1",
+      "pdf_reference_id": "openlogic-sets-logic-computation-2026-07-12-pdf",
+      "pdf_sha256": "39081a7e3cade6b9d6935e15448fd14279b44708c1a8da2abd30ff817c4a35d9",
+      "pdf_size_bytes": 4914680,
+      "derived_text_reference_id": "openlogic-sets-logic-computation-2026-07-12-text-pypdf-6.14.2",
+      "derived_text_sha256": "6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d",
+      "derived_text_size_bytes": 622790,
+      "derived_text_page_count": 437,
+      "derived_text_method": "pypdf-pdfreader-extract-text-plain-form-feed-v1",
+      "model_egress_policy": "local_only"
+    },
+    "implementation": {
+      "path": "Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean",
+      "sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+      "module_name": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+      "declaration_count": 46
+    },
+    "t4_exact_image": {
+      "attachment_path": "Builder/pilots/model-theory-admission/t4-exact-image-attachment.v1.json",
+      "attachment_sha256": "0891670f7d5651969cd2036cc21e1ebb2255a696934b66192702d13042648b6e",
+      "query_path": "Builder/pilots/model-theory-admission/t4-declaration-query.v1.json",
+      "query_sha256": "167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a",
+      "worker_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",
+      "build_receipt_canonical_sha256": "40e15776cec80a03b9d5b0affd59a3f613b7f1855c48aa0c1e91f24ec0e1eed7",
+      "source_snapshot_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+      "sealed_candidate_sha256": "71dd796831ce3e95497545f7cda6ff5242030afc137775d56a5961f38b9798ae",
+      "declaration_count": 46,
+      "candidate_direct_imports": [
+        "Init",
+        "Mathlib.ModelTheory.Semantics"
+      ],
+      "module_import_closure_count": 2744,
+      "module_import_closure_sha256": "a10239138591c69cf70a398a897fb5ef9b5300964af90f44109a1262d8f05229",
+      "closed_sound_observed_axioms": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "decision_profile_compatible": false
+    }
+  },
+  "verdict_enums": {
+    "visual_locator_verdict": [
+      "pending",
+      "confirmed",
+      "needs_correction",
+      "rejected",
+      "insufficient_context"
+    ],
+    "semantic_fidelity_verdict": [
+      "pending",
+      "supports",
+      "supports_with_scope_change",
+      "contradicts",
+      "insufficient_evidence"
+    ],
+    "page_ambiguity_verdict": [
+      "pending",
+      "page_pair_confirmed",
+      "page_pair_corrected",
+      "unresolved"
+    ],
+    "fragment_scope_verdict": [
+      "pending",
+      "accept_exact_scope",
+      "revise_name_or_scope",
+      "reject_candidate_scope"
+    ],
+    "representation_verdict": [
+      "pending",
+      "supports",
+      "supports_with_scope_change",
+      "contradicts",
+      "insufficient_evidence"
+    ],
+    "init_import_policy_verdict": [
+      "pending",
+      "treat_init_as_implicit",
+      "require_init_in_allowlist",
+      "reject_profile"
+    ],
+    "axiom_policy_verdict": [
+      "pending",
+      "accept_exact_observed_set",
+      "require_axiom_reduction",
+      "reject_profile"
+    ],
+    "overall_recommendation": [
+      "pending",
+      "retain_gap",
+      "revise_candidate",
+      "select_backup",
+      "recommend_admission_review"
+    ]
+  },
+  "locator_correction_fields": [
+    "corrected_start_offset",
+    "corrected_end_offset",
+    "corrected_raw_sha256",
+    "pdf_page_1_based",
+    "pdf_page_0_based",
+    "printed_page_label",
+    "page_render_sha256"
+  ],
+  "page_coordinate_policy": {
+    "pdf_page_1_based": "pdftoppm and human-facing PDF page sequence",
+    "pdf_page_0_based": "pdf_page_1_based minus one",
+    "printed_page_label": "label visibly printed on the source page, if present",
+    "review_effect": "advisory_only"
+  },
+  "span_reviews": [
+    {
+      "span_id": "free-bound-occurrences-and-sentences",
+      "requirement_id": "free-bound-occurrences-and-sentences",
+      "segment_id": "items-6-33-through-6-37",
+      "start_offset": 179126,
+      "end_offset": 181333,
+      "raw_sha256": "64f428589823b795bc34afd9d3c2ff15aef3845001cd6840729239cae8c1eb38",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "capture-avoiding-substitution-and-free-for",
+      "requirement_id": "capture-avoiding-substitution-and-free-for",
+      "segment_id": "items-6-38-through-6-41",
+      "start_offset": 181394,
+      "end_offset": 183958,
+      "raw_sha256": "c6ccf6ab7d6868039b0080ad31b474b69b25384d5f6866a7d751225c361948cb",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "open-formula-satisfaction-and-assignment-update",
+      "requirement_id": "open-formula-satisfaction-and-assignment-update",
+      "segment_id": "definitions-7-7-through-7-11",
+      "start_offset": 194309,
+      "end_offset": 197717,
+      "raw_sha256": "f55b3cb6b1f862699259c4076a40d5f53569f9ebfc72d1f736b48361039f7bd7",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "sentence-satisfaction-assignment-independence",
+      "requirement_id": "sentence-satisfaction-assignment-independence",
+      "segment_id": "section-7-5-assignment-independence",
+      "start_offset": 206573,
+      "end_offset": 207405,
+      "raw_sha256": "ce4d882e1d8278ee026573119d3d8c595a14ca97ca75f27c6c312e6a3e7ed0f2",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "semantic-substitution",
+      "requirement_id": "semantic-substitution",
+      "segment_id": "proposition-7-23",
+      "start_offset": 210137,
+      "end_offset": 210988,
+      "raw_sha256": "99af1bebd17a693aaf684454b6c97ec382e2750cfaf079a5b1b86648cc94ad86",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "closed-term-quantifier-instances",
+      "requirement_id": "closed-term-quantifier-instances",
+      "segment_id": "proposition-7-31",
+      "start_offset": 213852,
+      "end_offset": 214192,
+      "raw_sha256": "e941a7d5462fd51ce7f3af2a535e2be1e835e008e069eeda5282f6ea9e4a828f",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "closed-sequent-boundary",
+      "requirement_id": "closed-sequent-boundary",
+      "segment_id": "definition-10-1",
+      "start_offset": 258935,
+      "end_offset": 260021,
+      "raw_sha256": "725c1868c77d08720792753db46043c368a0f94278b9b88bb1cdf379a7f6d793",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-rule-inventory-and-side-conditions",
+      "requirement_id": "lk-rule-inventory-and-side-conditions",
+      "segment_id": "section-10-3-rule-inventory",
+      "start_offset": 261278,
+      "end_offset": 263415,
+      "raw_sha256": "07c35f45f2e933e20de9e061540bea345dee3a4899e2d04a39161dbb50cd60f8",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-statement",
+      "requirement_id": "lk-validity-and-soundness",
+      "segment_id": "definition-10-27-and-theorem-10-28-statement",
+      "start_offset": 283111,
+      "end_offset": 283352,
+      "raw_sha256": "0b6c4e282d9c890aecd14c4062649974ba9ad9e094c8ac29d17eb95835450473",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "span_id": "lk-validity-and-soundness-universal-right-case",
+      "requirement_id": "lk-validity-and-soundness",
+      "segment_id": "universal-right-soundness-case",
+      "start_offset": 287999,
+      "end_offset": 289391,
+      "raw_sha256": "be527cf613a1ac2d8050440274d1588c14758c07dcb7945d0edda4be98a4dbff",
+      "required_verdicts": [
+        "visual_locator_verdict",
+        "semantic_fidelity_verdict"
+      ],
+      "review_effect": "advisory_only"
+    }
+  ],
+  "page_ambiguity_reviews": [
+    {
+      "ambiguity_id": "section-7-5-page-pair-unreconciled",
+      "span_id": "sentence-satisfaction-assignment-independence",
+      "locator_snapshot": "Section 7.5, Corollary 7.15 and Definitions 7.16-7.17, PDF page 148 / printed page 127",
+      "claimed_page": {
+        "pdf_page_1_based": 148,
+        "pdf_page_0_based": 147,
+        "printed_page_label": "127"
+      },
+      "required_verdict": "page_ambiguity_verdict",
+      "required_evidence_fields": [
+        "pdf_page_1_based",
+        "pdf_page_0_based",
+        "printed_page_label",
+        "page_render_sha256",
+        "page_label_region_sha256"
+      ],
+      "review_effect": "advisory_only"
+    },
+    {
+      "ambiguity_id": "universal-right-page-pair-unreconciled",
+      "span_id": "lk-validity-and-soundness-universal-right-case",
+      "locator_snapshot": "Universal-right case at PDF page 208 / printed page 187",
+      "claimed_page": {
+        "pdf_page_1_based": 208,
+        "pdf_page_0_based": 207,
+        "printed_page_label": "187"
+      },
+      "required_verdict": "page_ambiguity_verdict",
+      "required_evidence_fields": [
+        "pdf_page_1_based",
+        "pdf_page_0_based",
+        "printed_page_label",
+        "page_render_sha256",
+        "page_label_region_sha256"
+      ],
+      "review_effect": "advisory_only"
+    }
+  ],
+  "fragment_naming_review": {
+    "current_candidate_id": "model-theory-closed-level-indexed-fragment",
+    "required_scope_exclusions": [
+      "existential rule constructors",
+      "sequent-level structural rules and cut",
+      "connective rules outside bottom, implication, and universal quantification",
+      "full LK",
+      "completeness"
+    ],
+    "required_verdict": "fragment_scope_verdict",
+    "review_effect": "advisory_only"
+  },
+  "fin_n_freshness_review": {
+    "fin_n_question": "Does the internal Fin n representation preserve the source closed-term and free-for boundary?",
+    "freshness_question": "Does the fresh Fin.last level preserve the source fresh-symbol side condition for universal-right?",
+    "required_verdicts": [
+      "fin_n_representation_verdict",
+      "freshness_encoding_verdict"
+    ],
+    "verdict_enum": "representation_verdict",
+    "review_effect": "advisory_only"
+  },
+  "init_axiom_policy_review": {
+    "observed_direct_imports": [
+      "Init",
+      "Mathlib.ModelTheory.Semantics"
+    ],
+    "observed_axioms": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ],
+    "current_decision_imports_allowlist": [
+      "Mathlib.ModelTheory.Semantics"
+    ],
+    "current_decision_axioms_allowlist": [],
+    "required_verdicts": [
+      "init_import_policy_verdict",
+      "axiom_policy_verdict"
+    ],
+    "review_effect": "advisory_only"
+  },
+  "overall_review": {
+    "required_verdict": "overall_recommendation",
+    "review_effect": "advisory_only",
+    "cannot_issue_admission": true
+  },
+  "public_safety": {
+    "contains_textbook_excerpt": false,
+    "contains_local_cache_path": false,
+    "contains_prompt_or_raw_model_output": false,
+    "contains_credentials": false,
+    "page_images_are_generated_locally_and_ignored": true
+  },
+  "authority_boundary": {
+    "human_identity_authenticated": false,
+    "expert_qualification_authenticated": false,
+    "independence_authenticated": false,
+    "builder_admission_authority_present": false,
+    "may_change_boundary_decision": false,
+    "may_issue_admission_receipt": false,
+    "may_freeze_statement": false,
+    "may_handoff_to_prover": false,
+    "may_promote": false,
+    "may_claim_open_problem_progress": false
+  }
+}
