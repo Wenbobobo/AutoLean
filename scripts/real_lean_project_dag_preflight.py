@@ -12,6 +12,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import os
 import platform
 import re
 import stat
@@ -28,6 +29,7 @@ if __package__ in {None, ""}:
 from benchmarks.real_lean_project_dag import (  # noqa: I001
     RealLeanProjectDagV1,
     load_default_real_lean_project_dag,
+    load_real_lean_project_dag,
 )
 
 
@@ -46,6 +48,97 @@ class RealLeanProjectDagPreflightError(RuntimeError):
 
 def _sha256(path: Path) -> str:
     return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def _snapshot_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    fingerprint = (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+    )
+    if os.name == "nt":
+        return fingerprint
+    return (*fingerprint, metadata.st_ctime_ns)
+
+
+def _fixture_regular_file(source: Path, fixture_root: Path, *, label: str) -> Path:
+    """Return one non-link fixture file that resolves inside the fixture root."""
+
+    root = fixture_root.resolve()
+    raw_source = source if source.is_absolute() else root / source
+    try:
+        raw_source.relative_to(root)
+    except ValueError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} escapes the fixture root") from error
+    try:
+        metadata = raw_source.lstat()
+    except OSError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} is unavailable") from error
+    if raw_source.is_symlink() or not stat.S_ISREG(metadata.st_mode):
+        raise RealLeanProjectDagPreflightError(f"{label} must be a regular non-symlink file")
+    resolved = raw_source.resolve()
+    try:
+        resolved.relative_to(root)
+    except ValueError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} escapes the fixture root") from error
+    return resolved
+
+
+def _snapshot_regular_file(source: Path, destination: Path, *, label: str) -> None:
+    """Copy one stable regular file with exclusive creation into the fresh snapshot."""
+
+    try:
+        metadata = source.lstat()
+    except OSError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} is unavailable") from error
+    if source.is_symlink() or not stat.S_ISREG(metadata.st_mode):
+        raise RealLeanProjectDagPreflightError(f"{label} must be a regular non-symlink file")
+    try:
+        with source.open("rb") as source_stream:
+            before = os.fstat(source_stream.fileno())
+            if _snapshot_fingerprint(before) != _snapshot_fingerprint(metadata):
+                raise RealLeanProjectDagPreflightError(f"{label} changed before snapshot")
+            destination.parent.mkdir(parents=True, exist_ok=True)
+            with destination.open("xb") as destination_stream:
+                while chunk := source_stream.read(1024 * 1024):
+                    destination_stream.write(chunk)
+                destination_stream.flush()
+                os.fsync(destination_stream.fileno())
+            after = os.fstat(source_stream.fileno())
+    except OSError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} snapshot failed") from error
+    if _snapshot_fingerprint(before) != _snapshot_fingerprint(after):
+        raise RealLeanProjectDagPreflightError(f"{label} changed during snapshot")
+    try:
+        snapshot_metadata = destination.lstat()
+    except OSError as error:
+        raise RealLeanProjectDagPreflightError(f"{label} snapshot is unavailable") from error
+    if destination.is_symlink() or not stat.S_ISREG(snapshot_metadata.st_mode):
+        raise RealLeanProjectDagPreflightError(f"{label} snapshot is not a regular file")
+    if snapshot_metadata.st_size != metadata.st_size:
+        raise RealLeanProjectDagPreflightError(f"{label} snapshot size differs from source")
+    destination.chmod(stat.S_IRUSR | stat.S_IRGRP | stat.S_IROTH)
+
+
+def _snapshot_fixture(fixture: RealLeanProjectDagV1, snapshot_root: Path) -> RealLeanProjectDagV1:
+    """Copy only the manifest and its bound sources, then revalidate that copy."""
+
+    fixture_root = fixture.root.resolve()
+    manifest = _fixture_regular_file(
+        fixture.manifest_path, fixture_root, label="real Lean fixture manifest"
+    )
+    snapshot_root.mkdir(mode=0o700)
+    snapshot_manifest = snapshot_root / manifest.relative_to(fixture_root)
+    _snapshot_regular_file(manifest, snapshot_manifest, label="real Lean fixture manifest")
+    for module in fixture.module_topological_order():
+        source = _fixture_regular_file(
+            fixture.source_path(module), fixture_root, label=f"Lean source {module.module}"
+        )
+        destination = snapshot_root / Path(*PurePosixPath(module.file).parts)
+        _snapshot_regular_file(source, destination, label=f"Lean source {module.module}")
+    return load_real_lean_project_dag(snapshot_manifest)
 
 
 def _canonical_json(document: object) -> bytes:
@@ -186,9 +279,13 @@ def clean_build(
 
     if not 1 <= timeout_seconds <= 600:
         raise RealLeanProjectDagPreflightError("timeout must be between 1 and 600 seconds")
-    fixture = load_default_real_lean_project_dag()
-    with tempfile.TemporaryDirectory(prefix="autolean-t7-preflight-") as raw_output:
-        output_root = Path(raw_output)
+    live_fixture = load_default_real_lean_project_dag()
+    with tempfile.TemporaryDirectory(prefix="autolean-t7-preflight-") as raw_workspace:
+        workspace_root = Path(raw_workspace)
+        fixture = _snapshot_fixture(live_fixture, workspace_root / "fixture-snapshot")
+        fixture_manifest_sha256 = fixture.manifest_sha256()
+        output_root = workspace_root / "output"
+        output_root.mkdir(mode=0o700)
         output_root.chmod(stat.S_IRWXU | stat.S_IRWXG | stat.S_IRWXO)
         command = docker_clean_build_command(fixture, output_root, distribution=distribution)
         result = _run(command, timeout_seconds=timeout_seconds)
@@ -208,9 +305,9 @@ def clean_build(
         "scope": "t7_preflight_only",
         "acceptance_result": False,
         "image": SOURCE_V2_IMAGE,
-        "fixture_manifest_sha256": fixture.manifest_sha256(),
+        "fixture_manifest_sha256": fixture_manifest_sha256,
         "compiled_modules": compiled_modules,
-        "declaration_graph_reverse_closure_validated": True,
+        "declared_content_graph_reverse_closure_validated": True,
         "changed_source_recompiled": False,
         "network_accessed_by_container": False,
         "provider_evidence_created": False,
@@ -223,9 +320,7 @@ def clean_build(
 def _parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
     subparsers = parser.add_subparsers(dest="command", required=True)
-    validate = subparsers.add_parser(
-        "validate", help="validate the byte-bound real Lean fixture"
-    )
+    validate = subparsers.add_parser("validate", help="validate the byte-bound real Lean fixture")
     validate.add_argument(
         "--json", action="store_true", help="render a canonical diagnostic record"
     )
@@ -251,7 +346,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "fixture_manifest_sha256": fixture.manifest_sha256(),
                 "module_count": len(fixture.modules),
                 "declaration_count": len(fixture.declarations),
-                "declaration_graph_reverse_closure_validated": True,
+                "declared_content_graph_reverse_closure_validated": True,
                 "changed_source_recompiled": False,
             }
             if args.json:
