@@ -41,7 +41,9 @@ runner reports success.
     [the parallel execution plan](phase-1-parallel-execution.md) assigns work packages, and
     [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
 14. [Builder domain pilot](domain-pilot-selection.md) records the conditional model-theory
-    primary, curvature's reference-only boundary, backups, and selection gates.
+    primary, curvature's reference-only boundary, backups, and selection gates. The
+    [T3 human-review packet](../Builder/pilots/model-theory-admission/human-review/README.md)
+    provides the reproducible reviewer view without claiming that review or admission occurred.
 15. [Multi-agent self-calibration](self-calibration-decision.md) defines the independent
     candidate, textbook/open-problem alignment, adversarial-review, and pinned-Library-spike
     decision loop that precedes manual Builder calibration.
@@ -49,7 +51,9 @@ runner reports success.
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
     `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
-    independent versus compositional proof-dependency gates.
+    independent versus compositional proof-dependency gates. The
+    [executable proof-dependency spike](proof-dependency-gate-spike.md) records a host-mounted
+    source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.
 18. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
     deliberately narrow evidence boundary.
 19. [Operations and release](operations-release.md) defines evidence collection and the conditions
