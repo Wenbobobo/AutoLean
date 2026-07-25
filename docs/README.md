@@ -75,6 +75,9 @@ runner reports success.
 25. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.
+26. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
+    `Arithmetic.score` API change to separate declaration-invalidation and module-rebuild plans,
+    then records the non-acceptance failure/rebuild/reuse boundary.
 
 The source audits that informed these decisions live in [audits/](audits/):
 [Archon](audits/archon-audit.md), [AutoArchon](audits/autoarchon-audit.md), and

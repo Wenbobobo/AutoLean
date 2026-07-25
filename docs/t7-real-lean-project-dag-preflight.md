@@ -27,10 +27,10 @@ The validator rejects a source hash change, file/module mismatch, changed source
 duplicate declaration identity, unknown dependency, cyclic module/declaration graph, an import
 that does not correspond to a cross-module content edge, or a cross-module edge without its Lean
 import. It exposes deterministic forward dependency closure and reverse API-change closure for
-focused tests. That reverse closure is graph validation only: this preflight does **not** modify a
-source declaration and recompile the affected modules. Changed-source invalidation/rebuild remains
-scope for the later project-level acceptance harness. It also does not infer mathematical meaning
-from syntax; Builder still owns that work.
+focused tests. This baseline clean-build command does not modify a source declaration. The
+side-by-side [changed-source preflight](t7-real-lean-changed-source-preflight.md) now exercises one
+committed API-change case, but remains preflight rather than project-level acceptance. Neither
+runner infers mathematical meaning from syntax; Builder still owns that work.
 
 Run the offline structural check with:
 

@@ -1,0 +1,107 @@
+{
+  "schema_version": "autolean.real-lean-project-dag-change-case.v1",
+  "name": "arithmetic-score-parameter-propagation",
+  "baseline_manifest_file": "real-lean-content-manifest.v1.json",
+  "baseline_manifest_sha256": "45dc2fe5dbff4fbc122c21aff1b653ccb941c08e1abc3d66843b0478b873cdf0",
+  "changed_declaration_ids": ["arithmetic.score"],
+  "expected_declaration_reverse_closure": [
+    "arithmetic.score",
+    "capstone.target-nat",
+    "relations.exact-score",
+    "relations.positive-score",
+    "relations.seed-is-bounded",
+    "capstone.target-is-fifteen",
+    "capstone.target-is-positive",
+    "relations.score-certificate",
+    "relations.score-is-nonzero",
+    "capstone.final-certificate",
+    "capstone.capstone"
+  ],
+  "expected_module_reverse_import_closure": [
+    "AutoLean.ProjectDagPreflight.Arithmetic",
+    "AutoLean.ProjectDagPreflight.Relations",
+    "AutoLean.ProjectDagPreflight.Capstone"
+  ],
+  "failure_probe_module": "AutoLean.ProjectDagPreflight.Relations",
+  "expected_baseline_canonical_type_sha256": "3d1917aa425fd7059394e1413a9cf36a1304374e10ea4b88200fd2d34ce749d4",
+  "expected_successor_canonical_type_sha256": "8cdc3fc38998265195d830dd7e0978f73e57d2b441a478bc377a2e80940f3e30",
+  "edits": [
+    {
+      "kind": "upstream_api_change",
+      "module": "AutoLean.ProjectDagPreflight.Arithmetic",
+      "file": "lean/AutoLean/ProjectDagPreflight/Arithmetic.lean",
+      "baseline_source_sha256": "cee33f02aac07983481357e12e3e25ce71d29feab3189e9ca7fb08e2097093ec",
+      "successor_source_sha256": "dd5512ce69f37948159d6c70cb54beb6c89aab96faab78fa4314b25ad6b5ea02",
+      "replacements": [
+        {
+          "old": "def score : Nat := sumSeeds + tripleSeed",
+          "new": "def score (bonus : Nat) : Nat := sumSeeds + tripleSeed + bonus",
+          "expected_occurrences": 1
+        }
+      ]
+    },
+    {
+      "kind": "successor_compatibility",
+      "module": "AutoLean.ProjectDagPreflight.Relations",
+      "file": "lean/AutoLean/ProjectDagPreflight/Relations.lean",
+      "baseline_source_sha256": "2c808371f0fc24e3d67b7d04e21aa23ed73da8d18388eafd827d3fb4513d7f60",
+      "successor_source_sha256": "efda21da628fda6a0ea4dda3721c4cfab41aa524f8962a5a3aad59e69f8191ab",
+      "replacements": [
+        {
+          "old": "theorem exactScore : AutoLean.ProjectDagPreflight.Arithmetic.score = 13 := rfl",
+          "new": "theorem exactScore : AutoLean.ProjectDagPreflight.Arithmetic.score 0 = 13 := rfl",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "theorem positiveScore : 0 < AutoLean.ProjectDagPreflight.Arithmetic.score := by",
+          "new": "theorem positiveScore : 0 < AutoLean.ProjectDagPreflight.Arithmetic.score 0 := by",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "    AutoLean.ProjectDagPreflight.Arithmetic.score = 13 ∧",
+          "new": "    AutoLean.ProjectDagPreflight.Arithmetic.score 0 = 13 ∧",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "      0 < AutoLean.ProjectDagPreflight.Arithmetic.score :=",
+          "new": "      0 < AutoLean.ProjectDagPreflight.Arithmetic.score 0 :=",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "theorem scoreIsNonzero : AutoLean.ProjectDagPreflight.Arithmetic.score ≠ 0 :=",
+          "new": "theorem scoreIsNonzero : AutoLean.ProjectDagPreflight.Arithmetic.score 0 ≠ 0 :=",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "      AutoLean.ProjectDagPreflight.Arithmetic.score := by",
+          "new": "      AutoLean.ProjectDagPreflight.Arithmetic.score 0 := by",
+          "expected_occurrences": 1
+        }
+      ]
+    },
+    {
+      "kind": "successor_compatibility",
+      "module": "AutoLean.ProjectDagPreflight.Capstone",
+      "file": "lean/AutoLean/ProjectDagPreflight/Capstone.lean",
+      "baseline_source_sha256": "7f3d2d55093f1c90e3976b69d258c5b44c4d0bffeb05f4fdff9e243f482328af",
+      "successor_source_sha256": "53014e9d7130a3286eebebbc4cc75e2d1b87d0d6636148ed46c175542462620a",
+      "replacements": [
+        {
+          "old": "  AutoLean.ProjectDagPreflight.Arithmetic.score +",
+          "new": "  AutoLean.ProjectDagPreflight.Arithmetic.score 0 +",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "        (And (AutoLean.ProjectDagPreflight.Arithmetic.score = 13)",
+          "new": "        (And (AutoLean.ProjectDagPreflight.Arithmetic.score 0 = 13)",
+          "expected_occurrences": 1
+        },
+        {
+          "old": "          (0 < AutoLean.ProjectDagPreflight.Arithmetic.score))) :=",
+          "new": "          (0 < AutoLean.ProjectDagPreflight.Arithmetic.score 0))) :=",
+          "expected_occurrences": 1
+        }
+      ]
+    }
+  ]
+}
