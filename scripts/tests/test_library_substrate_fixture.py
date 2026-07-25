@@ -4,6 +4,7 @@ import importlib.util
 import json
 import os
 import shutil
+import subprocess
 import sys
 import tempfile
 from pathlib import Path
@@ -191,6 +192,27 @@ def test_static_fallback_is_explicit_about_what_it_does_not_prove() -> None:
     assert "image" not in result
     assert "no_lean_compile_observation" in result["non_claims"]
     assert "no_proof_admission" in result["non_claims"]
+
+
+@pytest.mark.parametrize(
+    "command",
+    (
+        ("Library/scripts/run_substrate_canary.py",),
+        ("-m", "Library.scripts.run_substrate_canary"),
+    ),
+)
+def test_static_canary_supports_direct_and_module_invocation(command: tuple[str, ...]) -> None:
+    project_root = Path(__file__).resolve().parents[2]
+    completed = subprocess.run(
+        [sys.executable, *command, "static", "--reason", "entrypoint_test"],
+        cwd=project_root,
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    result = json.loads(completed.stdout)
+    assert result["mode"] == "static_fallback"
+    assert result["fallback_reason"] == "entrypoint_test"
 
 
 def test_real_canary_materializes_only_validated_profile_modules(tmp_path: Path) -> None:

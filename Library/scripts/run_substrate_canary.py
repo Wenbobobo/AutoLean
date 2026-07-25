@@ -23,9 +23,18 @@ import sys
 import tempfile
 from collections.abc import Sequence
 from pathlib import Path
-from typing import Final, NoReturn
+from typing import Final, NoReturn, TypedDict, cast
 
-from verify_substrate_fixture import (
+# A direct ``python Library/scripts/run_substrate_canary.py`` invocation gives
+# Python only this script directory on ``sys.path``.  Keep that operator path
+# working while using the repository-root namespace import that mypy can
+# resolve under ``--explicit-package-bases``.
+if __package__ in {None, ""}:
+    repository_root = str(Path(__file__).resolve().parents[2])
+    if repository_root not in sys.path:
+        sys.path.insert(0, repository_root)
+
+from Library.scripts.verify_substrate_fixture import (
     EXPECTED_CANDIDATES,
     FIXTURE_ROOT,
     MODULE_BY_NAME,
@@ -45,6 +54,18 @@ HISTORICAL_AXIOMS: Final = ("Classical.choice", "Quot.sound", "propext")
 
 class CanaryError(RuntimeError):
     """The requested real diagnostic run could not complete."""
+
+
+class DirectDependencyObservation(TypedDict):
+    """Validated host-mounted query record used only by this local diagnostic."""
+
+    authority: str
+    candidate_owns_target: bool
+    canonical_type: str
+    declaration: str
+    direct_proof_dependencies: tuple[str, ...]
+    observed_axioms: tuple[str, ...]
+    schema_version: str
 
 
 def fail(message: str) -> NoReturn:
@@ -67,16 +88,32 @@ def _run(
         raise CanaryError("subprocess failed") from error
 
 
-def _parse_query(raw: str, *, task_mode: str) -> dict[str, object]:
+def _sorted_unique_names(value: object, *, task_mode: str, field: str) -> tuple[str, ...]:
+    if not isinstance(value, list):
+        fail(f"{task_mode} query {field} is invalid")
+    names: list[str] = []
+    for name in value:
+        if not isinstance(name, str):
+            fail(f"{task_mode} query {field} is invalid")
+        names.append(name)
+    if names != sorted(set(names)):
+        fail(f"{task_mode} query {field} is not sorted and unique")
+    return tuple(names)
+
+
+def _parse_query(raw: str, *, task_mode: str) -> DirectDependencyObservation:
     lines = raw.splitlines()
     if len(lines) != 1:
         fail(f"{task_mode} query did not emit exactly one JSON record")
     try:
-        value = json.loads(lines[0])
+        raw_value: object = json.loads(lines[0])
     except json.JSONDecodeError as error:
         raise CanaryError(f"{task_mode} query did not emit JSON") from error
-    if not isinstance(value, dict):
+    if not isinstance(raw_value, dict) or any(
+        not isinstance(key, str) for key in raw_value
+    ):
         fail(f"{task_mode} query output must be an object")
+    value = cast(dict[str, object], raw_value)
     required = {
         "authority",
         "candidate_owns_target",
@@ -88,25 +125,41 @@ def _parse_query(raw: str, *, task_mode: str) -> dict[str, object]:
     }
     if set(value) != required:
         fail(f"{task_mode} query schema drifted")
-    if value["authority"] != "diagnostic-host-mounted-preflight-only":
+    authority = value["authority"]
+    if authority != "diagnostic-host-mounted-preflight-only":
         fail(f"{task_mode} query authority label drifted")
-    if value["schema_version"] != "autolean.library-substrate-direct-dependency-query.v2":
+    schema_version = value["schema_version"]
+    if schema_version != "autolean.library-substrate-direct-dependency-query.v2":
         fail(f"{task_mode} query protocol drifted")
     if value["candidate_owns_target"] is not True or value["declaration"] != TARGET_DECLARATION:
         fail(f"{task_mode} query did not establish Candidate ownership")
-    for field in ("canonical_type",):
-        if not isinstance(value[field], str) or not value[field]:
-            fail(f"{task_mode} query {field} is invalid")
-    for field in ("direct_proof_dependencies", "observed_axioms"):
-        names = value[field]
-        if not isinstance(names, list) or any(not isinstance(name, str) for name in names):
-            fail(f"{task_mode} query {field} is invalid")
-        if names != sorted(set(names)):
-            fail(f"{task_mode} query {field} is not sorted and unique")
-    return value
+    canonical_type = value["canonical_type"]
+    if not isinstance(canonical_type, str) or not canonical_type:
+        fail(f"{task_mode} query canonical_type is invalid")
+    direct_proof_dependencies = _sorted_unique_names(
+        value["direct_proof_dependencies"],
+        task_mode=task_mode,
+        field="direct_proof_dependencies",
+    )
+    observed_axioms = _sorted_unique_names(
+        value["observed_axioms"],
+        task_mode=task_mode,
+        field="observed_axioms",
+    )
+    return {
+        "authority": authority,
+        "candidate_owns_target": True,
+        "canonical_type": canonical_type,
+        "declaration": TARGET_DECLARATION,
+        "direct_proof_dependencies": direct_proof_dependencies,
+        "observed_axioms": observed_axioms,
+        "schema_version": schema_version,
+    }
 
 
-def _validate_pair(observations: dict[str, dict[str, object]]) -> dict[str, object]:
+def _validate_pair(
+    observations: dict[str, DirectDependencyObservation],
+) -> dict[str, object]:
     independent = observations["independent_reproof"]
     compositional = observations["compositional_bridge"]
     independent_direct = set(independent["direct_proof_dependencies"])
@@ -119,7 +172,6 @@ def _validate_pair(observations: dict[str, dict[str, object]]) -> dict[str, obje
     compositional_type = compositional["canonical_type"]
     if independent_type != compositional_type:
         fail("candidate queries do not have the same canonical target type")
-    assert isinstance(independent_type, str)
     type_sha256 = hashlib.sha256(independent_type.encode("utf-8")).hexdigest()
     if type_sha256 != HISTORICAL_TYPE_SHA256:
         fail("split target canonical type differs from the retained T4 historical reference")
@@ -277,7 +329,7 @@ def _run_one_real(
     snapshot_root: Path,
     workspace_root: Path,
     profile: ValidatedProfileBoundary,
-) -> dict[str, object]:
+) -> DirectDependencyObservation:
     runtime_root = _materialize_runtime(snapshot_root, workspace_root, profile)
     compiled = workspace_root / "compiled" / profile.task_mode
     compiled.mkdir(parents=True, mode=0o777)
