@@ -30,10 +30,10 @@ selection authority. A failed spike is a gap report for its candidate, not a lic
 theorem silently. If neither candidate reaches the required boundary, the pilot moves to the
 Cea-type or van Kampen backup after the same selection process.
 
-The [backup pilot audit](research/backup-pilot-audit-2026-07-25.md) conditionally ranks a
-pointwise Cea comparison slice ahead of van Kampen and records the latter's source-rights and
-active-upstream blockers. It is research input only: it selects, compiles, admits, and freezes no
-candidate.
+The [backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
+comparison ahead of van Kampen only as a read-only audit lead. Its honest pointwise graph misses
+the size and coverage gates, while van Kampen retains source-rights and active-upstream blockers;
+neither candidate qualifies. The audit selects, compiles, admits, and freezes no candidate.
 
 ## Curvature reference boundary
 

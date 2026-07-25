@@ -6,11 +6,17 @@ Audit date: 2026-07-25
 
 ## Conclusion
 
-If the current model-theory pilot receives an authorized backup disposition, evaluate an
-abstract Cea comparison slice first. Pause the van Kampen candidate.
+Use an abstract pointwise Cea comparison as the first **read-only backup audit lead**. It is not
+a qualifying backup pilot: its reproducible pointwise-only mathematical graph has 8 nodes, below
+the 20-node floor, and only 2 of 8 nodes map directly to exact generic pinned Mathlib/core
+representations in this desk audit. Even an optimistic count that assumes two uncompiled
+adapters gives 4 of 8 nodes, 50 percent, below the 70--80 percent target. Pause the van Kampen
+candidate. The current decision is therefore that neither backup qualifies for selection.
 
-This ordering is conditional. It does not admit either candidate, freeze a statement, authorize
-source ingestion, prove API compatibility, or establish progress on an open problem. No expert
+This ordering is only for desk, source-lead, and API inspection. Those read-only checks may
+continue under the current T3 `gap/not_selected` record; they do not require an authorized backup
+disposition. They do not admit either candidate, authorize source ingestion or a rights decision,
+freeze a statement, prove API compatibility, or establish progress on an open problem. No expert
 review, independent semantic review, pinned-Library compile spike, Builder admission, Prover
 handoff, or promotion was performed by this audit.
 
@@ -31,7 +37,8 @@ bridge have been stated and reviewed.
 
 The audit uses the following minimum boundary:
 
-1. 20--40 mathematical/formal dependency nodes, small enough for a first real Library slice;
+1. a reviewed 20--40-node mathematical target closure, small enough for a first real Library
+   slice; any compiled formal graph is reported separately and is never added to that count;
 2. a source and rights route that can be bound to exact bytes and exact spans;
 3. approximately 70--80 percent of prerequisite infrastructure already available in the pinned
    public Mathlib API;
@@ -41,8 +48,9 @@ The audit uses the following minimum boundary:
    pilot itself as an open-problem result; and
 6. no exact collision with active upstream work.
 
-The percentages below are desk-audit estimates over the proposed graph. They count expected
-source/API mappings, not compiled declarations or completed proofs.
+These are admission criteria, not targets to recover by changing the node granularity or adding
+future theorems. The percentages below are desk-audit estimates over the pointwise-only graph.
+They count source/API mappings, not compiled declarations or completed proofs.
 
 ## Evidence boundary
 
@@ -56,12 +64,17 @@ Logic source chains. Neither iFEM nor Hatcher has a manifest entry, cached artif
 receipt, rights decision, or source span available to either candidate.
 
 The [Library lock](../../Library/lake-manifest.json) pins Mathlib revision
-`8f9d9cff6bd728b17a24e163c9402775d9e6a365`. The official Mathlib source at that revision contains
-[Lax--Milgram infrastructure](https://github.com/leanprover-community/mathlib4/blob/8f9d9cff6bd728b17a24e163c9402775d9e6a365/Mathlib/Analysis/InnerProductSpace/LaxMilgram.lean),
-including bounded real bilinear forms, `IsCoercive`, `continuousLinearMapOfBilin`, and
-`continuousLinearEquivOfBilin`. That source inspection supports a mapping estimate only. This
-audit did not materialize dependencies in `Library/.lake/packages`, compile a candidate, or query
-the declarations in a pinned worker.
+`8f9d9cff6bd728b17a24e163c9402775d9e6a365`. The official pinned
+[Lax--Milgram source](https://github.com/leanprover-community/mathlib4/blob/8f9d9cff6bd728b17a24e163c9402775d9e6a365/Mathlib/Analysis/InnerProductSpace/LaxMilgram.lean)
+represents a bounded real bilinear form as `V ->L[R] V ->L[R] R` and exposes an `IsCoercive`
+predicate. This audit counts the exact continuous-linear-map representation, and treats an
+explicit-constant coercivity bridge only as a possible adapter. It does not count completeness,
+the Lax--Milgram equivalence, or any solution theorem.
+
+The same source inspection supports desk mappings to generic real normed-space, submodule, norm,
+and ordered-real infrastructure. This audit did not materialize dependencies in
+`Library/.lake/packages`, compile a candidate, or query any proposed declaration in a pinned
+worker.
 
 ### Candidate textbook lead
 
@@ -76,9 +89,10 @@ All three primary-source links were accessed on 2026-07-25.
 
 This is a source lead, not a rights decision. Before source preparation, an operator must add a
 manifest-bound parent artifact and derived text, verify their hashes, bind attribution and an
-egress ceiling, and record a rights review. A source analyst must also identify the exact
-preceding definitions of the variational problem, continuity, coercivity, and Galerkin
-approximation; Chapter 24 alone does not authorize an inferred dependency boundary.
+egress ceiling, and record a rights review. A source analyst must identify the exact spans for
+continuity, coercivity, Galerkin orthogonality, and the comparison argument. Definitions of the
+continuous and discrete variational problems may be retained as source context for later work,
+but they are not prerequisites of the pointwise contract below.
 
 ## Candidate 1: pointwise Cea comparison
 
@@ -87,67 +101,83 @@ approximation; Chapter 24 alone does not authorize an inferred dependency bounda
 The candidate takes:
 
 ```text
-V          a complete real inner-product space
-B          a bundled continuous bilinear form on V
-V_h        a linear subspace of V
-u          the continuous solution value
-u_h        a member of V_h
-alpha, M   explicit real constants with 0 < alpha and 0 <= M
+V          a real normed vector space
+B          a bundled continuous real bilinear form on V
+V_h        a real linear subspace of V
+u, u_h     arbitrary values in V
+alpha, M   real constants
 
-coercivity:             alpha * norm(v) * norm(v) <= B(v, v)
-continuity:             abs(B(v, w)) <= M * norm(v) * norm(w)
-Galerkin orthogonality: for every w in V_h, B(u - u_h, w) = 0
+trial membership:       u_h in V_h
+positivity:              0 < alpha and 0 <= M
+coercivity:              forall v : V,
+                           alpha * norm(v) * norm(v) <= B(v, v)
+continuity:              forall v w : V,
+                           abs(B(v, w)) <= M * norm(v) * norm(w)
+Galerkin orthogonality:  forall w : V, w in V_h ->
+                           B(u - u_h, w) = 0
 ```
 
 and concludes:
 
 ```text
-for every v_h in V_h,
+forall v_h : V, v_h in V_h ->
   norm(u - u_h) <= (M / alpha) * norm(u - v_h).
 ```
 
-Existence and uniqueness of `u` can map to Lax--Milgram. Existence of `u_h`, finite-element
-geometry, Sobolev regularity, interpolation estimates, convergence rates, and the infimum form
-are outside the first boundary. In particular, the first theorem may assume a Galerkin solution;
-it must not imply that Mathlib already supplies the discrete existence theorem.
+The universal quantifiers in coercivity, continuity, orthogonality, and the conclusion are part
+of the contract. The theorem treats `u` and `u_h` as values satisfying explicit hypotheses, not
+as continuous and discrete solutions. The proof uses only bilinearity and the displayed
+pointwise bound; the continuous-linear-map bundle is an exact pinned API representation, not an
+invocation of Lax--Milgram. Inner-product structure, completeness, and an existence theorem are
+not prerequisites.
 
-### Estimated 28-node statement graph
+### Pointwise-only 8-node mathematical graph
 
-| Node | Role | Expected disposition |
-| --- | --- | --- |
-| `cea-01-real-scalars` | Ordered scalar field | Existing Mathlib/core infrastructure |
-| `cea-02-normed-add-group` | Normed additive structure on `V` | Existing Mathlib infrastructure |
-| `cea-03-inner-product-space` | Real inner-product structure | Existing Mathlib infrastructure |
-| `cea-04-complete-space` | Completeness required by Lax--Milgram | Existing Mathlib infrastructure |
-| `cea-05-bundled-bilinear-form` | `V ->L[R] V ->L[R] R` representation | Existing Mathlib infrastructure |
-| `cea-06-form-evaluation` | Evaluation and linearity in both arguments | Existing Mathlib infrastructure |
-| `cea-07-continuity-bound` | Explicit operator bound with constant `M` | Expected generic API mapping |
-| `cea-08-coercivity-predicate` | Coercivity with explicit `alpha` | Expected `IsCoercive` mapping |
-| `cea-09-bilinear-to-linear-map` | `continuousLinearMapOfBilin` | Existing pinned Mathlib declaration |
-| `cea-10-lax-milgram-equivalence` | Ambient solution equivalence | Existing pinned Mathlib declaration |
-| `cea-11-trial-submodule` | Linear subspace `V_h` | Existing Mathlib infrastructure |
-| `cea-12-submodule-membership` | Typed membership in `V_h` | Existing Mathlib infrastructure |
-| `cea-13-submodule-zero` | Zero comparison member | Existing Mathlib infrastructure |
-| `cea-14-submodule-add` | Addition closure | Existing Mathlib infrastructure |
-| `cea-15-submodule-sub` | Negation/subtraction closure | Existing Mathlib infrastructure |
-| `cea-16-error-term` | `e = u - u_h` | Existing additive infrastructure |
-| `cea-17-norm-zero-case` | `norm e = 0` branch | Existing Mathlib infrastructure |
-| `cea-18-norm-nonnegative` | Positivity of norms | Existing Mathlib infrastructure |
-| `cea-19-positive-division` | `0 < alpha` and `M / alpha` order facts | Existing Mathlib infrastructure |
-| `cea-20-real-cancellation` | Cancel the nonzero error norm | Existing Mathlib infrastructure |
-| `cea-21-source-solution-spec` | Source-bound variational equation for `u` | New Builder-owned mapping |
-| `cea-22-galerkin-solution-spec` | Source-bound discrete equation for `u_h` | New Builder-owned mapping |
-| `cea-23-trial-membership-obligation` | Explicit proof that `u_h` is in `V_h` | New candidate obligation |
-| `cea-24-galerkin-orthogonality` | Residual vanishes on every trial member | New candidate lemma |
-| `cea-25-comparison-member` | Arbitrary `v_h` with membership proof | New quantifier boundary |
-| `cea-26-residual-rewrite` | `B(e,e) = B(e,u-v_h)` | New candidate lemma |
-| `cea-27-bound-chain` | Coercivity-to-continuity inequality chain | New candidate lemma |
-| `cea-28-pointwise-comparison` | Final universally quantified estimate | New target statement |
+The counting unit follows the repository's [graph separation](../architecture.md): a
+mathematical node is a separately nameable definition or theorem with its own normalized claim
+and dependency edges. The existing
+[pilot manifest](../../Builder/pilots/self-calibration/pilot-manifest.v1.json) represents such
+nodes with a `node_id`, kind, normalized claim, formalization target, dependencies, and review
+state. Raw binders such as `u`, individual structure fields, uses of a hypothesis, algebraic
+rewrites inside a proof, Lean imports, and execution tasks are not additional mathematical
+nodes. Lean declarations, instances, and imports belong to a separate formal graph, which this
+audit has not compiled and therefore cannot honestly count.
 
-Twenty of 28 nodes are expected to map to existing infrastructure, yielding a 71 percent point
-estimate. Allowing for uncertainty in the explicit continuity/coercivity adapters gives the
-reported 70--75 percent range. This estimate is not a compile result, API acceptance, proof, or
-semantic-fidelity judgement.
+| Node | Normalized claim | Depends on | Mapping status |
+| --- | --- | --- | --- |
+| `cea-01-normed-bilinear-setting` | `V` is a real normed vector space and `B : V ->L[R] V ->L[R] R` | None | Direct pinned Mathlib/core representations |
+| `cea-02-trial-data` | `V_h` is a real submodule and `u u_h : V` | `cea-01-normed-bilinear-setting` | Direct `Submodule` representation |
+| `cea-03-coercivity-all-v` | `0 < alpha` and `forall v : V`, `alpha * norm(v) * norm(v) <= B(v,v)` | `cea-01-normed-bilinear-setting` | Possible coercivity adapter; uncompiled |
+| `cea-04-continuity-all-v-w` | `0 <= M` and `forall v w : V`, `abs(B(v,w)) <= M * norm(v) * norm(w)` | `cea-01-normed-bilinear-setting` | Possible bounded-bilinear adapter; uncompiled |
+| `cea-05-galerkin-admissibility` | `u_h in V_h` and `forall w : V`, `w in V_h -> B(u-u_h,w) = 0` | `cea-01-normed-bilinear-setting`, `cea-02-trial-data` | New candidate hypothesis node |
+| `cea-06-residual-identity` | For every `v_h in V_h`, `B(u-u_h,u-u_h) = B(u-u_h,u-v_h)` | `cea-01-normed-bilinear-setting`, `cea-02-trial-data`, `cea-05-galerkin-admissibility` | New candidate lemma |
+| `cea-07-pre-cancellation-bound` | For every `v_h in V_h`, `alpha * norm(u-u_h)^2 <= M * norm(u-u_h) * norm(u-v_h)` | `cea-03-coercivity-all-v`, `cea-04-continuity-all-v-w`, `cea-06-residual-identity` | New candidate lemma |
+| `cea-08-pointwise-target` | For every `v_h in V_h`, `norm(u-u_h) <= (M/alpha) * norm(u-v_h)` | `cea-02-trial-data`, `cea-03-coercivity-all-v`, `cea-07-pre-cancellation-bound` | New target statement |
+
+The frozen mapping rule distinguishes representations from claims. A representation node is
+direct only when exact generic structures are identified in pinned source. A claim node is
+direct only when an exact reusable predicate or theorem is identified; merely being writable
+with `forall` and equality is not coverage. An adapter has an analogous pinned declaration but
+its type, constants, or quantifiers have not compiled against this contract. Candidate-specific
+hypotheses and lemmas are new. On that rule, 2 of 8 nodes map directly, giving 25 percent.
+If both uncompiled adapters at `cea-03` and `cea-04` require no new bridge declaration, the
+optimistic estimate is 4 of 8, or 50 percent. Neither estimate reaches the 70--80 percent gate.
+The only auditable graph is also below the 20-node floor. A future formal graph may contain more
+Lean declarations, but it must remain separate and cannot be predicted or added to this
+mathematical denominator. Therefore this pointwise slice fails both the size and current
+coverage gates. It must not be padded with future work to qualify. These estimates are not a
+compile result, API acceptance, proof, or semantic-fidelity judgement.
+
+### Future work not counted in the pointwise graph
+
+Completeness, inner-product structure, continuous-solution and discrete-solution specifications,
+existence or uniqueness, and derivation of Galerkin orthogonality from those specifications all
+change the contract. A later source-backed candidate could investigate the pinned Lax--Milgram
+infrastructure, but it would need a new graph and source review.
+
+The infimum corollary, finite-element geometry, Sobolev regularity, interpolation estimates, and
+convergence rates are also future work. None is a prerequisite of the displayed pointwise
+comparison, and none contributes to the 8-node count or coverage estimate.
 
 ### Controls and mutations
 
@@ -156,8 +186,9 @@ The following are proposed gates, not completed test results:
 | Control | Witness or change | Required result |
 | --- | --- | --- |
 | Positive and non-vacuous | `V = R^2`, standard inner product, `V_h = span(e_1)`, `u = e_2`, `u_h = 0`, `alpha = M = 1`, compare with `v_h = 0` | The hypotheses hold and equality has nonzero error |
-| Drop coercivity | Use the zero form with nonzero error and `M = 0` | Reject the mutated conclusion |
+| Drop coercivity | `V = R`, `V_h = {0}`, zero form, `u = 1`, `u_h = 0`, `alpha = 1`, and `M = 0` | Reject: orthogonality and continuity hold, but comparison with zero would require `1 <= 0` |
 | Drop `u_h in V_h` | `V = R`, `V_h = {0}`, `u = 0`, `u_h = 1`; orthogonality on `V_h` is trivial at zero while the bound at `v_h = 0` is false | Reject the mutated statement |
+| Weaken coercivity or continuity quantifiers | Replace `forall v` with one chosen value, or replace `forall v w` with a diagonal-only bound | Reject: the proof needs coercivity at the error and continuity at the error/comparison pair |
 | Weaken `forall v_h` to `exists v_h` | Replace the comparison quantifier | Reject as a semantic weakening even if provable |
 | Remove comparison membership | Quantify over arbitrary `v_h : V` | Reject the overbroad statement |
 | Remove `0 < alpha` | Permit zero or negative coercivity constant | Reject division/cancellation and the claimed estimate |
@@ -225,31 +256,57 @@ source blocker; it would not remove the upstream collision.
 Therefore the current van Kampen candidate is paused. It is not a second immediately runnable
 backup.
 
-## Switching gates
+## Work lanes and switching gates
 
-### Main candidate to Cea evaluation
+### Read-only audit permitted now
 
-Evaluation may start only after all of:
+The current [Phase 1 progress ledger](../phase-1-progress.md) says that a backup may be evaluated
+under T3 `gap/not_selected`, while T5 freeze and any Prover bundle remain blocked. In that narrow
+sense, the following work may continue now without an authorized backup disposition:
 
-1. an authorized successor T3 record keeps the current primary unselected and explicitly chooses
-   a backup evaluation; delay or missing review is not itself a backup decision;
-2. the iFEM source is added through a new immutable reference-manifest revision, cached and
-   verified by the operator path, and bound to a rights decision and egress ceiling;
-3. exact source spans and the preceding definition chain are retained for continuity,
-   coercivity, the continuous problem, the Galerkin problem, and the comparison argument;
-4. the 28-node graph and the pointwise target are versioned without presenting the infimum form
-   as already proved;
-5. a current overlap/API census and pinned-Library mapping spike retain their exact lock,
-   imports, candidate revision, and failures; and
-6. the proposed positive, negative, non-vacuity, assumption, constant, and quantifier controls
-   are independently reviewed.
+1. inspect public source and license pages, pinned Mathlib source, and official upstream issue or
+   pull-request metadata without changing source or reference state;
+2. refine the semantic graph, statement quantifiers, controls, overlap census, and gap record;
+3. draft acquisition, rights-review, compile-spike, and expert-review requests; and
+4. retain URLs, immutable revisions, hashes, access dates, and negative findings in audit notes.
 
-### Cea evaluation to selection
+Here, "read-only" means no candidate, reference-cache, manifest, rights, freeze, or selection
+state is changed; writing the audit record does not turn its source leads into admitted evidence.
+This lane may not ingest source bytes, retain unapproved excerpts, edit the reference manifest,
+decide rights, materialize a candidate workspace, freeze a contract, select a backup, or hand
+anything to Prover. The current audit has completed only this lane.
 
-Selection additionally requires a clean pinned-Library compile spike without scope changes,
+### Authorized source preparation
+
+If the project owner chooses to investigate a new Cea boundary despite the current gate failures,
+source preparation requires separate authority:
+
+1. the operator creates a new immutable reference-manifest revision, imports and verifies the
+   exact parent and derived artifacts, and preserves receipts;
+2. the rights reviewer records attribution, permitted use, and the egress ceiling;
+3. the source analyst binds exact spans and the definition chain required by the proposed
+   contract; and
+4. any local dependency materialization or compile spike is explicitly scoped and records the
+   exact Library lock, imports, candidate revision, and failures.
+
+Those actions are not authorized by delay, by the existing T3 gap, or by this audit. Source
+preparation also does not select a candidate.
+
+### Admission, selection, and freeze
+
+The present 8-node pointwise slice cannot advance because it misses both the size and coverage
+gates. An authorized successor T3 record is required to select a backup or open admission of a
+different source-backed boundary; it is not required for the read-only lane above. Any revised
+boundary must freeze its counting rule before scoring and must not count future theorems merely
+to reach 20 nodes.
+
+Selection then requires source and rights readiness, a current overlap/API census, a clean
+pinned-Library compile spike without scope changes, the proposed positive and negative controls,
 independent source interpretation, independent semantic review, ordinary library/domain review,
 and authenticated Builder admission authority. Compilation alone cannot select the candidate.
-Any mismatch produces a gap or Builder-owned contract-change request.
+Any mismatch produces a gap or Builder-owned contract-change request. Only after selection may
+source-to-contract calibration and T5 freeze begin; only an unchanged frozen bundle may pass to
+Prover.
 
 ### Reconsidering van Kampen
 
@@ -267,13 +324,15 @@ mostly absent, the pause remains.
 ## Counter-argument and decision test
 
 The strongest counter-argument is that the pointwise Cea comparison is too abstract: it assumes
-the Galerkin solution and postpones the textbook infimum statement, so it may exercise less
-domain structure than topology. That objection holds if the pilot's goal is already a concrete
-finite-element convergence theorem. In that case neither candidate is ready: Cea must first
-resolve discrete existence, infimum, and Sobolev dependencies, while van Kampen must resolve
-rights and active upstream overlap.
+only Galerkin orthogonality and postpones the continuous/discrete solution equations, existence,
+the textbook infimum statement, and concrete finite-element structure. One response would be to
+add Lax--Milgram, solution specifications, or Sobolev dependencies until the graph reaches 20
+nodes. That would produce a different theorem, not repair this audit, and would make the old
+coverage denominator misleading.
 
-For the narrower Phase 1 goal -- a faithful 20--40 node Builder--Prover boundary with strong
-mutations and reusable dependency leverage -- the Cea comparison is the better first audit
-target. The decision should change only on retained source, API, compile, and review evidence,
+Such a broader Cea candidate can be legitimate only when a retained source and an independently
+reviewed contract actually require those nodes. Until then, the pointwise comparison remains the
+better read-only audit lead because it has a bounded statement and strong mutations, while van
+Kampen has a rights blocker and exact active-upstream overlap. Neither is a qualifying Phase 1
+backup. The decision should change only on retained source, API, compile, and review evidence,
 not on domain popularity or narrative ambition.
