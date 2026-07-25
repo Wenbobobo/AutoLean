@@ -1,0 +1,21 @@
+{
+  "candidate_declaration_count": 7,
+  "candidate_module_dependencies": [
+    "AutoLean.ProofDependencyFixture.allowedHelper",
+    "AutoLean.ProofDependencyFixture.nonalias"
+  ],
+  "declaration": "AutoLean.ProofDependencyFixture.exactTypeAlias",
+  "direct_proof_dependencies": [
+    "AutoLean.ProofDependencyFixture.nonalias"
+  ],
+  "proof_dependency_closure": [
+    "And",
+    "And.intro",
+    "And.left",
+    "And.right",
+    "AutoLean.ProofDependencyFixture.allowedHelper",
+    "AutoLean.ProofDependencyFixture.nonalias"
+  ],
+  "schema_version": "autolean.proof-dependency-query-spike.v2",
+  "traversal": "target-proof-value-then-declaration-type-and-value-transitive.v1"
+}

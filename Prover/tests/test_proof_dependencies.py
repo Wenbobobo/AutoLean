@@ -1,0 +1,424 @@
+from __future__ import annotations
+
+import hashlib
+import json
+import os
+import shutil
+import subprocess
+from copy import deepcopy
+from pathlib import Path
+from typing import cast
+
+import pytest
+from autolean_prover.proof_dependencies import (
+    ProofDependencyEvidence,
+    ProofDependencyEvidenceError,
+    ProofDependencyPolicy,
+    ProofDependencyRejected,
+    evaluate_proof_dependency_policy,
+)
+
+from scripts import proof_dependency_gate
+
+_FIXTURES = Path(__file__).parent / "fixtures" / "proof_dependencies"
+_SOURCE_V2_IMAGE = (
+    "autolean/mathlib-worker@"
+    "sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6"
+)
+
+
+def _record(name: str) -> dict[str, object]:
+    value = json.loads((_FIXTURES / name).read_text(encoding="utf-8"))
+    assert isinstance(value, dict)
+    return cast(dict[str, object], value)
+
+
+def test_exact_closure_allowlist_accepts_nonalias_fixture() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("nonalias.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("nonalias.policy.json"))
+
+    decision = evaluate_proof_dependency_policy(evidence, policy)
+
+    assert decision.accepted is True
+    assert evidence.declaration == "AutoLean.ProofDependencyFixture.nonalias"
+    assert decision.direct_dependency_count == 2
+    assert decision.closure_dependency_count == 5
+    assert len(decision.policy_sha256) == 64
+    assert len(decision.evidence_sha256) == 64
+
+
+def test_known_exact_type_alias_is_rejected_by_explicit_name_denial() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("exact-type-alias.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("exact-type-alias.policy.json"))
+
+    assert evidence.direct_proof_dependencies == ("AutoLean.ProofDependencyFixture.nonalias",)
+    with pytest.raises(ProofDependencyRejected, match="nonalias"):
+        evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_transitive_closure_rejects_allowed_wrapper_around_denied_theorem() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("disguised.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("disguised.policy.json"))
+
+    assert evidence.direct_proof_dependencies == ("AutoLean.ProofDependencyFixture.allowedWrapper",)
+    with pytest.raises(ProofDependencyRejected, match="forbiddenStrong"):
+        evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_unlisted_ordinary_declaration_fails_closed_without_a_matching_denial() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("disguised.evidence.json"))
+    policy_record = _record("disguised.policy.json")
+    policy_record["denied_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
+    policy = ProofDependencyPolicy.from_mapping(policy_record)
+
+    with pytest.raises(ProofDependencyRejected, match=r"unapproved.*forbiddenStrong"):
+        evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_quotient_declaration_type_adds_quot_mk_to_transitive_closure() -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("quotient.evidence.json"))
+    policy = ProofDependencyPolicy.from_mapping(_record("quotient.policy.json"))
+
+    assert evidence.direct_proof_dependencies == ("Quot.ind",)
+    assert "Quot.mk" not in evidence.direct_proof_dependencies
+    assert "Quot.mk" in evidence.proof_dependency_closure
+    with pytest.raises(ProofDependencyRejected, match=r"Quot\.mk"):
+        evaluate_proof_dependency_policy(evidence, policy)
+
+
+def test_candidate_module_intersection_is_diagnostic_not_an_ownership_policy() -> None:
+    record = _record("nonalias.evidence.json")
+    record["candidate_module_dependencies"] = []
+    evidence = ProofDependencyEvidence.from_mapping(record)
+    policy = ProofDependencyPolicy.from_mapping(_record("nonalias.policy.json"))
+
+    decision = evaluate_proof_dependency_policy(evidence, policy)
+
+    assert decision.accepted is True
+    assert evidence.candidate_module_dependencies == ()
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("missing-field", "unexpected or missing"),
+        ("unknown-field", "unexpected or missing"),
+        ("wrong-schema", "unsupported schema"),
+        ("wrong-traversal", "unsupported traversal"),
+        ("boolean-count", "count is invalid"),
+        ("unsorted-closure", "sorted and unique"),
+        ("duplicate-direct", "sorted and unique"),
+        ("missing-direct-from-closure", "omits a direct"),
+        ("candidate-outside-closure", "outside"),
+        ("self-reference", "own target"),
+    ),
+)
+def test_evidence_shape_and_completeness_invariants_fail_closed(
+    mutation: str,
+    message: str,
+) -> None:
+    record = deepcopy(_record("disguised.evidence.json"))
+    if mutation == "missing-field":
+        del record["traversal"]
+    elif mutation == "unknown-field":
+        record["extra"] = True
+    elif mutation == "wrong-schema":
+        record["schema_version"] = "other"
+    elif mutation == "wrong-traversal":
+        record["traversal"] = "direct-only"
+    elif mutation == "boolean-count":
+        record["candidate_declaration_count"] = True
+    elif mutation == "unsorted-closure":
+        record["proof_dependency_closure"] = list(
+            reversed(cast(list[object], record["proof_dependency_closure"]))
+        )
+    elif mutation == "duplicate-direct":
+        direct = cast(list[object], record["direct_proof_dependencies"])
+        record["direct_proof_dependencies"] = [*direct, *direct]
+    elif mutation == "missing-direct-from-closure":
+        record["proof_dependency_closure"] = ["AutoLean.ProofDependencyFixture.forbiddenStrong"]
+    elif mutation == "candidate-outside-closure":
+        record["candidate_module_dependencies"] = [
+            "AutoLean.ProofDependencyFixture.allowedWrapper",
+            "AutoLean.ProofDependencyFixture.forbiddenStrong",
+            "AutoLean.ProofDependencyFixture.other",
+        ]
+    else:
+        record["proof_dependency_closure"] = ["AutoLean.ProofDependencyFixture.disguised"]
+        record["direct_proof_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
+        record["candidate_module_dependencies"] = ["AutoLean.ProofDependencyFixture.disguised"]
+
+    with pytest.raises(ProofDependencyEvidenceError, match=message):
+        ProofDependencyEvidence.from_mapping(record)
+
+
+@pytest.mark.parametrize(
+    ("mutation", "message"),
+    (
+        ("missing-target-denial", "must include the target"),
+        ("overlap", "overlap"),
+        ("unsorted", "sorted and unique"),
+        ("target-mismatch", "different target"),
+    ),
+)
+def test_policy_and_target_binding_fail_closed(mutation: str, message: str) -> None:
+    evidence = ProofDependencyEvidence.from_mapping(_record("nonalias.evidence.json"))
+    record = deepcopy(_record("nonalias.policy.json"))
+    if mutation == "missing-target-denial":
+        record["denied_dependencies"] = ["AutoLean.ProofDependencyFixture.exactTypeAlias"]
+    elif mutation == "overlap":
+        record["allowed_dependencies"] = ["AutoLean.ProofDependencyFixture.exactTypeAlias"]
+    elif mutation == "unsorted":
+        record["denied_dependencies"] = list(
+            reversed(cast(list[object], record["denied_dependencies"]))
+        )
+    else:
+        record["target_declaration"] = "AutoLean.ProofDependencyFixture.other"
+        record["denied_dependencies"] = ["AutoLean.ProofDependencyFixture.other"]
+
+    if mutation == "target-mismatch":
+        policy = ProofDependencyPolicy.from_mapping(record)
+        with pytest.raises(ProofDependencyRejected, match=message):
+            evaluate_proof_dependency_policy(evidence, policy)
+    else:
+        with pytest.raises(ProofDependencyEvidenceError, match=message):
+            ProofDependencyPolicy.from_mapping(record)
+
+
+def test_validation_cli_accepts_positive_and_rejects_disguised_fixture(
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    assert (
+        proof_dependency_gate.main(
+            [
+                "validate",
+                "--policy",
+                str(_FIXTURES / "nonalias.policy.json"),
+                "--evidence",
+                str(_FIXTURES / "nonalias.evidence.json"),
+            ]
+        )
+        == 0
+    )
+    accepted = json.loads(capsys.readouterr().out)
+    assert accepted["accepted"] is True
+
+    assert (
+        proof_dependency_gate.main(
+            [
+                "validate",
+                "--policy",
+                str(_FIXTURES / "disguised.policy.json"),
+                "--evidence",
+                str(_FIXTURES / "disguised.evidence.json"),
+            ]
+        )
+        == 2
+    )
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert "forbiddenStrong" in captured.err
+
+
+def test_query_rejects_a_symlinked_candidate_before_running_docker(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.lean"
+    source.write_text("theorem source : True := True.intro\n", encoding="utf-8")
+    candidate = tmp_path / "Candidate.lean"
+    try:
+        candidate.symlink_to(source)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    def unexpected_run(
+        command: list[str],
+        *,
+        timeout: int,
+        cwd: Path | None = None,
+    ) -> subprocess.CompletedProcess[str]:
+        pytest.fail(f"subprocess ran before candidate validation: {command!r}, {timeout=}, {cwd=}")
+
+    monkeypatch.setattr(proof_dependency_gate, "_run", unexpected_run)
+
+    with pytest.raises(
+        proof_dependency_gate.ProofDependencySpikeError,
+        match="regular non-symlink",
+    ):
+        proof_dependency_gate.query_dependencies(
+            image=f"worker@example@sha256:{'0' * 64}",
+            candidate=candidate,
+            declaration="AutoLean.Example.theorem",
+        )
+
+
+def test_wsl_delegation_keeps_the_lexical_symlink_path(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    source = tmp_path / "source.lean"
+    source.write_text("theorem source : True := True.intro\n", encoding="utf-8")
+    candidate = tmp_path / "Candidate.lean"
+    try:
+        candidate.symlink_to(source)
+    except (NotImplementedError, OSError):
+        pytest.skip("symlink creation is unavailable")
+
+    translated: list[Path] = []
+
+    def fake_wsl_path(path: Path) -> str:
+        translated.append(path)
+        return path.as_posix()
+
+    def fake_run(
+        command: list[str],
+        *,
+        check: bool,
+    ) -> subprocess.CompletedProcess[str]:
+        assert check is False
+        return subprocess.CompletedProcess(command, 0, "", "")
+
+    monkeypatch.setattr(proof_dependency_gate, "_wsl_path", fake_wsl_path)
+    monkeypatch.setattr(proof_dependency_gate.subprocess, "run", fake_run)
+    arguments = proof_dependency_gate.parse_args(
+        [
+            "query",
+            "--image",
+            f"worker@example@sha256:{'0' * 64}",
+            "--candidate",
+            str(candidate),
+            "--declaration",
+            "AutoLean.Example.theorem",
+        ]
+    )
+
+    assert proof_dependency_gate._delegate_query(arguments) == 0
+    assert translated[-1] == proof_dependency_gate._lexical_absolute(candidate)
+    assert translated[-1].is_symlink()
+    assert translated[-1] != source.resolve()
+
+
+def test_fixture_replay_reuses_single_candidate_and_helper_snapshots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initial_candidate = b"initial candidate bytes\n"
+    initial_helper = b"initial helper bytes\n"
+    live_candidate = tmp_path / "ProofDependencyClosure.lean"
+    live_helper = tmp_path / "AutoleanProofDependencyQuery.lean"
+    live_candidate.write_bytes(initial_candidate)
+    live_helper.write_bytes(initial_helper)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_FIXTURE", live_candidate)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_HELPER", live_helper)
+    fixture_by_target = {
+        declaration: fixture_name
+        for fixture_name, declaration in proof_dependency_gate._REPLAY_TARGETS
+    }
+    executions: list[tuple[Path, Path, bytes, bytes]] = []
+
+    def fake_query_dependencies(
+        *,
+        image: str,
+        candidate: Path,
+        declaration: str,
+        query_helper_snapshot: Path | None = None,
+    ) -> ProofDependencyEvidence:
+        assert image == _SOURCE_V2_IMAGE
+        assert query_helper_snapshot is not None
+        executions.append(
+            (
+                candidate,
+                query_helper_snapshot,
+                candidate.read_bytes(),
+                query_helper_snapshot.read_bytes(),
+            )
+        )
+        if len(executions) == 1:
+            live_candidate.write_bytes(b"mutated live candidate\n")
+            live_helper.write_bytes(b"mutated live helper\n")
+        return ProofDependencyEvidence.from_mapping(_record(fixture_by_target[declaration]))
+
+    monkeypatch.setattr(proof_dependency_gate, "query_dependencies", fake_query_dependencies)
+
+    replay = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
+
+    assert len(executions) == 4
+    assert len({candidate for candidate, _, _, _ in executions}) == 1
+    assert len({helper for _, helper, _, _ in executions}) == 1
+    assert all(candidate != live_candidate for candidate, _, _, _ in executions)
+    assert all(helper != live_helper for _, helper, _, _ in executions)
+    assert all(candidate_bytes == initial_candidate for _, _, candidate_bytes, _ in executions)
+    assert all(helper_bytes == initial_helper for _, _, _, helper_bytes in executions)
+    assert replay.candidate_sha256 == hashlib.sha256(initial_candidate).hexdigest()
+    assert replay.query_helper_sha256 == hashlib.sha256(initial_helper).hexdigest()
+
+
+def test_operator_observation_uses_replay_snapshot_hashes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed_candidate = b"executed candidate snapshot\n"
+    executed_helper = b"executed helper snapshot\n"
+    candidate_sha256 = hashlib.sha256(executed_candidate).hexdigest()
+    helper_sha256 = hashlib.sha256(executed_helper).hexdigest()
+    observation = {
+        "declaration": "AutoLean.ProofDependencyFixture.nonalias",
+        "fixture_path": "Prover/tests/fixtures/proof_dependencies/nonalias.evidence.json",
+        "query_output_sha256": "0" * 64,
+    }
+    replay = proof_dependency_gate.FixtureReplay(
+        observations=(observation,),
+        candidate_sha256=candidate_sha256,
+        query_helper_sha256=helper_sha256,
+    )
+    live_candidate = tmp_path / "live-candidate.lean"
+    live_helper = tmp_path / "live-helper.lean"
+    live_candidate.write_bytes(b"different live candidate\n")
+    live_helper.write_bytes(b"different live helper\n")
+    monkeypatch.setattr(proof_dependency_gate, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_FIXTURE", live_candidate)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_HELPER", live_helper)
+    monkeypatch.setattr(
+        proof_dependency_gate,
+        "replay_fixture_evidence",
+        lambda *, image: replay,
+    )
+
+    record = proof_dependency_gate.write_operator_observation(
+        image=_SOURCE_V2_IMAGE,
+        output=Path("release-evidence") / "observation.json",
+    )
+
+    assert record["candidate_sha256"] == candidate_sha256
+    assert record["query_helper_sha256"] == helper_sha256
+    assert record["candidate_sha256"] != hashlib.sha256(live_candidate.read_bytes()).hexdigest()
+    assert record["query_helper_sha256"] != hashlib.sha256(live_helper.read_bytes()).hexdigest()
+    persisted = json.loads(
+        (tmp_path / "release-evidence" / "observation.json").read_text(encoding="utf-8")
+    )
+    assert persisted == record
+
+
+@pytest.mark.integration
+def test_source_v2_helper_replays_committed_query_fixtures() -> None:
+    if os.name != "posix" or shutil.which("docker") is None:
+        pytest.skip("requires Linux Docker and the operator-local source-v2 image")
+    available = subprocess.run(
+        ["docker", "image", "inspect", _SOURCE_V2_IMAGE],
+        check=False,
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    if available.returncode != 0:
+        pytest.skip("operator-local source-v2 image is unavailable")
+
+    replay = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
+
+    assert tuple(item["declaration"] for item in replay.observations) == (
+        "AutoLean.ProofDependencyFixture.nonalias",
+        "AutoLean.ProofDependencyFixture.exactTypeAlias",
+        "AutoLean.ProofDependencyFixture.disguised",
+        "AutoLean.ProofDependencyFixture.quotientProbe",
+    )
