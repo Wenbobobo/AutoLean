@@ -1,0 +1,15 @@
+{
+  "candidate_declaration_count": 5,
+  "candidate_owned_dependencies": [
+    "AutoLean.ProofDependencyFixture.allowedHelper"
+  ],
+  "declaration": "AutoLean.ProofDependencyFixture.independent",
+  "direct_proof_dependencies": [
+    "AutoLean.ProofDependencyFixture.allowedHelper"
+  ],
+  "proof_dependency_closure": [
+    "AutoLean.ProofDependencyFixture.allowedHelper"
+  ],
+  "schema_version": "autolean.proof-dependency-query-spike.v1",
+  "traversal": "target-proof-value-then-declaration-type-and-value-transitive.v1"
+}

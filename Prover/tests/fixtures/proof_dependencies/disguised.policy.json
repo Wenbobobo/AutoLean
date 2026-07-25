@@ -1,0 +1,11 @@
+{
+  "allowed_dependencies": [
+    "AutoLean.ProofDependencyFixture.allowedWrapper"
+  ],
+  "denied_dependencies": [
+    "AutoLean.ProofDependencyFixture.disguised",
+    "AutoLean.ProofDependencyFixture.forbiddenStrong"
+  ],
+  "schema_version": "autolean.proof-dependency-policy-spike.v1",
+  "target_declaration": "AutoLean.ProofDependencyFixture.disguised"
+}
