@@ -94,6 +94,9 @@ command, image digest, candidate SHA
 `b8f70dd46400460a0c70db225137be738e0d161639845a53792f465426508ae9`, four query-output
 hashes, and aggregate outputs SHA
 `b216956433b32b4f3473889565cfe27e415564b2d768eb21650bd1acfa221116`.
+Candidate and helper are each snapshotted once before the first target; all four queries reuse
+those paths, the record hashes those executed snapshots, and their hashes are rechecked after the
+last target.
 The ignored record's byte SHA-256 is
 `51d02e527358681ca89f53f236ab397d9f82ad8feb8514fe88a0f8a0e72c9f64`.
 

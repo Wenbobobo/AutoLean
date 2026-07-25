@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import shutil
@@ -298,6 +299,107 @@ def test_wsl_delegation_keeps_the_lexical_symlink_path(
     assert translated[-1] != source.resolve()
 
 
+def test_fixture_replay_reuses_single_candidate_and_helper_snapshots(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    initial_candidate = b"initial candidate bytes\n"
+    initial_helper = b"initial helper bytes\n"
+    live_candidate = tmp_path / "ProofDependencyClosure.lean"
+    live_helper = tmp_path / "AutoleanProofDependencyQuery.lean"
+    live_candidate.write_bytes(initial_candidate)
+    live_helper.write_bytes(initial_helper)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_FIXTURE", live_candidate)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_HELPER", live_helper)
+    fixture_by_target = {
+        declaration: fixture_name
+        for fixture_name, declaration in proof_dependency_gate._REPLAY_TARGETS
+    }
+    executions: list[tuple[Path, Path, bytes, bytes]] = []
+
+    def fake_query_dependencies(
+        *,
+        image: str,
+        candidate: Path,
+        declaration: str,
+        query_helper_snapshot: Path | None = None,
+    ) -> ProofDependencyEvidence:
+        assert image == _SOURCE_V2_IMAGE
+        assert query_helper_snapshot is not None
+        executions.append(
+            (
+                candidate,
+                query_helper_snapshot,
+                candidate.read_bytes(),
+                query_helper_snapshot.read_bytes(),
+            )
+        )
+        if len(executions) == 1:
+            live_candidate.write_bytes(b"mutated live candidate\n")
+            live_helper.write_bytes(b"mutated live helper\n")
+        return ProofDependencyEvidence.from_mapping(_record(fixture_by_target[declaration]))
+
+    monkeypatch.setattr(proof_dependency_gate, "query_dependencies", fake_query_dependencies)
+
+    replay = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
+
+    assert len(executions) == 4
+    assert len({candidate for candidate, _, _, _ in executions}) == 1
+    assert len({helper for _, helper, _, _ in executions}) == 1
+    assert all(candidate != live_candidate for candidate, _, _, _ in executions)
+    assert all(helper != live_helper for _, helper, _, _ in executions)
+    assert all(candidate_bytes == initial_candidate for _, _, candidate_bytes, _ in executions)
+    assert all(helper_bytes == initial_helper for _, _, _, helper_bytes in executions)
+    assert replay.candidate_sha256 == hashlib.sha256(initial_candidate).hexdigest()
+    assert replay.query_helper_sha256 == hashlib.sha256(initial_helper).hexdigest()
+
+
+def test_operator_observation_uses_replay_snapshot_hashes(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    executed_candidate = b"executed candidate snapshot\n"
+    executed_helper = b"executed helper snapshot\n"
+    candidate_sha256 = hashlib.sha256(executed_candidate).hexdigest()
+    helper_sha256 = hashlib.sha256(executed_helper).hexdigest()
+    observation = {
+        "declaration": "AutoLean.ProofDependencyFixture.nonalias",
+        "fixture_path": "Prover/tests/fixtures/proof_dependencies/nonalias.evidence.json",
+        "query_output_sha256": "0" * 64,
+    }
+    replay = proof_dependency_gate.FixtureReplay(
+        observations=(observation,),
+        candidate_sha256=candidate_sha256,
+        query_helper_sha256=helper_sha256,
+    )
+    live_candidate = tmp_path / "live-candidate.lean"
+    live_helper = tmp_path / "live-helper.lean"
+    live_candidate.write_bytes(b"different live candidate\n")
+    live_helper.write_bytes(b"different live helper\n")
+    monkeypatch.setattr(proof_dependency_gate, "_REPO_ROOT", tmp_path)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_FIXTURE", live_candidate)
+    monkeypatch.setattr(proof_dependency_gate, "_QUERY_HELPER", live_helper)
+    monkeypatch.setattr(
+        proof_dependency_gate,
+        "replay_fixture_evidence",
+        lambda *, image: replay,
+    )
+
+    record = proof_dependency_gate.write_operator_observation(
+        image=_SOURCE_V2_IMAGE,
+        output=Path("release-evidence") / "observation.json",
+    )
+
+    assert record["candidate_sha256"] == candidate_sha256
+    assert record["query_helper_sha256"] == helper_sha256
+    assert record["candidate_sha256"] != hashlib.sha256(live_candidate.read_bytes()).hexdigest()
+    assert record["query_helper_sha256"] != hashlib.sha256(live_helper.read_bytes()).hexdigest()
+    persisted = json.loads(
+        (tmp_path / "release-evidence" / "observation.json").read_text(encoding="utf-8")
+    )
+    assert persisted == record
+
+
 @pytest.mark.integration
 def test_source_v2_helper_replays_committed_query_fixtures() -> None:
     if os.name != "posix" or shutil.which("docker") is None:
@@ -312,9 +414,9 @@ def test_source_v2_helper_replays_committed_query_fixtures() -> None:
     if available.returncode != 0:
         pytest.skip("operator-local source-v2 image is unavailable")
 
-    observations = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
+    replay = proof_dependency_gate.replay_fixture_evidence(image=_SOURCE_V2_IMAGE)
 
-    assert tuple(item["declaration"] for item in observations) == (
+    assert tuple(item["declaration"] for item in replay.observations) == (
         "AutoLean.ProofDependencyFixture.nonalias",
         "AutoLean.ProofDependencyFixture.exactTypeAlias",
         "AutoLean.ProofDependencyFixture.disguised",

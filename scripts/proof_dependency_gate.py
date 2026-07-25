@@ -11,6 +11,7 @@ import stat
 import subprocess
 import sys
 import tempfile
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Final, NoReturn, cast
 
@@ -42,6 +43,15 @@ _REPLAY_TARGETS: Final[tuple[tuple[str, str], ...]] = (
 
 class ProofDependencySpikeError(RuntimeError):
     """The local, non-authoritative query could not complete safely."""
+
+
+@dataclass(frozen=True)
+class FixtureReplay:
+    """One replay over a single frozen candidate/helper byte pair."""
+
+    observations: tuple[dict[str, object], ...]
+    candidate_sha256: str
+    query_helper_sha256: str
 
 
 def _fail(message: str) -> NoReturn:
@@ -137,34 +147,34 @@ def _docker_base() -> list[str]:
     ]
 
 
-def _snapshot_candidate(source: Path, destination: Path) -> None:
+def _snapshot_fingerprint(metadata: os.stat_result) -> tuple[int, ...]:
+    fingerprint = (
+        metadata.st_dev,
+        metadata.st_ino,
+        metadata.st_mode,
+        metadata.st_size,
+        metadata.st_mtime_ns,
+    )
+    if os.name == "nt":
+        # Windows creation time can differ between path and handle views of a new file.
+        return fingerprint
+    return (*fingerprint, metadata.st_ctime_ns)
+
+
+def _snapshot_regular_file(source: Path, destination: Path, *, label: str) -> None:
     try:
         metadata = source.lstat()
     except OSError as error:
-        raise ProofDependencySpikeError("candidate source is unavailable") from error
+        raise ProofDependencySpikeError(f"{label} is unavailable") from error
     if source.is_symlink() or not stat.S_ISREG(metadata.st_mode):
-        _fail("candidate source must be a regular non-symlink file")
+        _fail(f"{label} must be a regular non-symlink file")
     if metadata.st_size <= 0 or metadata.st_size > _MAX_SOURCE_BYTES:
-        _fail("candidate source size is outside the spike limit")
+        _fail(f"{label} size is outside the spike limit")
     try:
         with source.open("rb") as source_stream:
             before = os.fstat(source_stream.fileno())
-            if (
-                before.st_dev,
-                before.st_ino,
-                before.st_mode,
-                before.st_size,
-                before.st_mtime_ns,
-                before.st_ctime_ns,
-            ) != (
-                metadata.st_dev,
-                metadata.st_ino,
-                metadata.st_mode,
-                metadata.st_size,
-                metadata.st_mtime_ns,
-                metadata.st_ctime_ns,
-            ):
-                _fail("candidate source changed before snapshot")
+            if _snapshot_fingerprint(before) != _snapshot_fingerprint(metadata):
+                _fail(f"{label} changed before snapshot")
             with destination.open("xb") as destination_stream:
                 while chunk := source_stream.read(1024 * 1024):
                     destination_stream.write(chunk)
@@ -172,26 +182,20 @@ def _snapshot_candidate(source: Path, destination: Path) -> None:
                 os.fsync(destination_stream.fileno())
             after = os.fstat(source_stream.fileno())
     except OSError as error:
-        raise ProofDependencySpikeError("candidate source snapshot failed") from error
-    if (
-        before.st_dev,
-        before.st_ino,
-        before.st_mode,
-        before.st_size,
-        before.st_mtime_ns,
-        before.st_ctime_ns,
-    ) != (
-        after.st_dev,
-        after.st_ino,
-        after.st_mode,
-        after.st_size,
-        after.st_mtime_ns,
-        after.st_ctime_ns,
-    ):
-        _fail("candidate source changed during snapshot")
+        raise ProofDependencySpikeError(f"{label} snapshot failed") from error
+    if _snapshot_fingerprint(before) != _snapshot_fingerprint(after):
+        _fail(f"{label} changed during snapshot")
     if destination.stat().st_size != metadata.st_size:
-        _fail("candidate source snapshot size differs from source")
+        _fail(f"{label} snapshot size differs from source")
     destination.chmod(0o444)
+
+
+def _snapshot_candidate(source: Path, destination: Path) -> None:
+    _snapshot_regular_file(source, destination, label="candidate source")
+
+
+def _snapshot_query_helper(source: Path, destination: Path) -> None:
+    _snapshot_regular_file(source, destination, label="proof dependency query helper")
 
 
 def query_dependencies(
@@ -199,6 +203,7 @@ def query_dependencies(
     image: str,
     candidate: Path,
     declaration: str,
+    query_helper_snapshot: Path | None = None,
 ) -> ProofDependencyEvidence:
     """Compile once with the frozen wrapper, then run the host-mounted query spike."""
 
@@ -206,7 +211,12 @@ def query_dependencies(
         _fail("query requires a digest-pinned worker image")
     if _TARGET.fullmatch(declaration) is None:
         _fail("query target must be a canonical dotted Lean declaration")
-    if not _QUERY_HELPER.is_file():
+    query_helper = _QUERY_HELPER if query_helper_snapshot is None else query_helper_snapshot
+    try:
+        helper_metadata = query_helper.lstat()
+    except OSError as error:
+        raise ProofDependencySpikeError("proof dependency query helper is unavailable") from error
+    if query_helper.is_symlink() or not stat.S_ISREG(helper_metadata.st_mode):
         _fail("proof dependency query helper is unavailable")
 
     with tempfile.TemporaryDirectory(prefix="autolean-proof-dependency-") as raw_scratch:
@@ -251,10 +261,7 @@ def query_dependencies(
             "--mount",
             f"type=bind,src={compiled},dst=/compiled/Candidate.olean,readonly",
             "--mount",
-            (
-                f"type=bind,src={_QUERY_HELPER},"
-                "dst=/query/AutoleanProofDependencyQuery.lean,readonly"
-            ),
+            (f"type=bind,src={query_helper},dst=/query/AutoleanProofDependencyQuery.lean,readonly"),
             "--entrypoint",
             "/bin/sh",
             image,
@@ -275,34 +282,54 @@ def query_dependencies(
         )
 
 
-def replay_fixture_evidence(*, image: str) -> tuple[dict[str, object], ...]:
+def replay_fixture_evidence(*, image: str) -> FixtureReplay:
     """Run the real helper and require exact agreement with every committed fixture."""
 
-    observations: list[dict[str, object]] = []
-    for fixture_name, declaration in _REPLAY_TARGETS:
-        observed = query_dependencies(
-            image=image,
-            candidate=_QUERY_FIXTURE,
-            declaration=declaration,
-        )
-        expected = ProofDependencyEvidence.from_mapping(
-            _load_json(
-                _EVIDENCE_FIXTURES / fixture_name,
-                label=f"committed proof dependency fixture {fixture_name}",
+    with tempfile.TemporaryDirectory(prefix="autolean-proof-dependency-replay-") as raw_scratch:
+        scratch = Path(raw_scratch)
+        candidate_snapshot = scratch / "Candidate.lean"
+        query_helper_snapshot = scratch / "AutoleanProofDependencyQuery.lean"
+        _snapshot_candidate(_QUERY_FIXTURE, candidate_snapshot)
+        _snapshot_query_helper(_QUERY_HELPER, query_helper_snapshot)
+        candidate_sha256 = _sha256_file(candidate_snapshot)
+        query_helper_sha256 = _sha256_file(query_helper_snapshot)
+
+        observations: list[dict[str, object]] = []
+        for fixture_name, declaration in _REPLAY_TARGETS:
+            observed = query_dependencies(
+                image=image,
+                candidate=candidate_snapshot,
+                declaration=declaration,
+                query_helper_snapshot=query_helper_snapshot,
             )
+            expected = ProofDependencyEvidence.from_mapping(
+                _load_json(
+                    _EVIDENCE_FIXTURES / fixture_name,
+                    label=f"committed proof dependency fixture {fixture_name}",
+                )
+            )
+            if observed != expected:
+                _fail(f"proof dependency query drifted from committed fixture: {fixture_name}")
+            observations.append(
+                {
+                    "declaration": declaration,
+                    "fixture_path": (
+                        Path("Prover") / "tests" / "fixtures" / "proof_dependencies" / fixture_name
+                    ).as_posix(),
+                    "query_output_sha256": observed.canonical_sha256(),
+                }
+            )
+
+        if (
+            _sha256_file(candidate_snapshot) != candidate_sha256
+            or _sha256_file(query_helper_snapshot) != query_helper_sha256
+        ):
+            _fail("proof dependency replay input snapshot changed during query")
+        return FixtureReplay(
+            observations=tuple(observations),
+            candidate_sha256=candidate_sha256,
+            query_helper_sha256=query_helper_sha256,
         )
-        if observed != expected:
-            _fail(f"proof dependency query drifted from committed fixture: {fixture_name}")
-        observations.append(
-            {
-                "declaration": declaration,
-                "fixture_path": (
-                    Path("Prover") / "tests" / "fixtures" / "proof_dependencies" / fixture_name
-                ).as_posix(),
-                "query_output_sha256": observed.canonical_sha256(),
-            }
-        )
-    return tuple(observations)
 
 
 def write_operator_observation(*, image: str, output: Path) -> dict[str, object]:
@@ -312,7 +339,8 @@ def write_operator_observation(*, image: str, output: Path) -> dict[str, object]
     destination = (output if output.is_absolute() else _REPO_ROOT / output).resolve()
     if destination.suffix != ".json" or not destination.is_relative_to(release_root):
         _fail("operator observation must be a JSON file below release-evidence")
-    observations = replay_fixture_evidence(image=image)
+    replay = replay_fixture_evidence(image=image)
+    observations = replay.observations
     output_hashes = tuple(cast(str, item["query_output_sha256"]) for item in observations)
     outputs_sha256 = hashlib.sha256(
         json.dumps(
@@ -324,7 +352,7 @@ def write_operator_observation(*, image: str, output: Path) -> dict[str, object]
     relative_output = destination.relative_to(_REPO_ROOT).as_posix()
     record: dict[str, object] = {
         "authority": "operator-local-observation-only",
-        "candidate_sha256": _sha256_file(_QUERY_FIXTURE),
+        "candidate_sha256": replay.candidate_sha256,
         "command": [
             "uv",
             "run",
@@ -342,7 +370,7 @@ def write_operator_observation(*, image: str, output: Path) -> dict[str, object]
         "observations": list(observations),
         "outputs_sha256": outputs_sha256,
         "promotion_state": "not-admission-evidence",
-        "query_helper_sha256": _sha256_file(_QUERY_HELPER),
+        "query_helper_sha256": replay.query_helper_sha256,
         "schema_version": "autolean.proof-dependency-operator-observation.v1",
     }
     encoded = (
