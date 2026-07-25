@@ -32,6 +32,11 @@ WORKER_FILES: Final[tuple[str, ...]] = (
     "AutoleanLeanQuery.lean",
     "autolean-lean-wrapper",
 )
+CANARY_RUNTIME_PACKAGES: Final[tuple[str, ...]] = (
+    "autolean-prover",
+    "autolean-control-plane",
+    "autolean-builder",
+)
 
 
 def _run(
@@ -225,15 +230,15 @@ def _canary(repo_root: Path, image: str | None) -> None:
         if not candidate.is_file():
             raise RuntimeError("uv is unavailable in the WSL execution environment")
         uv = str(candidate)
+    package_arguments = [
+        argument for package in CANARY_RUNTIME_PACKAGES for argument in ("--package", package)
+    ]
     _run(
         [
             uv,
             "sync",
             "--frozen",
-            "--package",
-            "autolean-prover",
-            "--package",
-            "autolean-control-plane",
+            *package_arguments,
             "--no-dev",
         ],
         cwd=repo_root,

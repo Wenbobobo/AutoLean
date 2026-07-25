@@ -9,6 +9,7 @@ import os
 import secrets
 import stat
 import subprocess
+import sys
 import tempfile
 import time
 from dataclasses import dataclass
@@ -17,40 +18,17 @@ from pathlib import Path
 from typing import Final
 
 from autolean_contracts import (
-    AlignmentTargetV1,
     AttestationPurposeV1,
-    ExecutionGraphV1,
-    FidelityRiskV1,
-    FormalGraphV1,
     FormalizationTaskBundleV1,
-    FormalSpecificationV1,
-    FreezeRecordV1,
-    GraphBundleV1,
     HashKindV1,
     HmacAttestationKeyV1,
     HmacAttestationSignerV1,
     HmacAttestationVerifierV1,
-    LeanEnvironmentV1,
-    MathematicalGraphV1,
-    MathematicalSpecificationV1,
-    OciVerifierExecutionPolicyV2,
-    PermissionDecisionV1,
     ProofSubmissionV1,
-    ReleaseTierV1,
-    RightsRecordV1,
-    SourceRecordV1,
-    SourceSpanV1,
     StableIdentifierV1,
-    StatementContractV1,
-    StatementStatusV1,
-    TaskKindV1,
-    TaskPolicyV1,
     VerificationEvidenceArtifactV2,
     VerificationSigningLeaseBindingV1,
     VerificationSigningRequestV1,
-    build_proof_boundary,
-    builder_attestation_payload,
-    digest_model,
     digest_text,
     stable_identifier,
 )
@@ -80,13 +58,23 @@ from autolean_prover.execution import (
 from autolean_prover.verification import TrustedLeanVerifier
 from autolean_prover.verification_gateway import attest_oci_observation_via_gateway
 
-PROTOCOL: Final[str] = "autolean.oci-lean-wrapper.v2"
-TYPE_FORMAT: Final[str] = "autolean.lean-pp-expr.v1"
-DECLARATION: Final[str] = "AutoLean.OCI.fixture"
-CANONICAL_TYPE: Final[str] = "\u2200 (n : Nat), @Eq.{1} Nat n n"
-LEAN_VERSION: Final[str] = "v4.28.0"
-MATHLIB_REVISION: Final[str] = "none-pure-lean-v4.28.0"
-_FIXED_TIME: Final[datetime] = datetime(2026, 1, 1, tzinfo=UTC)
+_PROJECT_ROOT = Path(__file__).resolve().parents[1]
+if str(_PROJECT_ROOT) not in sys.path:
+    sys.path.insert(0, str(_PROJECT_ROOT))
+
+from benchmarks.source_backed_oci_fixture import (  # noqa: E402
+    CANONICAL_TYPE,
+    LEAN_VERSION,
+    MATHLIB_REVISION,
+    PROTOCOL,
+    TYPE_FORMAT,
+    build_source_backed_oci_fixture,
+)
+from benchmarks.source_backed_oci_fixture import (  # noqa: E402
+    DECLARATION as _DECLARATION,
+)
+
+DECLARATION: Final[str] = _DECLARATION
 _VERIFIER_KEY: Final[HmacAttestationKeyV1] = HmacAttestationKeyV1(
     key_id="oci-canary-verifier-v1",
     secret=b"local-oci-canary-verifier-key-0123456789",
@@ -234,123 +222,6 @@ class _IndependentOciCanaryVerifier:
             execution_claim_hash=artifact.oci.execution_authority.execution_claim_hash,
         )
         return _INDEPENDENT_RECEIPT_AUTHENTICATOR.authenticate(receipt)
-
-
-def _bundle(image_digest: str) -> FormalizationTaskBundleV1:
-    source_id = _stable_id("source")
-    span = SourceSpanV1(
-        span_id=_stable_id("span"),
-        locator="oci-canary:1",
-        content_hash=digest_text(HashKindV1.SOURCE_SPAN, "n equals n"),
-        permitted_excerpt="n equals n",
-    )
-    source = SourceRecordV1(
-        source_id=source_id,
-        work_id="oci-real-canary",
-        title="AutoLean OCI real-execution canary",
-        version="1",
-        locator="autolean://oci-real-canary",
-        content_hash=digest_text(HashKindV1.SOURCE_BYTES, "oci-real-canary-source-v1"),
-        retrieved_at=_FIXED_TIME,
-        spans=(span,),
-    )
-    rights = RightsRecordV1(
-        rights_id=_stable_id("rights"),
-        source_id=source_id,
-        source_license="CC0-1.0",
-        overall_decision=PermissionDecisionV1.ALLOW,
-        model_egress=PermissionDecisionV1.DENY,
-        reviewed_by="oci-canary-rights-fixture",
-        reviewed_at=_FIXED_TIME,
-    )
-    statement = "theorem fixture (n : Nat) : n = n"
-    verifier_policy = OciVerifierExecutionPolicyV2(
-        worker_image_digest=image_digest,
-    )
-    environment = LeanEnvironmentV1(
-        lean_version=LEAN_VERSION,
-        mathlib_revision=MATHLIB_REVISION,
-        verifier_execution_policy=verifier_policy,
-        environment_hash=digest_text(
-            HashKindV1.ENVIRONMENT,
-            "pure-lean-4.28.0:"
-            f"{image_digest}:{TYPE_FORMAT}:"
-            f"{verifier_policy.schema_version}:{verifier_policy.command_policy_hash().value}",
-        ),
-    )
-    formal = FormalSpecificationV1(
-        declaration_name="fixture",
-        namespace="AutoLean.OCI",
-        lean_statement_source=statement,
-        statement_source_hash=digest_text(HashKindV1.STATEMENT_SOURCE, statement),
-        elaborated_type=CANONICAL_TYPE,
-        elaborated_type_hash=digest_text(HashKindV1.ELABORATED_TYPE, CANONICAL_TYPE),
-        environment=environment,
-        imports_allowlist=(),
-    )
-    draft = StatementContractV1(
-        contract_id=_stable_id("contract"),
-        revision=2,
-        task_kind=TaskKindV1.KNOWN_THEOREM,
-        source=source,
-        rights=rights,
-        mathematics=MathematicalSpecificationV1(
-            informal_statement="Every natural number equals itself.",
-            normalized_statement="For every natural number n, n = n.",
-        ),
-        formal=formal,
-        alignments=(
-            AlignmentTargetV1(
-                source_span_id=span.span_id,
-                formal_target=DECLARATION,
-                relation="formalizes",
-                confidence=1.0,
-            ),
-        ),
-        policy=TaskPolicyV1(
-            release_tier=ReleaseTierV1.CALIBRATION,
-            fidelity_risk=FidelityRiskV1.L1_SIMPLE,
-        ),
-    )
-    frozen_payload = draft.model_dump(mode="python", round_trip=True)
-    frozen_payload.update(
-        {
-            "status": StatementStatusV1.FROZEN,
-            "freeze": FreezeRecordV1(
-                contract_hash=draft.semantic_hash(),
-                source_hash=source.content_hash,
-                source_preparation_id=stable_identifier("source-preparation", "oci-real-canary"),
-                source_preparation_hash=digest_text(
-                    HashKindV1.SOURCE_PREPARATION, "oci-real-canary"
-                ),
-                statement_source_hash=formal.statement_source_hash,
-                elaborated_type_hash=formal.elaborated_type_hash,
-                frozen_by="oci-real-canary",
-                frozen_at=_FIXED_TIME,
-            ),
-        }
-    )
-    frozen = StatementContractV1.model_validate(frozen_payload)
-    graphs = GraphBundleV1(
-        mathematical=MathematicalGraphV1(graph_id=_stable_id("math"), revision=2),
-        formal=FormalGraphV1(graph_id=_stable_id("formal"), revision=2),
-        execution=ExecutionGraphV1(graph_id=_stable_id("execution"), revision=2),
-    )
-    unsigned = FormalizationTaskBundleV1(
-        bundle_id=_stable_id("bundle"),
-        contract=frozen,
-        graphs=graphs,
-        graph_snapshot_hash=digest_model(HashKindV1.GRAPH_SNAPSHOT, graphs),
-        proof_boundary=build_proof_boundary(frozen),
-        issued_at=_FIXED_TIME,
-    )
-    attestation = HmacAttestationSignerV1(_BUILDER_KEY).issue(
-        purpose=AttestationPurposeV1.BUILDER_FREEZE,
-        payload=builder_attestation_payload(unsigned),
-        evidence_identity="oci-real-canary-builder-freeze",
-        ttl_seconds=3600,
-    )
-    return unsigned.model_copy(update={"builder_attestation": attestation})
 
 
 def _submission(bundle: FormalizationTaskBundleV1, proof: str) -> ProofSubmissionV1:
@@ -711,7 +582,6 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
     if wrong_profile.returncode == 0 or wrong_profile.stdout:
         raise RuntimeError("unknown helper profile did not fail closed")
 
-    bundle = _bundle(image_digest)
     with tempfile.TemporaryDirectory(prefix="autolean-oci-canary-") as raw_root:
         root = Path(raw_root)
         database = root / "control.db"
@@ -725,8 +595,16 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
                     _VERIFIER_KEY.key_id: _VERIFIER_KEY,
                 }
             ),
-            allow_test_only_unreviewed_bundles=True,
         )
+        if plane.allow_test_only_unreviewed_bundles:
+            raise RuntimeError("source-backed OCI canary cannot enable unreviewed bundle admission")
+        source_backed = build_source_backed_oci_fixture(
+            root / "source-backed-builder",
+            artifact_store=plane.artifacts,
+            image_digest=image_digest,
+            attestor=HmacAttestationSignerV1(_BUILDER_KEY),
+        )
+        bundle = source_backed.bundle
         plane.register_bundle(bundle, idempotency_key="register")
         receipt = plane.claim(
             bundle.bundle_id.value,
@@ -855,6 +733,9 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
             or outcome.execution_authority_class != "test-only-local"
         ):
             raise RuntimeError(f"control plane rejected the OCI canary: {outcome.reasons!r}")
+        freeze = bundle.contract.freeze
+        if freeze is None or freeze.source_preparation_hash is None:
+            raise RuntimeError("source-backed OCI canary lost its source preparation binding")
         with plane.events.connection() as connection:
             receipt_row = connection.execute(
                 """
@@ -928,6 +809,11 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
             "control_plane_promotion_state": outcome.promotion_state,
             "control_plane_execution_authority_class": outcome.execution_authority_class,
             "promotion_attestation_created": False,
+            "source_backed_builder_handoff": True,
+            "builder_unreviewed_bypass": plane.allow_test_only_unreviewed_bundles,
+            "builder_fidelity_evidence_digest": source_backed.evaluation.evidence_hash.value,
+            "source_preparation_hash": freeze.source_preparation_hash.value,
+            "bundle_handoff_hash": bundle.handoff_hash().value,
         }
 
     evidence = repo_root / "release-evidence" / "oci-worker"
