@@ -93,9 +93,7 @@ def test_real_lean_content_fixture_rejects_duplicate_source_declaration(tmp_path
 def test_real_lean_content_dependency_and_reverse_closures_are_exact() -> None:
     graph = load_default_real_lean_project_dag()
 
-    closure = {
-        item.node_id for item in graph.dependency_closure(frozenset({"capstone.capstone"}))
-    }
+    closure = {item.node_id for item in graph.dependency_closure(frozenset({"capstone.capstone"}))}
     assert {
         "foundations.seed",
         "arithmetic.score",

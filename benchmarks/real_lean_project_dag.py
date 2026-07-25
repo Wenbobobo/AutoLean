@@ -27,9 +27,7 @@ _MODULE = re.compile(r"^[A-Za-z][A-Za-z0-9_]*(?:\.[A-Za-z][A-Za-z0-9_]*)+$")
 _NODE_ID = re.compile(r"^[a-z][a-z0-9-]*(?:\.[a-z][a-z0-9-]*)+$")
 _IMPORT = re.compile(r"^import\s+([A-Za-z][A-Za-z0-9_.]*)\s*$", re.MULTILINE)
 _NAMESPACE = re.compile(r"^namespace\s+([A-Za-z][A-Za-z0-9_.]*)\s*$", re.MULTILINE)
-_DECLARATION = re.compile(
-    r"^(?:def|theorem|lemma)\s+([A-Za-z][A-Za-z0-9_]*)\b", re.MULTILINE
-)
+_DECLARATION = re.compile(r"^(?:def|theorem|lemma)\s+([A-Za-z][A-Za-z0-9_]*)\b", re.MULTILINE)
 
 
 @dataclass(frozen=True, slots=True)
@@ -94,9 +92,8 @@ class RealLeanProjectDagV1:
         module_files = tuple(module.file for module in self.modules)
         declaration_ids = tuple(item.node_id for item in self.declarations)
         declaration_names = tuple(item.declaration for item in self.declarations)
-        if (
-            len(set(module_names)) != len(module_names)
-            or len(set(module_files)) != len(module_files)
+        if len(set(module_names)) != len(module_names) or len(set(module_files)) != len(
+            module_files
         ):
             raise RealLeanProjectDagError("Lean fixture modules must be unique")
         if len(set(declaration_ids)) != len(declaration_ids) or len(set(declaration_names)) != len(
@@ -107,9 +104,10 @@ class RealLeanProjectDagV1:
         known_nodes = set(declaration_ids)
         for module in self.modules:
             expected_file = (
-                PurePosixPath(self.source_root)
-                / PurePosixPath(*module.module.split("."))
-            ).with_suffix(".lean").as_posix()
+                (PurePosixPath(self.source_root) / PurePosixPath(*module.module.split(".")))
+                .with_suffix(".lean")
+                .as_posix()
+            )
             if module.file != expected_file:
                 raise RealLeanProjectDagError("Lean module file does not match its module identity")
             if set(module.imports) - known_modules:
@@ -290,20 +288,14 @@ class RealLeanProjectDagV1:
 def _safe_relative_file(value: str) -> bool:
     path = PurePosixPath(value)
     return (
-        bool(value)
-        and not path.is_absolute()
-        and ".." not in path.parts
-        and "." not in path.parts
+        bool(value) and not path.is_absolute() and ".." not in path.parts and "." not in path.parts
     )
 
 
 def _safe_relative_directory(value: str) -> bool:
     path = PurePosixPath(value)
     return (
-        bool(value)
-        and not path.is_absolute()
-        and ".." not in path.parts
-        and "." not in path.parts
+        bool(value) and not path.is_absolute() and ".." not in path.parts and "." not in path.parts
     )
 
 
