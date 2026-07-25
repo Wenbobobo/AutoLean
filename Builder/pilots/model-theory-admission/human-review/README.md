@@ -34,14 +34,18 @@ Generated files are confined to:
 
 ```text
 tmp/pdfs/model-theory-t3-review/
-  pages/
-  index.html
-  review-view-manifest.v1.json
+  <review-view-manifest-sha256>/
+    pages/
+    index.html
+    review-view-manifest.v1.json
 ```
 
-This directory is ignored by Git. The generator never writes page images or textbook text into
-the public packet, never uses the network, never deletes unknown files, and refuses to overwrite a
-different existing generated file.
+This directory is ignored by Git. The CLI returns the versioned `output` path, the
+`review_view_manifest` path, and its `review_view_manifest_sha256`. Repeating an identical build
+reuses that immutable version; a renderer or view change produces a different version without
+deleting prior versions or unknown files. The generator never writes page images or textbook text
+into the public packet, never uses the network, and refuses to overwrite a different existing
+generated file.
 
 ## Completing A Review
 

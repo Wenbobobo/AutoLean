@@ -349,7 +349,7 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
     t4 = _load_json_object(_T4_ATTACHMENT_PATH)
 
     assert hashlib.sha256(packet_bytes).hexdigest() == (
-        "53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b"
+        "b92ba3f01483ea08dfa011d6e5d9718cfd2fbcd386ef03ad58b3a8d426205c65"
     )
     assert packet["schema_version"] == "autolean.model-theory-t3-human-review-packet.v1"
     assert packet["artifact_kind"] == "public_safe_advisory_review_packet"
@@ -357,6 +357,7 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
 
     decision_binding = packet["decision_binding"]
     assert isinstance(decision_binding, dict)
+    assert decision_binding["path"] == "Builder/pilots/model-theory-admission/decision.v2.json"
     assert (
         decision_binding["file_sha256"] == hashlib.sha256(_DECISION_PATH.read_bytes()).hexdigest()
     )
@@ -380,6 +381,16 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
     assert isinstance(manifest_binding, dict)
     assert isinstance(implementation, dict)
     assert isinstance(t4_binding, dict)
+    assert fine_binding["path"] == "Builder/pilots/model-theory-admission/fine-source-spans.v2.json"
+    assert pending_binding["path"] == "Builder/pilots/model-theory-admission/pending-review.md"
+    assert manifest_binding["path"] == "Builder/references/manifest.v2.json"
+    assert implementation["path"] == "Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean"
+    assert t4_binding["attachment_path"] == (
+        "Builder/pilots/model-theory-admission/t4-exact-image-attachment.v1.json"
+    )
+    assert t4_binding["query_path"] == (
+        "Builder/pilots/model-theory-admission/t4-declaration-query.v1.json"
+    )
     assert (
         fine_binding["file_sha256"]
         == hashlib.sha256((_ADMISSION_ROOT / "fine-source-spans.v2.json").read_bytes()).hexdigest()
@@ -437,7 +448,10 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
     assert isinstance(ambiguities, list)
     assert isinstance(fine_ambiguities, list)
     assert len(ambiguities) == len(fine_ambiguities) == 2
-    expected_claims = [(148, 147, "127"), (208, 207, "187")]
+    expected_claims = [
+        [(147, 146, "126"), (148, 147, "127")],
+        [(207, 206, "186"), (208, 207, "187")],
+    ]
     for review, bound_ambiguity, expected_claim in zip(
         ambiguities, fine_ambiguities, expected_claims, strict=True
     ):
@@ -445,20 +459,24 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
         assert isinstance(bound_ambiguity, dict)
         assert review["ambiguity_id"] == bound_ambiguity["ambiguity_id"]
         assert review["locator_snapshot"] == bound_ambiguity["matrix_locator_snapshot"]
-        claimed_page = review["claimed_page"]
-        assert isinstance(claimed_page, dict)
-        assert (
-            claimed_page["pdf_page_1_based"],
-            claimed_page["pdf_page_0_based"],
-            claimed_page["printed_page_label"],
-        ) == expected_claim
-        assert review["required_evidence_fields"] == [
+        claimed_pages = review["claimed_pages"]
+        assert isinstance(claimed_pages, list)
+        assert [
+            (
+                claimed_page["pdf_page_1_based"],
+                claimed_page["pdf_page_0_based"],
+                claimed_page["printed_page_label"],
+            )
+            for claimed_page in claimed_pages
+            if isinstance(claimed_page, dict)
+        ] == expected_claim
+        assert review["required_page_evidence_fields"] == [
             "pdf_page_1_based",
             "pdf_page_0_based",
             "printed_page_label",
             "page_render_sha256",
-            "page_label_region_sha256",
         ]
+        assert review["required_review_view_manifest_sha256"] is True
         assert review["review_effect"] == "advisory_only"
 
     verdicts = packet["verdict_enums"]
@@ -514,8 +532,16 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
         assert isinstance(packet_row, dict)
         assert response_row["ambiguity_id"] == packet_row["ambiguity_id"]
         assert response_row["page_ambiguity_verdict"] == "pending"
-        for field in packet_row["required_evidence_fields"]:
-            assert response_row[field] is None
+        assert response_row["review_view_manifest_sha256"] is None
+        response_evidence = response_row["page_evidence"]
+        packet_claims = packet_row["claimed_pages"]
+        assert isinstance(response_evidence, list)
+        assert isinstance(packet_claims, list)
+        assert len(response_evidence) == len(packet_claims) == 2
+        for page_evidence in response_evidence:
+            assert isinstance(page_evidence, dict)
+            for field in packet_row["required_page_evidence_fields"]:
+                assert page_evidence[field] is None
         assert response_row["review_effect"] == "advisory_only"
 
     for artifact in (packet, response):
@@ -540,6 +566,7 @@ def test_t3_human_review_packet_and_unfilled_response_replay_without_authority()
     )
     for forbidden in (b"C:\\\\", b"/home/", b"/Users/", b"/mnt/"):
         assert forbidden not in public_files
+    assert b"page_label_" + b"region_sha256" not in public_files
     assert not (_ADMISSION_ROOT / "admission-receipt.v2.json").exists()
 
 

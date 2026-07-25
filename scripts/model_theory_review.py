@@ -6,8 +6,10 @@ import argparse
 import hashlib
 import html
 import json
+import os
 import re
 import shutil
+import stat
 import subprocess
 import tempfile
 from pathlib import Path
@@ -28,12 +30,20 @@ from autolean_builder.reference_cache import (
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = ROOT / "tmp" / "pdfs" / "model-theory-t3-review"
 PACKET_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/human-review/packet.v1.json")
+DECISION_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/decision.v2.json")
 FINE_SPANS_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/fine-source-spans.v2.json")
+PENDING_REVIEW_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/pending-review.md")
 MANIFEST_RELATIVE_PATH = Path("Builder/references/manifest.v2.json")
+IMPLEMENTATION_RELATIVE_PATH = Path("Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean")
+T4_ATTACHMENT_RELATIVE_PATH = Path(
+    "Builder/pilots/model-theory-admission/t4-exact-image-attachment.v1.json"
+)
+T4_QUERY_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/t4-declaration-query.v1.json")
 PACKET_SCHEMA = "autolean.model-theory-t3-human-review-packet.v1"
 VIEW_SCHEMA = "autolean.model-theory-t3-review-view-manifest.v1"
 RENDER_DPI = 144
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
 
 
 class ReviewBuildError(ValueError):
@@ -131,11 +141,14 @@ def _bound_file(
     binding: dict[str, object],
     expected_path: Path,
     label: str,
+    *,
+    path_key: str = "path",
+    hash_key: str = "file_sha256",
 ) -> Path:
-    if binding.get("path") != expected_path.as_posix():
+    if binding.get(path_key) != expected_path.as_posix():
         raise ReviewBuildError(f"{label} binds an unexpected path")
     path = repo_root / expected_path
-    expected = _string(binding.get("file_sha256"), f"{label} hash")
+    expected = _string(binding.get(hash_key), f"{label} hash")
     if not _SHA256.fullmatch(expected) or _sha256(_read_file(path, label)) != expected:
         raise ReviewBuildError(f"{label} differs from the packet binding")
     return path
@@ -151,26 +164,40 @@ def _load_page_claims(
     if len(rows) != 2 or len(known_ambiguities) != 2:
         raise ReviewBuildError("the review packet must contain exactly two page ambiguities")
     claims: list[PageClaim] = []
+    seen_ambiguities: set[str] = set()
     for raw in rows:
         row = _object(raw, "page ambiguity review")
         ambiguity_id = _string(row.get("ambiguity_id"), "ambiguity ID")
         span_id = _string(row.get("span_id"), "ambiguity span ID")
-        if ambiguity_id not in known_ambiguities or span_id not in known_spans:
+        if (
+            ambiguity_id not in known_ambiguities
+            or span_id not in known_spans
+            or ambiguity_id in seen_ambiguities
+        ):
             raise ReviewBuildError("page ambiguity does not bind fine-span evidence")
-        claimed = _object(row.get("claimed_page"), f"claimed page {ambiguity_id}")
-        one_based = _integer(claimed.get("pdf_page_1_based"), "claimed PDF page")
-        zero_based = _integer(claimed.get("pdf_page_0_based"), "claimed PDF page index")
-        printed = _string(claimed.get("printed_page_label"), "claimed printed page")
-        if one_based <= 0 or zero_based != one_based - 1:
-            raise ReviewBuildError(f"page coordinates are inconsistent: {ambiguity_id}")
-        claims.append(
-            PageClaim(
-                ambiguity_id=ambiguity_id,
-                span_id=span_id,
-                pdf_page_1_based=one_based,
-                printed_page_label=printed,
+        seen_ambiguities.add(ambiguity_id)
+        pages = _array(row.get("claimed_pages"), f"claimed pages {ambiguity_id}")
+        if len(pages) != 2:
+            raise ReviewBuildError(f"page ambiguity must contain a page pair: {ambiguity_id}")
+        seen_pages: set[int] = set()
+        for claimed_raw in pages:
+            claimed = _object(claimed_raw, f"claimed page {ambiguity_id}")
+            one_based = _integer(claimed.get("pdf_page_1_based"), "claimed PDF page")
+            zero_based = _integer(claimed.get("pdf_page_0_based"), "claimed PDF page index")
+            printed = _string(claimed.get("printed_page_label"), "claimed printed page")
+            if one_based <= 0 or zero_based != one_based - 1 or one_based in seen_pages:
+                raise ReviewBuildError(f"page coordinates are inconsistent: {ambiguity_id}")
+            seen_pages.add(one_based)
+            claims.append(
+                PageClaim(
+                    ambiguity_id=ambiguity_id,
+                    span_id=span_id,
+                    pdf_page_1_based=one_based,
+                    printed_page_label=printed,
+                )
             )
-        )
+    if seen_ambiguities != known_ambiguities:
+        raise ReviewBuildError("page ambiguities do not bind fine-span evidence exactly")
     return tuple(claims)
 
 
@@ -187,11 +214,40 @@ def load_review_plan(repo_root: Path = ROOT) -> ReviewPlan:
         raise ReviewBuildError("review packet contains authority")
 
     evidence = _object(packet.get("evidence_bindings"), "evidence bindings")
+    decision_binding = _object(packet.get("decision_binding"), "decision binding")
+    _bound_file(repo_root, decision_binding, DECISION_RELATIVE_PATH, "decision")
     fine_binding = _object(evidence.get("fine_source_spans"), "fine-span binding")
     fine_path = _bound_file(repo_root, fine_binding, FINE_SPANS_RELATIVE_PATH, "fine-source spans")
+    pending_binding = _object(evidence.get("pending_review"), "pending-review binding")
+    _bound_file(repo_root, pending_binding, PENDING_REVIEW_RELATIVE_PATH, "pending review")
     manifest_binding = _object(evidence.get("reference_manifest"), "manifest binding")
     manifest_path = _bound_file(
         repo_root, manifest_binding, MANIFEST_RELATIVE_PATH, "reference manifest"
+    )
+    implementation_binding = _object(evidence.get("implementation"), "implementation binding")
+    _bound_file(
+        repo_root,
+        implementation_binding,
+        IMPLEMENTATION_RELATIVE_PATH,
+        "implementation",
+        hash_key="sha256",
+    )
+    t4_binding = _object(evidence.get("t4_exact_image"), "T4 exact-image binding")
+    _bound_file(
+        repo_root,
+        t4_binding,
+        T4_ATTACHMENT_RELATIVE_PATH,
+        "T4 attachment",
+        path_key="attachment_path",
+        hash_key="attachment_sha256",
+    )
+    _bound_file(
+        repo_root,
+        t4_binding,
+        T4_QUERY_RELATIVE_PATH,
+        "T4 query",
+        path_key="query_path",
+        hash_key="query_sha256",
     )
     try:
         fine_spans = load_fine_source_span_attachment(fine_path)
@@ -234,7 +290,18 @@ def load_review_plan(repo_root: Path = ROOT) -> ReviewPlan:
     )
 
 
-def verify_materials(plan: ReviewPlan, cache_root: Path) -> tuple[Path, bytes]:
+def _verify_material_bytes(
+    content: bytes,
+    *,
+    expected_sha256: str,
+    expected_size_bytes: int,
+    label: str,
+) -> None:
+    if len(content) != expected_size_bytes or _sha256(content) != expected_sha256:
+        raise ReviewBuildError(f"{label} differs from the manifest after verification")
+
+
+def verify_materials(plan: ReviewPlan, cache_root: Path) -> tuple[bytes, bytes]:
     try:
         root = cache_root.resolve(strict=True)
         if not root.is_dir():
@@ -242,17 +309,29 @@ def verify_materials(plan: ReviewPlan, cache_root: Path) -> tuple[Path, bytes]:
         cache = ReferenceCache(plan.manifest, root, confinement_root=root)
         pdf = cache.verify(plan.pdf_reference_id)
         text = cache.verify(plan.text_reference_id)
-        plan.fine_spans.assert_matches_source_artifact(text.cache_path)
     except (OSError, FineSpanAttachmentError, ReferenceCacheError) as error:
         raise ReviewBuildError(f"reference cache verification failed: {error}") from error
+    pdf_bytes = _read_file(pdf.cache_path, "manifest-bound PDF")
     text_bytes = _read_file(text.cache_path, "manifest-bound derived text")
+    _verify_material_bytes(
+        pdf_bytes,
+        expected_sha256=pdf.entry.sha256,
+        expected_size_bytes=pdf.entry.size_bytes,
+        label="manifest-bound PDF",
+    )
+    _verify_material_bytes(
+        text_bytes,
+        expected_sha256=text.entry.sha256,
+        expected_size_bytes=text.entry.size_bytes,
+        label="manifest-bound derived text",
+    )
     try:
         text_bytes.decode("utf-8")
     except UnicodeDecodeError as error:
         raise ReviewBuildError("manifest-bound derived text is not valid UTF-8") from error
     if len(text_bytes.split(b"\f")) != plan.page_count:
         raise ReviewBuildError("derived-text page count differs from the packet")
-    return pdf.cache_path, text_bytes
+    return pdf_bytes, text_bytes
 
 
 def map_spans_to_pages(
@@ -366,33 +445,100 @@ def render_page(
     )
 
 
+def _is_link_or_reparse(path: Path) -> bool:
+    try:
+        value = path.lstat()
+    except OSError as error:
+        raise ReviewBuildError(f"cannot inspect review output: {path.name}") from error
+    is_junction = getattr(os.path, "isjunction", lambda _: False)
+    return (
+        path.is_symlink()
+        or is_junction(path)
+        or stat.S_ISLNK(value.st_mode)
+        or bool(int(getattr(value, "st_file_attributes", 0)) & _REPARSE_POINT)
+    )
+
+
+def _lexical_absolute(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _relative_output_parts(path: Path, repository: Path) -> tuple[str, ...]:
+    try:
+        relative = _lexical_absolute(path).relative_to(repository)
+    except ValueError as error:
+        raise ReviewBuildError("review output escapes the repository") from error
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise ReviewBuildError("review output contains an unsafe component")
+    return relative.parts
+
+
+def _require_confined_directory(path: Path, repository: Path) -> None:
+    if _is_link_or_reparse(path):
+        raise ReviewBuildError("review output contains a symlink or junction")
+    try:
+        value = path.lstat()
+        resolved = path.resolve(strict=True)
+    except OSError as error:
+        raise ReviewBuildError(f"cannot inspect review output: {path.name}") from error
+    if not stat.S_ISDIR(value.st_mode):
+        raise ReviewBuildError("review output boundary is not a directory")
+    try:
+        resolved.relative_to(repository)
+    except ValueError as error:
+        raise ReviewBuildError("review output escapes the repository") from error
+
+
 def _ensure_output(repo_root: Path, output_root: Path) -> Path:
     try:
         repository = repo_root.resolve(strict=True)
-        relative = output_root.absolute().relative_to(repository)
-    except (OSError, ValueError) as error:
+    except OSError as error:
         raise ReviewBuildError("review output escapes the repository") from error
+    relative = _relative_output_parts(output_root, repository)
     current = repository
-    for part in relative.parts:
+    for part in relative:
         current /= part
-        if current.exists() and current.is_symlink():
-            raise ReviewBuildError("review output contains a symlink")
-    output_root.mkdir(parents=True, exist_ok=True)
-    (output_root / "pages").mkdir(exist_ok=True)
-    if not output_root.is_dir() or not (output_root / "pages").is_dir():
-        raise ReviewBuildError("review output boundary is not a directory")
-    return relative
+        try:
+            current.mkdir()
+        except FileExistsError:
+            pass
+        except OSError as error:
+            raise ReviewBuildError(f"cannot create review output: {current.name}") from error
+        _require_confined_directory(current, repository)
+    return Path(*relative)
+
+
+def _require_destination_parent(path: Path, output_root: Path, repository: Path) -> None:
+    try:
+        output_resolved = output_root.resolve(strict=True)
+        parent_resolved = path.parent.resolve(strict=True)
+        parent_resolved.relative_to(output_resolved)
+        parent_resolved.relative_to(repository)
+    except (OSError, ValueError) as error:
+        raise ReviewBuildError("review output destination escapes its version directory") from error
+    _require_confined_directory(path.parent, repository)
 
 
 def _preflight(path: Path, content: bytes) -> None:
-    if not path.exists():
+    try:
+        path.lstat()
+    except FileNotFoundError:
         return
-    if path.is_symlink() or not path.is_file() or _read_file(path, path.name) != content:
+    except OSError as error:
+        raise ReviewBuildError(f"cannot inspect review output: {path.name}") from error
+    if _is_link_or_reparse(path) or not path.is_file() or _read_file(path, path.name) != content:
         raise ReviewBuildError(f"review output collision will not be overwritten: {path.name}")
 
 
 def _install(path: Path, content: bytes) -> None:
-    if path.exists():
+    try:
+        path.lstat()
+    except FileNotFoundError:
+        pass
+    except OSError as error:
+        raise ReviewBuildError(f"cannot inspect review output: {path.name}") from error
+    else:
+        _preflight(path, content)
         return
     try:
         with path.open("xb") as handle:
@@ -407,7 +553,7 @@ def build_page_ambiguity_evidence(
     pages: dict[int, RenderedPage],
 ) -> list[dict[str, object]]:
     mapped_by_id = {item.span_id: item for item in span_pages}
-    evidence: list[dict[str, object]] = []
+    evidence_by_ambiguity: dict[str, dict[str, object]] = {}
     for claim in claims:
         try:
             mapped = mapped_by_id[claim.span_id]
@@ -416,20 +562,26 @@ def build_page_ambiguity_evidence(
             raise ReviewBuildError("page ambiguity lacks mapped render evidence") from error
         if not mapped.pdf_page_start <= claim.pdf_page_1_based <= mapped.pdf_page_end:
             raise ReviewBuildError(f"claimed page is outside its mapped span: {claim.ambiguity_id}")
-        evidence.append(
+        row = evidence_by_ambiguity.setdefault(
+            claim.ambiguity_id,
             {
                 "ambiguity_id": claim.ambiguity_id,
                 "span_id": claim.span_id,
                 "mapped_pdf_page_start_1_based": mapped.pdf_page_start,
                 "mapped_pdf_page_end_1_based": mapped.pdf_page_end,
+                "page_evidence": [],
+            },
+        )
+        page_evidence = _array(row["page_evidence"], "page ambiguity evidence")
+        page_evidence.append(
+            {
                 "pdf_page_1_based": claim.pdf_page_1_based,
                 "pdf_page_0_based": claim.pdf_page_1_based - 1,
                 "printed_page_label": claim.printed_page_label,
                 "page_render_sha256": rendered.sha256,
-                "page_label_region_sha256": None,
             }
         )
-    return evidence
+    return list(evidence_by_ambiguity.values())
 
 
 def _render_index(
@@ -476,7 +628,7 @@ def _render_index(
         span = mapped[claim.span_id]
         lines.append(
             f"<li><code>{html.escape(claim.ambiguity_id)}</code>: mapped PDF "
-            f"{span.pdf_page_start}-{span.pdf_page_end}; claim PDF "
+            f"{span.pdf_page_start}-{span.pdf_page_end}; claimed PDF "
             f"{claim.pdf_page_1_based} / printed {html.escape(claim.printed_page_label)}</li>"
         )
     lines.append(
@@ -495,16 +647,23 @@ def build_review_view(
     tool: PdftoppmTool | None = None,
 ) -> dict[str, object]:
     plan = load_review_plan(repo_root)
-    pdf_path, text_bytes = verify_materials(plan, cache_root)
+    pdf_bytes, text_bytes = verify_materials(plan, cache_root)
     spans = map_spans_to_pages(text_bytes, plan.fine_spans.spans)
     renderer = tool or resolve_pdftoppm(pdftoppm)
-    relative_output = _ensure_output(repo_root, output_root)
+    _ensure_output(repo_root, output_root)
     needed_pages = sorted(
         {page for span in spans for page in range(span.pdf_page_start, span.pdf_page_end + 1)}
     )
-    with tempfile.TemporaryDirectory(prefix=".render-", dir=output_root) as temporary:
+    with tempfile.TemporaryDirectory(prefix=".review-build-", dir=output_root) as temporary:
+        temporary_root = Path(temporary)
+        pdf_snapshot = temporary_root / "manifest-bound-source.pdf"
+        try:
+            with pdf_snapshot.open("xb") as handle:
+                handle.write(pdf_bytes)
+        except OSError as error:
+            raise ReviewBuildError("cannot create private PDF render snapshot") from error
         rendered = {
-            page: render_page(renderer, pdf_path, page, Path(temporary)) for page in needed_pages
+            page: render_page(renderer, pdf_snapshot, page, temporary_root) for page in needed_pages
         }
     ambiguity_evidence = build_page_ambiguity_evidence(plan.page_claims, spans, rendered)
     index = _render_index(plan, spans, rendered)
@@ -566,16 +725,27 @@ def build_review_view(
     manifest_bytes = (
         json.dumps(manifest, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
     ).encode()
-    destinations = {output_root / page.relative_path: page.content for page in rendered.values()}
-    destinations[output_root / "index.html"] = index
-    destinations[output_root / "review-view-manifest.v1.json"] = manifest_bytes
+    manifest_sha256 = _sha256(manifest_bytes)
+    version_root = output_root / manifest_sha256
+    relative_output = _ensure_output(repo_root, version_root)
+    _ensure_output(repo_root, version_root / "pages")
+    try:
+        repository = repo_root.resolve(strict=True)
+    except OSError as error:
+        raise ReviewBuildError("review output escapes the repository") from error
+    destinations = {version_root / page.relative_path: page.content for page in rendered.values()}
+    destinations[version_root / "index.html"] = index
+    destinations[version_root / "review-view-manifest.v1.json"] = manifest_bytes
     for path, content in destinations.items():
+        _require_destination_parent(path, version_root, repository)
         _preflight(path, content)
     for path, content in destinations.items():
+        _require_destination_parent(path, version_root, repository)
         _install(path, content)
     return {
-        "manifest_sha256": _sha256(manifest_bytes),
+        "review_view_manifest_sha256": manifest_sha256,
         "output": relative_output.as_posix(),
+        "review_view_manifest": (relative_output / "review-view-manifest.v1.json").as_posix(),
         "rendered_page_count": len(rendered),
         "status": "ok",
     }

@@ -7,7 +7,7 @@ promotion.
 ## Bound Packet
 
 - Packet ID: `model-theory-t3-human-review-v1`
-- Packet SHA-256: `53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b`
+- Packet SHA-256: `b92ba3f01483ea08dfa011d6e5d9718cfd2fbcd386ef03ad58b3a8d426205c65`
 - Decision canonical SHA-256:
   `f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5`
 - Review effect: `advisory_only`
@@ -63,13 +63,15 @@ fields null when no correction is proposed.
 Allowed verdicts are `page_pair_confirmed`, `page_pair_corrected`, and `unresolved`.
 
 The packet records the unconfirmed source claims separately from the reviewer response. The
-derived-text spans map across PDF pages 147-148 and 207-208 respectively; the local view binds
-the render hash of the claimed page while retaining the full range.
+derived-text spans map across PDF pages 147-148 and 207-208 respectively. For each ambiguity,
+record both pages in `page_evidence`, including one-based and zero-based PDF coordinates, the
+printed label, and the local render SHA-256. Bind the two entries to one generated local view with
+`review_view_manifest_sha256`.
 
-| Ambiguity ID | Unconfirmed claim | Verdict | PDF page, 1-based | PDF page, 0-based | Printed label | Render SHA-256 | Label-region SHA-256 |
-| --- | --- | --- | --- | --- | --- | --- | --- |
-| `section-7-5-page-pair-unreconciled` | PDF 148 / printed 127 |  |  |  |  |  |  |
-| `universal-right-page-pair-unreconciled` | PDF 208 / printed 187 |  |  |  |  |  |  |
+| Ambiguity ID | Unconfirmed page pair | Verdict | Per-page evidence | Review-view manifest SHA-256 |
+| --- | --- | --- | --- | --- |
+| `section-7-5-page-pair-unreconciled` | PDF 147 / printed 126; PDF 148 / printed 127 |  | PDF coordinates, printed label, render SHA-256 |  |
+| `universal-right-page-pair-unreconciled` | PDF 207 / printed 186; PDF 208 / printed 187 |  | PDF coordinates, printed label, render SHA-256 |  |
 
 ## Fragment Name And Scope
 

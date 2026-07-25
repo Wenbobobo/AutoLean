@@ -276,38 +276,52 @@
       "ambiguity_id": "section-7-5-page-pair-unreconciled",
       "span_id": "sentence-satisfaction-assignment-independence",
       "locator_snapshot": "Section 7.5, Corollary 7.15 and Definitions 7.16-7.17, PDF page 148 / printed page 127",
-      "claimed_page": {
-        "pdf_page_1_based": 148,
-        "pdf_page_0_based": 147,
-        "printed_page_label": "127"
-      },
+      "claimed_pages": [
+        {
+          "pdf_page_1_based": 147,
+          "pdf_page_0_based": 146,
+          "printed_page_label": "126"
+        },
+        {
+          "pdf_page_1_based": 148,
+          "pdf_page_0_based": 147,
+          "printed_page_label": "127"
+        }
+      ],
       "required_verdict": "page_ambiguity_verdict",
-      "required_evidence_fields": [
+      "required_page_evidence_fields": [
         "pdf_page_1_based",
         "pdf_page_0_based",
         "printed_page_label",
-        "page_render_sha256",
-        "page_label_region_sha256"
+        "page_render_sha256"
       ],
+      "required_review_view_manifest_sha256": true,
       "review_effect": "advisory_only"
     },
     {
       "ambiguity_id": "universal-right-page-pair-unreconciled",
       "span_id": "lk-validity-and-soundness-universal-right-case",
       "locator_snapshot": "Universal-right case at PDF page 208 / printed page 187",
-      "claimed_page": {
-        "pdf_page_1_based": 208,
-        "pdf_page_0_based": 207,
-        "printed_page_label": "187"
-      },
+      "claimed_pages": [
+        {
+          "pdf_page_1_based": 207,
+          "pdf_page_0_based": 206,
+          "printed_page_label": "186"
+        },
+        {
+          "pdf_page_1_based": 208,
+          "pdf_page_0_based": 207,
+          "printed_page_label": "187"
+        }
+      ],
       "required_verdict": "page_ambiguity_verdict",
-      "required_evidence_fields": [
+      "required_page_evidence_fields": [
         "pdf_page_1_based",
         "pdf_page_0_based",
         "printed_page_label",
-        "page_render_sha256",
-        "page_label_region_sha256"
+        "page_render_sha256"
       ],
+      "required_review_view_manifest_sha256": true,
       "review_effect": "advisory_only"
     }
   ],

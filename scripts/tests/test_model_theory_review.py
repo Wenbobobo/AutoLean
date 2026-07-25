@@ -1,8 +1,12 @@
 from __future__ import annotations
 
+import copy
 import hashlib
+import os
 import subprocess
 from pathlib import Path
+from types import SimpleNamespace
+from typing import Any, cast
 
 import pytest
 from autolean_builder.fine_span_attachment import FineSourceSpanV2
@@ -22,9 +26,6 @@ def _png(width: int = 8, height: int = 6) -> bytes:
 def test_tracked_plan_replays_cross_page_claims() -> None:
     plan = review.load_review_plan()
 
-    assert plan.packet_sha256 == (
-        "53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b"
-    )
     assert [
         (
             claim.ambiguity_id,
@@ -37,8 +38,20 @@ def test_tracked_plan_replays_cross_page_claims() -> None:
         (
             "section-7-5-page-pair-unreconciled",
             "sentence-satisfaction-assignment-independence",
+            147,
+            "126",
+        ),
+        (
+            "section-7-5-page-pair-unreconciled",
+            "sentence-satisfaction-assignment-independence",
             148,
             "127",
+        ),
+        (
+            "universal-right-page-pair-unreconciled",
+            "lk-validity-and-soundness-universal-right-case",
+            207,
+            "186",
         ),
         (
             "universal-right-page-pair-unreconciled",
@@ -81,11 +94,14 @@ def test_cross_page_mapping_binds_claimed_page_render() -> None:
             "span_id": "cross-page-span",
             "mapped_pdf_page_start_1_based": 1,
             "mapped_pdf_page_end_1_based": 2,
-            "pdf_page_1_based": 2,
-            "pdf_page_0_based": 1,
-            "printed_page_label": "B",
-            "page_render_sha256": pages[2].sha256,
-            "page_label_region_sha256": None,
+            "page_evidence": [
+                {
+                    "pdf_page_1_based": 2,
+                    "pdf_page_0_based": 1,
+                    "printed_page_label": "B",
+                    "page_render_sha256": pages[2].sha256,
+                }
+            ],
         }
     ]
 
@@ -183,3 +199,298 @@ def test_review_index_wraps_long_ids_and_hashes_without_widening_the_page() -> N
     assert "minmax(min(320px,100%),1fr)" in index
     assert "figure{min-width:0" in index
     assert "h1,h2,p,li,code{overflow-wrap:anywhere}" in index
+
+
+@pytest.mark.parametrize(
+    ("binding_path", "path_key"),
+    (
+        (("decision_binding",), "path"),
+        (("evidence_bindings", "fine_source_spans"), "path"),
+        (("evidence_bindings", "pending_review"), "path"),
+        (("evidence_bindings", "reference_manifest"), "path"),
+        (("evidence_bindings", "implementation"), "path"),
+        (("evidence_bindings", "t4_exact_image"), "attachment_path"),
+        (("evidence_bindings", "t4_exact_image"), "query_path"),
+    ),
+)
+def test_load_review_plan_rejects_each_bound_path(
+    monkeypatch: pytest.MonkeyPatch,
+    binding_path: tuple[str, ...],
+    path_key: str,
+) -> None:
+    original_load_object = review._load_object
+
+    def changed_packet(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        packet, raw = original_load_object(path, label)
+        if path != review.ROOT / review.PACKET_RELATIVE_PATH:
+            return packet, raw
+        changed = copy.deepcopy(packet)
+        binding: object = changed
+        for key in binding_path:
+            assert isinstance(binding, dict)
+            binding = binding[key]
+        assert isinstance(binding, dict)
+        binding[path_key] = "unbound/path"
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_packet)
+
+    with pytest.raises(review.ReviewBuildError, match="binds an unexpected path"):
+        review.load_review_plan()
+
+
+@pytest.mark.parametrize(
+    ("binding_path", "hash_key"),
+    (
+        (("decision_binding",), "file_sha256"),
+        (("evidence_bindings", "fine_source_spans"), "file_sha256"),
+        (("evidence_bindings", "pending_review"), "file_sha256"),
+        (("evidence_bindings", "reference_manifest"), "file_sha256"),
+        (("evidence_bindings", "implementation"), "sha256"),
+        (("evidence_bindings", "t4_exact_image"), "attachment_sha256"),
+        (("evidence_bindings", "t4_exact_image"), "query_sha256"),
+    ),
+)
+def test_load_review_plan_rejects_each_bound_hash(
+    monkeypatch: pytest.MonkeyPatch,
+    binding_path: tuple[str, ...],
+    hash_key: str,
+) -> None:
+    original_load_object = review._load_object
+
+    def changed_packet(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        packet, raw = original_load_object(path, label)
+        if path != review.ROOT / review.PACKET_RELATIVE_PATH:
+            return packet, raw
+        changed = copy.deepcopy(packet)
+        binding: object = changed
+        for key in binding_path:
+            assert isinstance(binding, dict)
+            binding = binding[key]
+        assert isinstance(binding, dict)
+        binding[hash_key] = "0" * 64
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_packet)
+
+    with pytest.raises(review.ReviewBuildError, match="differs from the packet binding"):
+        review.load_review_plan()
+
+
+@pytest.mark.parametrize(
+    "relative_path",
+    (
+        review.DECISION_RELATIVE_PATH,
+        review.FINE_SPANS_RELATIVE_PATH,
+        review.PENDING_REVIEW_RELATIVE_PATH,
+        review.MANIFEST_RELATIVE_PATH,
+        review.IMPLEMENTATION_RELATIVE_PATH,
+        review.T4_ATTACHMENT_RELATIVE_PATH,
+        review.T4_QUERY_RELATIVE_PATH,
+    ),
+)
+def test_load_review_plan_rejects_each_bound_artifact_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    relative_path: Path,
+) -> None:
+    original_read_file = review._read_file
+    target = review.ROOT / relative_path
+
+    def changed_artifact(path: Path, label: str) -> bytes:
+        content = original_read_file(path, label)
+        return content + b"\n" if path == target else content
+
+    monkeypatch.setattr(review, "_read_file", changed_artifact)
+
+    with pytest.raises(review.ReviewBuildError, match="differs from the packet binding"):
+        review.load_review_plan()
+
+
+def _material_plan(pdf: bytes, text: bytes) -> review.ReviewPlan:
+    entries = {
+        "pdf": SimpleNamespace(sha256=hashlib.sha256(pdf).hexdigest(), size_bytes=len(pdf)),
+        "text": SimpleNamespace(sha256=hashlib.sha256(text).hexdigest(), size_bytes=len(text)),
+    }
+    manifest = cast(Any, SimpleNamespace(require=entries.__getitem__))
+    return review.ReviewPlan(
+        packet={},
+        packet_sha256="0" * 64,
+        manifest=manifest,
+        fine_spans=cast(Any, SimpleNamespace()),
+        pdf_reference_id="pdf",
+        text_reference_id="text",
+        page_count=len(text.split(b"\f")),
+        page_claims=(),
+    )
+
+
+def test_verify_materials_returns_finally_verified_bytes(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    pdf_bytes = b"%PDF-finally-verified"
+    text_bytes = b"first\fsecond"
+    pdf_path = tmp_path / "pdf"
+    text_path = tmp_path / "text"
+    pdf_path.write_bytes(pdf_bytes)
+    text_path.write_bytes(text_bytes)
+
+    class Cache:
+        def __init__(self, *_: object, **__: object) -> None:
+            pass
+
+        def verify(self, reference_id: str) -> SimpleNamespace:
+            return SimpleNamespace(
+                entry=_material_plan(pdf_bytes, text_bytes).manifest.require(reference_id),
+                cache_path={"pdf": pdf_path, "text": text_path}[reference_id],
+            )
+
+    monkeypatch.setattr(review, "ReferenceCache", Cache)
+
+    assert review.verify_materials(_material_plan(pdf_bytes, text_bytes), tmp_path) == (
+        pdf_bytes,
+        text_bytes,
+    )
+
+
+@pytest.mark.parametrize("changed_reference", ("pdf", "text"))
+def test_verify_materials_rechecks_each_final_read(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+    changed_reference: str,
+) -> None:
+    pdf_bytes = b"%PDF-bound"
+    text_bytes = b"first\fsecond"
+    pdf_path = tmp_path / "pdf"
+    text_path = tmp_path / "text"
+    pdf_path.write_bytes(pdf_bytes)
+    text_path.write_bytes(text_bytes)
+    paths = {"pdf": pdf_path, "text": text_path}
+    plan = _material_plan(pdf_bytes, text_bytes)
+
+    class Cache:
+        def __init__(self, *_: object, **__: object) -> None:
+            pass
+
+        def verify(self, reference_id: str) -> SimpleNamespace:
+            result = SimpleNamespace(
+                entry=plan.manifest.require(reference_id), cache_path=paths[reference_id]
+            )
+            if reference_id == "text":
+                paths[changed_reference].write_bytes(b"changed-after-cache-verification")
+            return result
+
+    monkeypatch.setattr(review, "ReferenceCache", Cache)
+
+    with pytest.raises(
+        review.ReviewBuildError, match="differs from the manifest after verification"
+    ):
+        review.verify_materials(plan, tmp_path)
+
+
+def test_build_uses_private_pdf_snapshot_and_manifest_generation(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    output_root = repository / "tmp" / "pdfs" / "model-theory-t3-review"
+    cache_root = tmp_path / "cache"
+    cache_root.mkdir()
+    tracked = review.load_review_plan()
+    plan = tracked._replace(
+        page_count=1,
+        page_claims=(review.PageClaim("page-pair", "span", 1, "1"),),
+    )
+    span = review.SpanPageMap("span", 0, 4, "f" * 64, 1, 1)
+    observed_pdf_paths: list[Path] = []
+
+    monkeypatch.setattr(review, "load_review_plan", lambda _: plan)
+    monkeypatch.setattr(review, "verify_materials", lambda *_: (b"%PDF-snapshot", b"text"))
+    monkeypatch.setattr(review, "map_spans_to_pages", lambda *_: (span,))
+
+    def fake_render(
+        tool: review.PdftoppmTool,
+        pdf_path: Path,
+        page_number: int,
+        temporary_root: Path,
+    ) -> review.RenderedPage:
+        del tool, temporary_root
+        observed_pdf_paths.append(pdf_path)
+        assert pdf_path.name == "manifest-bound-source.pdf"
+        assert pdf_path.read_bytes() == b"%PDF-snapshot"
+        content = _png()
+        return review.RenderedPage(
+            page_number,
+            "pages/page-0001.png",
+            content,
+            hashlib.sha256(content).hexdigest(),
+        )
+
+    monkeypatch.setattr(review, "render_page", fake_render)
+    first_tool = review.PdftoppmTool(tmp_path / "pdftoppm", "1" * 64, "renderer-v1")
+    result = review.build_review_view(
+        cache_root,
+        "ignored",
+        repo_root=repository,
+        output_root=output_root,
+        tool=first_tool,
+    )
+    repeat = review.build_review_view(
+        cache_root,
+        "ignored",
+        repo_root=repository,
+        output_root=output_root,
+        tool=first_tool,
+    )
+    changed_renderer = review.build_review_view(
+        cache_root,
+        "ignored",
+        repo_root=repository,
+        output_root=output_root,
+        tool=review.PdftoppmTool(tmp_path / "pdftoppm", "1" * 64, "renderer-v2"),
+    )
+
+    assert observed_pdf_paths and all(
+        path.parent.parent == output_root for path in observed_pdf_paths
+    )
+    assert result == repeat
+    output = result["output"]
+    changed_output = changed_renderer["output"]
+    manifest_sha256 = result["review_view_manifest_sha256"]
+    assert isinstance(output, str)
+    assert isinstance(changed_output, str)
+    assert isinstance(manifest_sha256, str)
+    assert output != changed_output
+    assert manifest_sha256 in output
+    review_view_manifest = result["review_view_manifest"]
+    changed_review_view_manifest = changed_renderer["review_view_manifest"]
+    assert isinstance(review_view_manifest, str)
+    assert isinstance(changed_review_view_manifest, str)
+    assert (repository / review_view_manifest).is_file()
+    assert (repository / changed_review_view_manifest).is_file()
+
+
+def test_output_rejects_symlink_and_reparse_directory(
+    monkeypatch: pytest.MonkeyPatch,
+    tmp_path: Path,
+) -> None:
+    repository = tmp_path / "repository"
+    repository.mkdir()
+    external = tmp_path / "external"
+    external.mkdir()
+    linked = repository / "tmp"
+    try:
+        os.symlink(external, linked, target_is_directory=True)
+    except OSError as error:
+        pytest.skip(f"directory symlinks are unavailable: {error}")
+
+    with pytest.raises(review.ReviewBuildError, match="symlink or junction"):
+        review._ensure_output(repository, linked / "pdfs")
+
+    reparse = repository / "reparse"
+    reparse.mkdir()
+    monkeypatch.setattr(os.path, "isjunction", lambda path: Path(path) == reparse, raising=False)
+    assert review._is_link_or_reparse(reparse)
+    with pytest.raises(review.ReviewBuildError, match="symlink or junction"):
+        review._require_confined_directory(reparse, repository.resolve())

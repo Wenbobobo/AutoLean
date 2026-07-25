@@ -6,7 +6,7 @@
   "packet_binding": {
     "packet_id": "model-theory-t3-human-review-v1",
     "packet_path": "Builder/pilots/model-theory-admission/human-review/packet.v1.json",
-    "packet_sha256": "53eea20e92971ad6e47f1f244649604480d818f3645e97ab0d71a0afef19da6b"
+    "packet_sha256": "b92ba3f01483ea08dfa011d6e5d9718cfd2fbcd386ef03ad58b3a8d426205c65"
   },
   "reviewer_record": {
     "reviewer_id": null,
@@ -182,22 +182,42 @@
     {
       "ambiguity_id": "section-7-5-page-pair-unreconciled",
       "page_ambiguity_verdict": "pending",
-      "pdf_page_1_based": null,
-      "pdf_page_0_based": null,
-      "printed_page_label": null,
-      "page_render_sha256": null,
-      "page_label_region_sha256": null,
+      "review_view_manifest_sha256": null,
+      "page_evidence": [
+        {
+          "pdf_page_1_based": null,
+          "pdf_page_0_based": null,
+          "printed_page_label": null,
+          "page_render_sha256": null
+        },
+        {
+          "pdf_page_1_based": null,
+          "pdf_page_0_based": null,
+          "printed_page_label": null,
+          "page_render_sha256": null
+        }
+      ],
       "notes": null,
       "review_effect": "advisory_only"
     },
     {
       "ambiguity_id": "universal-right-page-pair-unreconciled",
       "page_ambiguity_verdict": "pending",
-      "pdf_page_1_based": null,
-      "pdf_page_0_based": null,
-      "printed_page_label": null,
-      "page_render_sha256": null,
-      "page_label_region_sha256": null,
+      "review_view_manifest_sha256": null,
+      "page_evidence": [
+        {
+          "pdf_page_1_based": null,
+          "pdf_page_0_based": null,
+          "printed_page_label": null,
+          "page_render_sha256": null
+        },
+        {
+          "pdf_page_1_based": null,
+          "pdf_page_0_based": null,
+          "printed_page_label": null,
+          "page_render_sha256": null
+        }
+      ],
       "notes": null,
       "review_effect": "advisory_only"
     }
