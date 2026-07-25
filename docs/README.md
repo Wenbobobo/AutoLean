@@ -54,8 +54,8 @@ runner reports success.
     independent versus compositional proof-dependency gates. The
     [executable proof-dependency spike](proof-dependency-gate-spike.md) records a host-mounted
     source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.
-    The [Lean 4.28 module-origin spike](lean-module-origin-spike.md) records the narrow
-    declaration-to-module API observation that a successor manifest must verify afresh.
+    The [Lean 4.28 module-origin API note](lean-module-origin-spike.md) records the imported
+    declaration boundary and the narrow image-owned test a successor manifest must implement.
 18. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
     deliberately narrow evidence boundary.
 19. [Operations and release](operations-release.md) defines evidence collection and the conditions

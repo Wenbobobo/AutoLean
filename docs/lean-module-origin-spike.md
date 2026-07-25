@@ -1,35 +1,59 @@
-# Lean 4.28 Declaration Module-Origin Spike
+# Lean 4.28 Imported-Declaration Module-Origin API Note
 
-## Conclusion
+## Status and conclusion
 
-Lean 4.28 exposes a usable *diagnostic* declaration-to-module lookup for a loaded environment. In the fixed source-v2 environment, the probe resolved the declarations it covered through:
+This is an API design note, not a replayable spike result. An early ad hoc source-v2
+observation prompted the API investigation, but its probe source, inputs, output, and digest
+were not retained. It must therefore not be cited as evidence that particular declarations,
+generated forms, or the source-v2 image were tested.
+
+Lean 4.28 exposes a diagnostic lookup for an *imported* declaration in a loaded environment:
 
 ```text
 env.getModuleIdxFor? info.name -> env.header.moduleNames[idx.toNat]?
 ```
 
-This closes one API-discovery question for the future target-free substrate. It does not make module origin trusted admission evidence: the probe was not image-owned, is not bound to a contract or manifest, and does not establish source provenance.
+`getModuleIdxFor?` is the lookup used by Lean's `isImportedConst`; its `none` branch is the
+normal branch for a declaration in the current module. The future substrate may use this lookup
+only as a fresh, image-owned diagnostic after the executable test below. It does not make module
+origin trusted admission evidence, and it does not establish source provenance.
 
-## Fixed observation boundary
+## API boundary
 
 | Field | Value |
 | --- | --- |
-| Lean environment | Lean 4.28 source-v2 worker environment |
-| Fixed image | `autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6` |
-| Query subject | a loaded declaration's `ConstantInfo` and its `info.name` |
+| Lean API version | Lean 4.28 |
+| Query subject | an imported declaration's `ConstantInfo` and its `info.name` |
 | Lookup | `env.getModuleIdxFor? info.name`, followed by `env.header.moduleNames[idx.toNat]?` |
-| Result class | observed module name, or `unknown` |
+| `some idx` result | A module name in the current loaded import closure |
+| `none` result | Current-module declaration or another name without an imported-module mapping |
 
-The probe covered declarations from different namespace/module combinations, generated and equation declarations, an imported `Candidate` declaration, and `Init`. Those cases show that the lookup is useful across the specific declaration forms relevant to the first substrate split. They do **not** establish coverage for every Lean declaration kind, generated name, or future toolchain revision.
+The [Lean 4.28 implementation](https://github.com/leanprover/lean4/blob/v4.28.0/src/Lean/Environment.lean#L1168-L1173)
+defines `getModuleIdxFor?` through the environment's imported-constant map and defines
+`isImportedConst` using its presence. Its
+[persistent-extension guidance](https://github.com/leanprover/lean4/blob/v4.28.0/src/Lean/Environment.lean#L1567-L1578)
+directs callers to current-module state when the lookup returns `none`.
+
+`ModuleIdx` is an index into the loaded environment's ordered module array. It is useful for the
+immediate lookup only and is not stable across changed import closures or toolchain/runtime
+rebuilds. It must never be a manifest identity, a cache key, or a reviewed dependency identity.
 
 ## Fail-closed interpretation
 
-The successor verifier must treat both absent stages as `unknown`:
+For an imported runtime declaration, the successor verifier must treat both absent stages as
+insufficient origin evidence:
 
 - `env.getModuleIdxFor? info.name = none`; or
 - a returned index has no corresponding `env.header.moduleNames[idx.toNat]?` entry.
 
-It must not infer an origin from the declaration's namespace, source-path convention, import order, or the current workspace. A declaration from the current module is accepted as such only when this exact lookup resolves to the expected current module name; it is not a fallback for an unresolved declaration. Any `unknown` or mismatch against the frozen manifest rejects the ordinary-dependency decision.
+It must not infer an imported origin from a declaration's namespace, source-path convention,
+import order, or current workspace. A `none` result is normal while compiling the current
+`Candidate` module; it cannot establish Candidate ownership or satisfy an imported-runtime
+origin check. Candidate ownership instead requires the sealed `Candidate.olean`'s
+`ModuleData.constNames` (and the compiled-file record) to name the expected declaration. In a
+separate query environment that imports `Candidate`, this API may report `Candidate`, but that
+diagnostic does not replace the sealed-module ownership check. Any missing or mismatched evidence
+rejects the ordinary-dependency decision.
 
 ## What this does not establish
 
@@ -40,16 +64,32 @@ It must not infer an origin from the declaration's namespace, source-path conven
 
 ## Successor manifest shape
 
-The `library-substrate-v1` manifest should include one declaration record for every AutoLean declaration in the target-free runtime. The minimum proposed fields are:
+The initial `library-substrate-v1` manifest should include one record for every AutoLean
+declaration with a `ConstantInfo` in the target-free runtime. The minimum proposed fields are:
 
 - declaration name and declaration kind;
-- resolved declaring module name (and, if retained for diagnostics, its module index);
+- resolved declaring module name;
 - canonical elaborated-type hash and observed axiom set;
-- the module's exact compiled-file identity and the complete runtime-manifest identity; and
+- the resolved module's exact `.olean` SHA-256 and the complete runtime-manifest identity; and
 - the profile image, Lean/toolchain, Mathlib revision, and ordered import-closure identities that make the module-name lookup meaningful.
 
-The verifier compares its fresh lookup against this frozen record. The module name alone is never sufficient: the record is reviewed together with the sealed runtime manifest and the ordinary-dependency policy.
+The verifier compares its fresh lookup against this frozen record. A module name alone is never
+sufficient: the record binds that name to its exact `.olean` identity and the sealed runtime
+manifest, then applies the ordinary-dependency policy.
+
+Lean's `ModuleData.extraConstNames` may contain code-generator auxiliary names that are mapped to
+a module but have no `ConstantInfo`. Initial `library-substrate-v1` rejects an AutoLean-owned
+extra name that cannot be matched to the typed declaration inventory; it does not fabricate a
+kind, canonical type, or axiom record. A later profile may admit such names only with a separate,
+reviewed schema and verification path.
 
 ## Next executable test
 
-Build a small target-free `library-substrate-v1` fixture with at least two AutoLean modules and one generated/equation declaration. An image-owned helper should enumerate its complete AutoLean declaration inventory, emit the lookup result and declaration kind/type/axiom data for each entry, and compare it to a content-addressed manifest. The test passes only when every origin is known and exact; fixtures with a missing mapping, manifest/module mismatch, target in the runtime, or reserved-module shadowing must reject. That is a preflight for the later image/contract/gateway work, not an admission result.
+Build a small target-free `library-substrate-v1` fixture with at least two AutoLean modules. An
+image-owned helper should enumerate the typed declaration inventory, emit the imported-origin
+lookup plus declaration kind/type/axiom data for each record, and compare it to a
+content-addressed manifest. Candidate ownership remains a separate sealed-`ModuleData` check.
+The test passes only when every required imported origin is known and exact. Fixtures with a
+missing mapping, a module-name/`.olean` mismatch, an unexpected untyped AutoLean extra name, a
+target in the runtime, or reserved-module shadowing must reject. This is a preflight for later
+image/contract/gateway work, not an admission result.
