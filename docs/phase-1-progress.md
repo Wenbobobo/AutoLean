@@ -2,12 +2,13 @@
 
 Snapshot: 2026-07-25
 
-Baseline: `3543b76f89671efd178a439f57e06029714d5e5e` on `origin/main`, after merged PRs
+Baseline: `f8bf32915a3510a4d697bd09d4b11147078abd88` on `origin/main`, after merged PRs
 [#11](https://github.com/Wenbobobo/AutoLean/pull/11),
 [#12](https://github.com/Wenbobobo/AutoLean/pull/12),
 [#13](https://github.com/Wenbobobo/AutoLean/pull/13),
 [#14](https://github.com/Wenbobobo/AutoLean/pull/14), and
-[#15](https://github.com/Wenbobobo/AutoLean/pull/15).
+[#15](https://github.com/Wenbobobo/AutoLean/pull/15), through
+[#20](https://github.com/Wenbobobo/AutoLean/pull/20).
 
 Decision: the baseline has substantial offline, synthetic, and local test-only coverage, but is
 not a Phase 1 release candidate. PR #11 adds a scripted-fake role calibration fixture, not a model
@@ -16,7 +17,11 @@ PR #13 makes the pending T3 source review reproducible, but supplies no complete
 review and no admission authority. PR #14 records that neither current backup qualifies. PR #15
 adds a host-side ordinary-dependency query and exact source-v2 replay, not an image-owned
 admission gate. Model-theory T3 therefore remains `gap/not_selected`, and T5 freeze remains
-blocked. No real external provider/model benchmark has run.
+blocked. PR #18 adds a real-Lean T7 input preflight, not T7 acceptance. PR #19 records the
+imported-declaration module-origin API boundary, not an executable probe; its early ad hoc probe
+was not retained. PR #20 adds a
+target-free split preflight, not a `library-substrate-v1` image or a T6 result. No real external
+provider/model benchmark has run, and this baseline is not a Phase 1 release candidate.
 
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
@@ -53,19 +58,22 @@ These labels are deliberately non-interchangeable:
 | Role benchmark V3 | Verified, fake-only | Ten oracle/mutant cells cover five roles and two cases per role with three repetitions, for 60 scripted trials. Strict matrix/readiness/evaluator commitments, private raw CAS, public aggregate, replay, and two byte-identical forward runs are recorded. Report file SHA `06766d98d82c6a5400765c60423d4b225ab0b12d314535e414d765ccbd414f13` | `provider_id=fake` and `exact_json_v1` exercise the harness only; this is not a model score or Lean/fidelity evidence |
 | External benchmark readiness | Blocked before egress | Refuses execution on `execution_authorization_missing_v1`, `external_executor_unavailable_v1`, and `production_role_evaluator_missing_v1` | API credentials are not yet requested |
 | Project DAG | Verified, synthetic | Fixed 20-node multi-file frontier, conflict, propagation, API-change, and integration-lease fixture | Does not compile a real multi-file Lean library |
+| Real Lean project-DAG preflight | Verified, byte-bound input; operator-local clean-build path | PR #18 adds a separate snapshot-first fixture: four Lean modules, twenty curated declaration nodes, byte-bound source/import/content graph, and a clean-build runner for the pinned local source-v2 image | No changed-source invalidation/rebuild, lease exercise, immutable bundle, per-node verifier, or T7 acceptance evidence |
 | Providers | Verified offline | Fake, Codex CLI, OpenAI Responses, and custom-compatible adapters; authorization/egress controls, stable failure taxonomy, and persistent circuit breaker | No paid/external run; no prohibited provider path |
 | OCI verifier | Verified, pure Lean test-only canary | Non-root exact image `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`; protocol V2 uses separate compile/query containers and binds both argv hashes plus the host-sealed `Candidate.olean` digest; statement replacement, wrong declaration/profile, stdout spoof, trusted-module shadow injection, persistent compile-time writer, and axiom attacks were rejected; an independent rerun produced an authenticated test-only execution receipt. Image-owned identity hash `81099458f107fc5a179e1d308b09ff0189424d8b4341dd47026cfbf01c3828e0`; current source-backed canary SHA `a83e703add32f9c896b3dbcd5f81982dabcfe5d036799a70cf5b5f9cd500a62e` | The image deliberately contains no mathlib; FATE's matching two-phase path was code-tested but not rerun; the receipt and gateway are fixture-only, `promotion_attestation_created=false`, and no production KMS/mTLS evidence exists |
 | Mathlib source-built OCI profile | Verified, local test-only | All nine locked Git sources plus only the JS payload from the official ProofWidgets v0.0.87 release asset entered a fresh exact context; `--no-cache --pull=false --network=none` completed 889/889 targets for `+Mathlib.ModelTheory.Semantics:olean`. The exact source-v2 image is `autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6`; build evidence SHA `3c340227a423ff5440aa67c63023f02e1468577eac317df8e2db2200e3212d7f`; canonical receipt SHA `40e15776cec80a03b9d5b0affd59a3f613b7f1855c48aa0c1e91f24ec0e1eed7`; canary SHA `0931e138fdc4bf67374dc1a42978c92e49f786bece95fcf812c425fc7fd8ad0e`. Query artifact SHA `167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a` binds all 46 retained declarations and the 2,744-module transitive closure; 41 declarations have nonempty axiom sets, and `Deriv.closed_sound` uses exactly `Classical.choice`, `Quot.sound`, and `propext` | Local test-only technical evidence only: the image has no registry publication, production signer, KMS/mTLS authority, promotion attestation, or frozen-bundle/gateway run. The source-v2 image, implicit `Init` import, and observed axioms do not match the immutable V2 decision's source-v1 strict empty-axiom profile; no admission or RC follows |
 | Ordinary proof-dependency spike | Verified, host-side executable | The Lean 4.28 query walks proof values and ordinary declaration types/values. Four committed fixtures replayed 4/4 against the exact source-v2 image: a structurally non-alias proof passed, while an exact-type known alias, a wrapper hiding a denied theorem, and a quotient dependency were exposed and rejected by their policies. The operator-local replay record binds one candidate snapshot, one helper snapshot, four query-output hashes, and aggregate output SHA `b216956433b32b4f3473889565cfe27e415564b2d768eb21650bd1acfa221116` | The helper is host-mounted and absent from the image receipt. The spike does not report canonical type hash, declaration kind, trusted module origin, or task mode; an unknown same-type alias can still pass if allowlisted. Contracts, OCI evidence, and the signing gateway do not bind or rerun it. It is not an admission gate or `independent_reproof` evidence |
+| Target-free Library split preflight | Verified static boundary; unretained operator-local diagnostic | PR #20 creates separate staged source trees and profile-selected snapshots. Its optional source-v2 canary can mount only the selected profile view and use a host-mounted diagnostic to observe Candidate ownership, direct proof dependencies, canonical type, and axioms for independent and compositional candidates | The diagnostic JSON was not retained. No new image or content-addressed receipt, complete dependency closure, imported module-origin verification, exact-type collision gate, contract/gateway binding, or T6 result |
+| Imported-declaration module-origin API note | Design note, not replayable evidence | PR #19 documents Lean 4.28's imported-only lookup: an imported `ConstantInfo` may resolve through `getModuleIdxFor?`; a declaration in the current `Candidate` normally yields `none`, so Candidate ownership remains a separate sealed-`ModuleData` check | The early ad hoc probe was not retained and is not evidence. The note supplies no image-owned helper, module-origin observation, collision check, or admission result |
 | Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
 | Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
-| Target-free Library substrate | Design decision merged | The ADR fixes `library-substrate-v1` as a new side-by-side image containing a manifest-bound, target-free AutoLean declaration closure over the locked Mathlib closure. It distinguishes `independent_reproof` from `compositional_bridge` and preserves source-v2/T4 bytes | No substrate image, environment revision, frozen bundle, proof-dependency admission gate, or gateway run exists yet; the ADR cannot close T3 |
+| Target-free Library substrate | Architecture accepted; split preflight verified only in its stated local scope | The ADR fixes `library-substrate-v1` as a new side-by-side image design. PR #20 adds a target-free staged split and profile-bound diagnostic preflight without changing source-v2/T4 history | No substrate image, content-addressed build receipt, complete closure/module-origin/collision checks, environment revision, frozen bundle, proof-dependency admission gate, or gateway run exists; neither the ADR nor preflight can close T3 or T6 |
 | Builder self-calibration and pilot selection | T3 gap, `not_selected`; review tooling merged | The pinned Library packet includes the kernel-checked `UniversalLK` micro-slice for the classical two-sided `⊥`, `→`, and `∀` fragment: level-indexed formulas, capture-avoiding instantiation, eigenvariable-safe universal rules, local/global soundness, the level-zero sentence bridge, and retained Bool rejection controls. The immutable public-safe V2 decision records the gap; a digest-only attachment covers all nine fine-anchor requirements with ten machine-located spans, and a separate exact-image attachment binds the source-v2 query artifact, all 46 declaration types/axiom sets, and the 2,744-module closure without changing that decision. PR #13 adds a byte-bound, versioned human-review packet and reproducible page-rendering workflow for the two ambiguous page pairs | No independent reviewer response has been accepted. Every fine span remains `machine_located_pending_review`; generating or visually opening the packet is not semantic review. The source-v2 observation still conflicts with the old decision's image/import/strict empty-axiom profile and requires an explicit successor profile plus authenticated admission authority. The fragment has no existential constructors or sequent-level structural rules; it is not frozen or handed to Prover |
 | Model-theory source egress | Enforced, source-specific `local_only` | The current reference manifest, source-rule matrix, and human-review packet all bind `model_egress_policy=local_only` | Exact textbook bytes or rendered pages may not be sent to an external provider or model-backed subagent. This is the current source record's rights/egress decision, not a missing Provider or Harness capability; changing it requires a reviewed manifest/rights revision |
 | Builder reference cache | Verified offline | Five locked source/derived records. The manifest-v2 fifth record is the 437-page `pypdf 6.14.2` extraction of Open Logic Project *Sets, Logic, Computation*, text SHA `6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d`; manifest SHA `b947a08ef2455beb77d9481c4cbddc481ec6590f03746fd22affb03dd8b06f91` | Retained only as local reference/provenance material; no human-calibrated pilot statement is recorded and model egress remains forbidden |
 | Backup pilot audit | Completed, read-only negative selection | The pointwise Cea lead has an 8-node mathematical graph: 2/8 nodes map directly under the strict count (25 percent), or 4/8 under the uncompiled optimistic-adapter count (50 percent), below both the 20-node floor and 70--80 percent reuse gate. van Kampen is paused for exact upstream overlap and source-rights blockers. Neither candidate is selected | This is desk/source/API inspection only: no source ingestion, rights decision, compile spike, semantic review, Builder admission, or Prover handoff occurred |
 | HF recovery boundary | Partially closed by operator confirmation | Operator confirmed deletion of the HF archive; no archive material is a migration source | This does not independently prove provider-side access state, credential rotation, or incident closure |
-| Local and remote CI, inventory, and SBOM | Verified at the recorded baseline | Baseline `3543b76` passed all four Ubuntu and Windows Python/policy and Dashboard jobs in [run 30145353560](https://github.com/Wenbobobo/AutoLean/actions/runs/30145353560). Current-tree and reachable-history scans, source-lock, inventory, and SPDX checks remain part of the recorded gates | GitHub Actions is compatibility and policy evidence, not production verifier authority. The Actions Node 20 deprecation warning is a maintenance risk, not a failed job |
+| Local and remote CI, inventory, and SBOM | Verified at the current baseline | Historical baseline `3543b76` passed all four jobs in [run 30145353560](https://github.com/Wenbobobo/AutoLean/actions/runs/30145353560). Current baseline `f8bf329` passed all four Ubuntu and Windows Python/policy and Dashboard jobs in [run 30161312819](https://github.com/Wenbobobo/AutoLean/actions/runs/30161312819). Current-tree and reachable-history scans, source-lock, inventory, and SPDX checks remain part of the recorded gates | GitHub Actions is compatibility and policy evidence, not production verifier authority |
 
 ## Weeks 1--12: actual state
 
@@ -79,18 +87,22 @@ downstream work.
 | 3--4 | Partial | SQLite WAL/events, leases/fencing, content-addressed artifacts, immutable workspaces, pure-Lean OCI adversarial canary, compile-canary-12, non-promotable agent-smoke-8, source-backed local vertical tests, and a host-side ordinary-dependency spike with 4/4 source-v2 fixture replay | Exercise the fixed FATE smoke bundles through the same immutable OCI/query/evidence boundary. Move ordinary-dependency evidence into a new image/contract/gateway revision with type and origin bindings; production verifier authority remains separate |
 | 5--6 | Partial | Offline Codex CLI/OpenAI Responses/custom-compatible adapters, capability/egress rejection, Archon adapter, specialist `ContextPack`, and synthetic 20-node DAG | Obtain explicit execution authorization and production role evaluators, then run registered `regression-48` pass@1. No such real-model run is recorded |
 | 7--8 | Partial | Read-only loopback Dashboard, budget and durable circuit-breaker policy, failure taxonomy, and fake-only five-role calibration fixture | Run `model-compare-90` pass@1 and role/model/retrieval/specialist ablations under one frozen experiment contract; remote Dashboard access remains unapproved |
-| 9--10 | Partial | Synthetic 1,000-job process recovery/replay evidence, Windows/Linux CI, local OCI evidence, and replayable fake reports | Run `model-compare-90` pass@4; record authoritative Linux clean-build/execution evidence and the remaining real worker crash/restart cases instead of treating compatibility CI as authority |
+| 9--10 | Partial | Synthetic 1,000-job process recovery/replay evidence, Windows/Linux CI, local OCI evidence, replayable fake reports, and the separate four-module/twenty-node real-Lean T7 input preflight | Bind the real fixture to changed-source rebuild, leases, immutable bundles, clean integration, and per-node verification; record authoritative Linux execution and the remaining real worker crash/restart cases instead of treating compatibility CI or the preflight as authority |
 | 11--12 | Not closed | SPDX SBOM, operations/release guide, protocol/interface documentation, audits, and explicit no-RC gates exist | Attempt FATE-350 pass@1 with separate M/H/X reports, review the registered paper-version subset, complete authorized production-authority evidence, and record an RC/no-RC decision. None of the benchmark/RC evidence is recorded |
 
 ## Recent merged evidence
 
-All three rows are in the baseline. None establishes admission.
+All six rows are in the baseline. None establishes admission, freezes T5, completes T6 or T7, or
+permits an RC.
 
 | Work item at snapshot | Repository state | Permitted interpretation |
 | --- | --- | --- |
 | T3 human-review packet, PR #13 | Merged | Review preparation and reproducibility only. T3 remains `gap/not_selected`; no semantic or admission decision exists |
 | Backup pilot audit, PR #14 | Merged | Read-only negative selection: pointwise Cea fails size/reuse gates, van Kampen is paused, and neither is selected |
 | Proof-dependency closure spike, PR #15 | Merged | Executable host-side diagnostic with real 4/4 source-v2 fixture replay; not image-owned, contract-bound, gateway-enforced, or `independent_reproof` admission evidence |
+| Real Lean T7 input preflight, PR #18 | Merged | Snapshot-first, byte-bound four-module/twenty-node content fixture with an optional local source-v2 clean build. It leaves changed-source rebuild, leases, bundles, per-node verification, and T7 acceptance open |
+| Lean module-origin API note, PR #19 | Merged | Imported-only API design boundary. Current-`Candidate` `none` is expected and Candidate ownership is separately sealed-module based; the unretained early probe cannot support a claim |
+| Target-free Library split preflight, PR #20 | Merged | Profile-bound staged split and unretained host-mounted direct-dependency/type/axiom diagnostic only. No image or content-addressed receipt, full closure, module-origin/collision gate, contract/gateway run, or T6 result |
 
 ## Current gated route
 
@@ -100,6 +112,8 @@ All three rows are in the baseline. None establishes admission.
 | Pilot self-calibration | T3 gap, blocked | V2 records `gap/not_selected` and remains unchanged. Complete local review of the ten machine-located spans, resolve the Section 7.5 and universal-right (`∀R`) locator ambiguity, decide a successor formal profile consistent with the exact image/import/axiom observation, and close semantic-review and admission-authority checks. The two audited backups are not selected, so a different backup requires its own audit |
 | Pinned Library selection spike | Partial passed with gap | The universal fragment is kernel-checked, but local replay does not select it or establish source fidelity |
 | First calibrated contract slice (T5) | Blocked by T3 | A different backup may be audited, but no statement may freeze until one boundary is admitted with rights and review readiness |
+| Target-free substrate and dependency gate (T6) | Preflight only, blocked by T5 | The split/profile diagnostic is useful implementation input, but T6 still needs a new image and content-addressed receipt, full closure, imported-origin and collision checks, immutable contract, OCI evidence, and gateway replay |
+| Real project-scale loop (T7) | Input preflight only | The synthetic scheduling fixture and real Lean content fixture are both retained, but acceptance still needs changed-source rebuild, lease/bundle flow, clean integration, and per-node verification evidence |
 | Authoritative Prover path | Partially verified | One unchanged source-backed synthetic bundle passed the full local pure-Lean path through real OCI, an independent gateway rerun, and terminal acceptance. Preserve that contract while extending the same path to the exact mathlib profile and closing production-authority and full adversarial-suite gaps |
 | Controlled model/benchmark evaluation | Blocked before egress | External execution authorization and production evaluators must exist before requesting an API secret. Once ready, fixed suites and ablations remain secondary diagnostics; no FATE result closes a Builder or Library gate |
 | Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
@@ -172,17 +186,21 @@ weakens a theorem.
 2. Keep T5 blocked until one boundary is admitted. Further backup source/rule auditing may
    proceed, but no statement freeze or Prover bundle may be issued.
 3. Preserve the completed source-backed pure-Lean vertical evidence and the exact source-v2 T4
-   query attachment. Keep the immutable V2 decision unchanged; record any accepted image/import/
-   axiom change only in a successor profile. Move the ordinary-dependency query into a new
-   image-owned helper and bind canonical type hash, declaration kind, module origin, task mode,
-   contract evidence, and gateway replay. After T3 and T5 permit a frozen contract, rerun the
-   unchanged bundle and rejected controls against the new substrate digest.
-4. Implement external execution authorization and production role evaluators. Request an
+   query attachment. PR #20's target-free split is a profile/snapshot and host-mounted diagnostic,
+   while PR #19 is only an imported-origin API design note; neither changes the immutable V2
+   decision. Build a new image-owned helper that binds canonical type, declaration kind, imported
+   module origin, full closure, collision checks, task mode, contract evidence, and gateway replay.
+   After T3 and T5 permit a frozen contract, rerun the unchanged bundle and rejected controls
+   against the new substrate digest.
+4. Keep the real Lean T7 fixture separate from the synthetic DAG: use it next for changed-source
+   rebuild, bundle/lease flow, clean integration, and per-node verification rather than relabeling
+   its source-v2 clean build as T7 acceptance.
+5. Implement external execution authorization and production role evaluators. Request an
    operator-owned API secret reference only after those gates and the relevant source-egress
    policy are ready; no API is requested now.
-5. After selection and rights/domain readiness, begin expert-reviewed source-to-contract
+6. After selection and rights/domain readiness, begin expert-reviewed source-to-contract
    calibration; feed only frozen bundles to Prover.
-6. Run fixed regression/comparison work as controlled secondary diagnostics, then deploy
+7. Run fixed regression/comparison work as controlled secondary diagnostics, then deploy
    Builder/verifier authorities behind authenticated service boundaries before any result is
    called promotable.
 
