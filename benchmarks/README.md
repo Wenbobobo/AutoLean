@@ -13,6 +13,13 @@ it maps twenty real Lean declarations across four modules to an explicit declara
 It does not alter `project_dag.v1` scheduler semantics or turn a local clean build into a T7
 acceptance result. See the [T7 real Lean project-DAG preflight](../docs/t7-real-lean-project-dag-preflight.md).
 
+`project_dag/real-lean-change-case.v1.json` adds one curated changed-source case without modifying
+that baseline fixture. It binds an `Arithmetic.score` type change, the exact eleven-declaration
+invalidation plan, the three-module reverse-import rebuild plan, and successor edits/hashes. The
+operator-local runner requires the unchanged Relations source to fail against the new compiled API
+before the bound successor can rebuild; this remains non-acceptance preflight evidence. See the
+[T7 changed-source preflight](../docs/t7-real-lean-changed-source-preflight.md).
+
 `project_integration.py` binds that fixed graph to public control-plane registration, lease, and
 append-only event APIs with synthetic test-only signatures. It records the cross-file topology as
 formal-graph metadata and derives execution status from events; it does not put scheduling edges
