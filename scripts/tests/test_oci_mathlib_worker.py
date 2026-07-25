@@ -916,6 +916,149 @@ def test_declaration_query_action_compiles_frozen_source_and_has_stable_policy(
         assert container_name not in policy_json
 
 
+def test_declaration_query_evidence_has_stable_content_and_non_self_referential_hash(
+    tmp_path: Path,
+) -> None:
+    document: dict[str, object] = {
+        "image": "autolean/mathlib-worker@sha256:" + "a" * 64,
+        "schema_version": oci_mathlib_worker.DECLARATION_QUERY_EVIDENCE_SCHEMA,
+        "source_inputs_sha256": "b" * 64,
+    }
+    expected = (
+        "{\n"
+        f'  "image": "{document["image"]}",\n'
+        '  "schema_version": "autolean.mathlib-declaration-query-evidence.v1",\n'
+        f'  "source_inputs_sha256": "{document["source_inputs_sha256"]}"\n'
+        "}\n"
+    ).encode()
+
+    result = oci_mathlib_worker._record_declaration_query_evidence(tmp_path, document)
+
+    output = (
+        tmp_path
+        / "release-evidence"
+        / "oci-worker"
+        / oci_mathlib_worker.DECLARATION_QUERY_EVIDENCE_NAME
+    )
+    assert output.read_bytes() == expected
+    assert hashlib.sha256(expected).hexdigest() == (
+        "0b24e915be544411ca450876bc4ed0d882ba765a60468fc05f4d553e805bef61"
+    )
+    assert result == {
+        **document,
+        "evidence_sha256": hashlib.sha256(expected).hexdigest(),
+    }
+    assert "evidence_sha256" not in json.loads(output.read_text(encoding="utf-8"))
+    assert "evidence_sha256" not in document
+
+
+def test_external_python_query_cli_records_and_prints_evidence_hash(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    candidate = tmp_path / "Candidate.lean"
+    candidate.write_text("theorem fixture : True := trivial\n", encoding="utf-8")
+    document: dict[str, object] = {
+        "schema_version": oci_mathlib_worker.DECLARATION_QUERY_EVIDENCE_SCHEMA,
+    }
+    recorded: list[tuple[Path, dict[str, object]]] = []
+    monkeypatch.setattr(
+        oci_mathlib_worker,
+        "query_declarations",
+        lambda *_arguments: document,
+    )
+
+    def record(repo_root: Path, result: dict[str, object]) -> dict[str, object]:
+        recorded.append((repo_root, result))
+        return {**result, "evidence_sha256": "c" * 64}
+
+    monkeypatch.setattr(oci_mathlib_worker, "_record_declaration_query_evidence", record)
+
+    oci_mathlib_worker.main(
+        [
+            "query-declarations",
+            "--image",
+            image,
+            "--candidate",
+            str(candidate),
+            "--declaration",
+            "AutoLean.Test.fixture",
+            "--native",
+            "--external-python",
+        ]
+    )
+
+    printed = json.loads(capsys.readouterr().out)
+    assert len(recorded) == 1
+    assert recorded[0][0] == Path(oci_mathlib_worker.__file__).resolve().parents[1]
+    assert recorded[0][1] is document
+    assert printed["evidence_sha256"] == "c" * 64
+
+
+def test_external_mathlib_actions_sync_complete_runtime_workspace(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    calls: list[list[str]] = []
+
+    def run(
+        argv: list[str],
+        **_kwargs: object,
+    ) -> subprocess.CompletedProcess[str]:
+        calls.append(list(argv))
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
+
+    monkeypatch.setattr(shutil, "which", lambda _name: "/fixture/uv")
+    monkeypatch.setattr(oci_mathlib_worker, "_run", run)
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    repo_root = tmp_path / "repo"
+    source_cache = tmp_path / "sources"
+    build_resource_cache = tmp_path / "resources"
+    candidate = tmp_path / "Candidate.lean"
+
+    oci_mathlib_worker._external_canary(
+        repo_root,
+        source_cache,
+        build_resource_cache,
+        image,
+    )
+    canary_calls = list(calls)
+    calls.clear()
+    oci_mathlib_worker._external_declaration_query(
+        repo_root,
+        source_cache,
+        build_resource_cache,
+        image,
+        candidate,
+        ("AutoLean.Test.fixture",),
+    )
+    declaration_calls = list(calls)
+    expected_sync = [
+        "/fixture/uv",
+        "sync",
+        "--frozen",
+        "--package",
+        "autolean-builder",
+        "--package",
+        "autolean-control-plane",
+        "--package",
+        "autolean-prover",
+        "--no-dev",
+    ]
+
+    assert oci_mathlib_worker.EXTERNAL_RUNTIME_PACKAGES == (
+        "autolean-builder",
+        "autolean-control-plane",
+        "autolean-prover",
+    )
+    assert canary_calls[0] == expected_sync
+    assert declaration_calls[0] == expected_sync
+    assert canary_calls[1][canary_calls[1].index("-m") + 2] == "canary"
+    assert declaration_calls[1][declaration_calls[1].index("-m") + 2] == "query-declarations"
+
+
 @pytest.mark.integration
 @pytest.mark.skipif(os.name != "posix", reason="source-v2 OCI integration is Linux-only")
 def test_source_v2_image_enforces_candidate_declaration_ownership() -> None:

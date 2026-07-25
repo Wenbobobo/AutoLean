@@ -44,6 +44,12 @@ DECLARATION_QUERY_HELPER: Final[str] = "/opt/autolean/lib/AutoleanMathlibDeclara
 DECLARATION_QUERY_MAX_DECLARATIONS: Final[int] = 128
 DECLARATION_SOURCE_MAX_BYTES: Final[int] = 16 * 1024 * 1024
 DECLARATION_EXECUTION_POLICY_SCHEMA: Final[str] = "autolean.mathlib-declaration-execution-policy.v1"
+DECLARATION_QUERY_EVIDENCE_NAME: Final[str] = "mathlib-declarations.v1.json"
+EXTERNAL_RUNTIME_PACKAGES: Final[tuple[str, ...]] = (
+    "autolean-builder",
+    "autolean-control-plane",
+    "autolean-prover",
+)
 OCI_LEAN_WRAPPER_EXECUTABLE: Final[str] = "/opt/autolean/bin/autolean-lean-wrapper"
 OCI_LEAN_WRAPPER_PROTOCOL: Final[str] = "autolean.oci-lean-wrapper.v2"
 BUILD_ASSETS: Final[tuple[str, ...]] = (
@@ -1170,6 +1176,22 @@ def _write_evidence(repo_root: Path, name: str, document: dict[str, object]) -> 
     return _sha256_bytes(rendered.encode("utf-8"))
 
 
+def _record_declaration_query_evidence(
+    repo_root: Path,
+    document: dict[str, object],
+) -> dict[str, object]:
+    if "evidence_sha256" in document:
+        raise MathlibWorkerError("declaration query evidence must not contain its own hash")
+    evidence_sha256 = _write_evidence(
+        repo_root,
+        DECLARATION_QUERY_EVIDENCE_NAME,
+        document,
+    )
+    result = dict(document)
+    result["evidence_sha256"] = evidence_sha256
+    return result
+
+
 def build(
     repo_root: Path,
     source_cache: Path,
@@ -1409,10 +1431,11 @@ def _external_canary(
             uv,
             "sync",
             "--frozen",
-            "--package",
-            "autolean-prover",
-            "--package",
-            "autolean-control-plane",
+            *(
+                argument
+                for package in EXTERNAL_RUNTIME_PACKAGES
+                for argument in ("--package", package)
+            ),
             "--no-dev",
         ],
         cwd=repo_root,
@@ -1465,10 +1488,11 @@ def _external_declaration_query(
             uv,
             "sync",
             "--frozen",
-            "--package",
-            "autolean-prover",
-            "--package",
-            "autolean-control-plane",
+            *(
+                argument
+                for package in EXTERNAL_RUNTIME_PACKAGES
+                for argument in ("--package", package)
+            ),
             "--no-dev",
         ],
         cwd=repo_root,
@@ -1600,6 +1624,7 @@ def main(argv: list[str] | None = None) -> None:
                 arguments.candidate.resolve(),
                 tuple(arguments.declaration),
             )
+            result = _record_declaration_query_evidence(repo_root, result)
             print(json.dumps(result, ensure_ascii=True, sort_keys=True))
         else:
             _external_declaration_query(
