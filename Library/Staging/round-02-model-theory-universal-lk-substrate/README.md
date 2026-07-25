@@ -52,6 +52,8 @@ against the existing digest-pinned source-v2 image, run:
 uv run --frozen python Library/scripts/run_substrate_canary.py canary
 ```
 
+The real canary never pulls an image; a missing pinned image fails closed.
+
 CI without Docker or the pinned local image must run the explicit static mode:
 
 ```text

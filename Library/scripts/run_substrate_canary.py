@@ -219,6 +219,7 @@ def _docker_base() -> list[str]:
         "docker",
         "run",
         "--rm",
+        "--pull=never",
         "--network",
         "none",
         "--read-only",

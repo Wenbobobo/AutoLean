@@ -290,6 +290,12 @@ def test_snapshot_copy_rejects_symlinks(tmp_path: Path) -> None:
         CANARY._regular_tree_copy(source, tmp_path / "snapshot")
 
 
+def test_real_canary_never_pulls_the_pinned_image() -> None:
+    command = CANARY._docker_base()
+
+    assert command[:4] == ["docker", "run", "--rm", "--pull=never"]
+
+
 def test_profile_parser_rejects_unknown_field(tmp_path: Path) -> None:
     root = _fixture_copy(tmp_path)
     profile = _profile(root, "compositional_bridge.profile.v1.json")
