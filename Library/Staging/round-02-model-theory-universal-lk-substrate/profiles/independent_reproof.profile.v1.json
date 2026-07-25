@@ -1,0 +1,101 @@
+{
+  "schema_version": "autolean.library-substrate-profile.v2",
+  "profile_id": "library-substrate-v1-model-theory-universal-lk-independent-reproof",
+  "profile_state": "preflight_fixture",
+  "task_mode": "independent_reproof",
+  "source_root": "source",
+  "source_tree": {
+    "schema_version": "autolean.library-substrate-source-tree.v2",
+    "sha256": "9ffb611432755899498f846d620fa9788306fed2b5dae81921287f85e9df4b07",
+    "files": [
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Core.lean",
+        "role": "core",
+        "sha256": "dc8fa5475d8b9eff0a7bdb39c10fe9c10ae35ee83a9fe4e9b510ca258789acb3"
+      },
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/SemanticPrelude.lean",
+        "role": "semantic_prelude",
+        "sha256": "4c05e9afd8a230d8a9c2c1f551f2ac42011f0fd319140e140aef727ebf354cd3"
+      },
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/RulePrelude.lean",
+        "role": "rule_prelude",
+        "sha256": "b6713e1c6471c8e379b7d4c7fd3ad96bf0b216220a354cb10e9293768a870fd1"
+      },
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.DerivSound",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Targets/DerivSound.lean",
+        "role": "unadmitted_dependency",
+        "sha256": "4c3996aba59b8020c8907eac2d263c913248586e5067914e91a5c7939dd58cd6"
+      },
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Targets/ClosedSound.lean",
+        "role": "target_oracle",
+        "sha256": "bf9aba5f726123c1d6affacfd4cfebb32cfc7ace67f875897a362f62913b228c"
+      },
+      {
+        "module": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Controls",
+        "path": "source/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK/Controls.lean",
+        "role": "offline_control",
+        "sha256": "3785dbcdebca1ffb8ede74549d19bac644dd4b0c1c2d358f562242dec319ac4f"
+      }
+    ]
+  },
+  "runtime_modules": [
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude"
+  ],
+  "runtime_import_closure": [
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Core",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude"
+  ],
+  "candidate_source": {
+    "path": "candidates/independent_reproof/Candidate.lean",
+    "sha256": "d7086bc1affa8df355bef57c5ffbaa985784f265080d4490eade66b0524bb7f8",
+    "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound",
+    "statement_sha256": "025caa66e8fd2a23eb6d65aa1da527c653a6ded9d6932c1d49ddd56ef72c481c"
+  },
+  "forbidden_modules": [
+    "AutoLeanLibrary.Fixtures.ModelTheory.Packet",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Controls",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound",
+    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.DerivSound"
+  ],
+  "target_binding": {
+    "state": "unbound",
+    "statement_contract_id": null,
+    "statement_contract_revision": null,
+    "target_declaration": null
+  },
+  "ordinary_dependency_policy": {
+    "state": "no_ordinary_dependency",
+    "formal_body_dependency_records": [],
+    "unadmitted_dependency_declarations": [],
+    "forbidden_declarations": [
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound",
+      "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.sound"
+    ]
+  },
+  "environment": {
+    "lean_toolchain": "leanprover/lean4:v4.28.0",
+    "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+    "source_v2_parent_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",
+    "library_substrate_image_digest": null,
+    "state": "parent_image_canary_only"
+  },
+  "non_claims": [
+    "no_frozen_statement_contract",
+    "no_library_substrate_image",
+    "no_promoted_library_asset",
+    "no_proof_admission",
+    "no_selected_builder_candidate"
+  ]
+}
