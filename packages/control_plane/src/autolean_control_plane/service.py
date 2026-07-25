@@ -28,6 +28,9 @@ from autolean_contracts import (
     VerificationSigningContextV1,
     VerificationSigningLeaseBindingV1,
     builder_attestation_payload,
+    canonical_json_bytes,
+    digest_bytes,
+    digest_text,
     proof_dependency_manifest_hash,
     verification_attestation_payload,
     verification_gateway_attestation_payload,
@@ -58,6 +61,45 @@ from .events import (
 from .leases import Lease, LeaseStore
 
 _PLACEHOLDER_RE = re.compile(r"\b(?:sorry|admit)\b|sorryAx")
+
+_FIDELITY_ARTIFACT_V1_FIELDS = frozenset(
+    {
+        "schema_version",
+        "task",
+        "generation_task",
+        "generation_task_hash",
+        "candidates",
+        "mutation_agent_id",
+        "mutation_probes",
+        "review",
+        "automatic_checks",
+        "additional_signoffs",
+    }
+)
+_DIGEST_V1_FIELDS = frozenset({"schema_version", "kind", "algorithm", "value"})
+_SOURCE_CLAIM_SPAN_FIELDS = frozenset({"span_id", "locator", "content_hash", "permitted_excerpt"})
+_SEMANTIC_OBLIGATION_FIELDS = frozenset(
+    {
+        "obligation_id",
+        "kind",
+        "description",
+        "source_span_ids",
+        "normalized_fragment",
+        "lean_fragment",
+        "authority",
+    }
+)
+_SEMANTIC_OBLIGATION_KINDS = frozenset(
+    {
+        "quantifier_order",
+        "assumption",
+        "conclusion",
+        "side_condition",
+        "definition",
+        "edge_case",
+        "non_vacuity",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -723,11 +765,15 @@ class ControlPlane:
 
         fidelity = bundle.contract.fidelity
         reference = bundle.fidelity_evidence
-        if fidelity is None or reference is None:
+        if fidelity is None and reference is None:
             if self.allow_test_only_unreviewed_bundles:
                 return None
             raise InvalidTransition(
                 "a canonical Builder fidelity artifact is required before registration"
+            )
+        if fidelity is None or reference is None:
+            raise InvalidTransition(
+                "reviewed Builder handoffs require a canonical fidelity artifact reference"
             )
         artifact = ArtifactRef(digest=reference.digest.value, size=reference.size)
         try:
@@ -742,7 +788,33 @@ class ControlPlane:
         )
         if payload.get("schema_version") != reference.artifact_schema:
             raise InvalidTransition("Builder fidelity artifact has an unexpected schema")
+        self._require_exact_object_keys(
+            payload,
+            _FIDELITY_ARTIFACT_V1_FIELDS,
+            label="Builder fidelity artifact",
+        )
         task = self._required_object(payload, "task")
+        generation_task = self._required_object(payload, "generation_task")
+        source_spans = self._source_claim_span_projection(bundle, task)
+        expected_generation_task = self._generation_task_projection(bundle, task, source_spans)
+        if generation_task != expected_generation_task:
+            raise InvalidTransition(
+                "Builder fidelity artifact generation task differs from the Builder projection"
+            )
+        generation_task_hash = digest_bytes(
+            HashKindV1.PROMPT,
+            canonical_json_bytes(generation_task),
+        )
+        declared_generation_task_hash = self._required_fidelity_digest(
+            payload,
+            "generation_task_hash",
+            expected_kind=HashKindV1.PROMPT,
+        )
+        if declared_generation_task_hash != generation_task_hash:
+            raise InvalidTransition(
+                "Builder fidelity artifact generation task does not match generation_task_hash"
+            )
+        self._validate_candidate_generation_task_hashes(payload, generation_task_hash)
         source_hash = self._required_object(task, "source_hash")
         statement_hash = self._required_object(task, "selected_statement_hash")
         checks = (
@@ -783,6 +855,234 @@ class ControlPlane:
             if not valid:
                 raise InvalidTransition(f"Builder fidelity artifact has a different {label}")
         return artifact
+
+    def _generation_task_projection(
+        self,
+        bundle: FormalizationTaskBundleV1,
+        task: JsonObject,
+        source_spans: list[JsonObject],
+    ) -> JsonObject:
+        obligations: list[JsonObject] = []
+        frozen_span_ids = {span.span_id.value for span in bundle.contract.source.spans}
+        obligation_ids: set[str] = set()
+        for value in self._required_list(task, "obligations"):
+            if not isinstance(value, dict):
+                raise InvalidTransition("Builder fidelity artifact task obligations are invalid")
+            full_obligation = self._json_object(value)
+            self._require_exact_object_keys(
+                full_obligation,
+                _SEMANTIC_OBLIGATION_FIELDS,
+                label="Builder fidelity artifact task obligation",
+            )
+            obligation_id = self._required_nonblank_fidelity_obligation_text(
+                full_obligation,
+                "obligation_id",
+            )
+            if obligation_id in obligation_ids:
+                raise InvalidTransition(
+                    "Builder fidelity artifact task obligation identifiers must be unique"
+                )
+            obligation_ids.add(obligation_id)
+            kind = self._required_text(full_obligation, "kind")
+            if kind not in _SEMANTIC_OBLIGATION_KINDS:
+                raise InvalidTransition("Builder fidelity artifact task obligation kind is invalid")
+            self._required_nonblank_fidelity_obligation_text(full_obligation, "description")
+            source_span_ids = self._required_texts(full_obligation, "source_span_ids")
+            if (
+                not source_span_ids
+                or len(set(source_span_ids)) != len(source_span_ids)
+                or not set(source_span_ids) <= frozen_span_ids
+            ):
+                raise InvalidTransition(
+                    "Builder fidelity artifact task obligation source spans are invalid"
+                )
+            normalized_fragment = self._required_nonblank_fidelity_obligation_text(
+                full_obligation,
+                "normalized_fragment",
+            )
+            if normalized_fragment not in bundle.contract.mathematics.normalized_statement:
+                raise InvalidTransition(
+                    "Builder fidelity artifact task obligation fragment is absent from the "
+                    "normalized statement"
+                )
+            self._required_nonblank_fidelity_obligation_text(full_obligation, "lean_fragment")
+            if self._required_text(full_obligation, "authority") != "expert":
+                raise InvalidTransition(
+                    "Builder fidelity artifact task obligation authority is invalid"
+                )
+            obligations.append(
+                self._json_object(
+                    {
+                        "obligation_id": obligation_id,
+                        "kind": kind,
+                        "source_span_ids": list(source_span_ids),
+                        "normalized_fragment": normalized_fragment,
+                    }
+                )
+            )
+        if not obligations:
+            raise InvalidTransition("Builder fidelity artifact task requires semantic obligations")
+        return self._json_object(
+            {
+                "source_spans": source_spans,
+                "mathematics": bundle.contract.mathematics.model_dump(mode="json"),
+                "formalization": {
+                    "task_kind": bundle.contract.task_kind.value,
+                    "declaration_name": bundle.contract.formal.declaration_name,
+                    "namespace": bundle.contract.formal.namespace,
+                    "lean_version": bundle.contract.formal.environment.lean_version,
+                    "mathlib_revision": bundle.contract.formal.environment.mathlib_revision,
+                    "imports_allowlist": list(bundle.contract.formal.imports_allowlist),
+                    "axioms_allowlist": list(bundle.contract.formal.axioms_allowlist),
+                    "rendering_profile": "autolean.full-declaration-exact.v1",
+                },
+                "obligations": obligations,
+            }
+        )
+
+    def _source_claim_span_projection(
+        self,
+        bundle: FormalizationTaskBundleV1,
+        task: JsonObject,
+    ) -> list[JsonObject]:
+        """Rebuild private claim payloads from frozen public span bindings.
+
+        The retained artifact supplies a private excerpt only.  Its span identifier, locator, and
+        typed content hash must exactly reproduce the frozen contract, and the excerpt must hash
+        to that contract hash before either task projection can include it.
+        """
+
+        claims = self._required_list(task, "source_spans")
+        frozen_spans = bundle.contract.source.spans
+        frozen_spans_by_id = {span.span_id.value: span for span in frozen_spans}
+        claims_by_id: dict[str, JsonObject] = {}
+        validated_claims: list[JsonObject] = []
+        for value in claims:
+            if not isinstance(value, dict):
+                raise InvalidTransition("Builder fidelity artifact task source spans are invalid")
+            claim = self._json_object(value)
+            self._require_exact_object_keys(
+                claim,
+                _SOURCE_CLAIM_SPAN_FIELDS,
+                label="Builder fidelity artifact task source span",
+            )
+            span_id = self._required_text(claim, "span_id")
+            if span_id in claims_by_id:
+                raise InvalidTransition(
+                    "Builder fidelity artifact task source span identifiers must be unique"
+                )
+            claims_by_id[span_id] = claim
+            validated_claims.append(claim)
+        if not claims or set(claims_by_id) != set(frozen_spans_by_id):
+            raise InvalidTransition(
+                "Builder fidelity artifact task source spans differ from frozen spans"
+            )
+
+        projection: list[JsonObject] = []
+        for frozen_claim in validated_claims:
+            span_id = self._required_text(frozen_claim, "span_id")
+            frozen_span = frozen_spans_by_id[span_id]
+            if self._required_text(frozen_claim, "locator") != frozen_span.locator:
+                raise InvalidTransition(
+                    "Builder fidelity artifact task source span locator differs"
+                )
+            content_hash = self._required_fidelity_digest(
+                frozen_claim,
+                "content_hash",
+                expected_kind=HashKindV1.SOURCE_SPAN,
+            )
+            if content_hash != frozen_span.content_hash:
+                raise InvalidTransition("Builder fidelity artifact task source span hash differs")
+            excerpt = self._required_text(frozen_claim, "permitted_excerpt")
+            if not excerpt.strip() or digest_text(HashKindV1.SOURCE_SPAN, excerpt) != content_hash:
+                raise InvalidTransition(
+                    "Builder fidelity artifact task source excerpt differs from hash"
+                )
+            if (
+                frozen_span.permitted_excerpt is not None
+                and excerpt != frozen_span.permitted_excerpt
+            ):
+                raise InvalidTransition(
+                    "Builder fidelity artifact task source excerpt differs from frozen span"
+                )
+            projection.append(
+                self._json_object(
+                    {
+                        "span_id": frozen_span.span_id.value,
+                        "locator": frozen_span.locator,
+                        "content_hash": frozen_span.content_hash.model_dump(mode="json"),
+                        "permitted_excerpt": excerpt,
+                    }
+                )
+            )
+
+        if validated_claims != projection:
+            raise InvalidTransition(
+                "Builder fidelity artifact task source spans differ from frozen spans"
+            )
+        return projection
+
+    def _validate_candidate_generation_task_hashes(
+        self,
+        payload: JsonObject,
+        generation_task_hash: DigestV1,
+    ) -> None:
+        candidates = self._required_list(payload, "candidates")
+        if len(candidates) < 2:
+            raise InvalidTransition("Builder fidelity artifact requires at least two candidates")
+        for index, value in enumerate(candidates):
+            if not isinstance(value, dict):
+                raise InvalidTransition(
+                    f"Builder fidelity artifact candidate {index} must be a JSON object"
+                )
+            candidate = self._json_object(value)
+            if (
+                self._required_fidelity_digest(
+                    candidate,
+                    "generation_task_hash",
+                    expected_kind=HashKindV1.PROMPT,
+                )
+                != generation_task_hash
+            ):
+                raise InvalidTransition(
+                    "Builder fidelity artifact candidate "
+                    f"{index} has a different generation task hash"
+                )
+
+    @staticmethod
+    def _require_exact_object_keys(
+        payload: JsonObject,
+        expected: frozenset[str],
+        *,
+        label: str,
+    ) -> None:
+        if set(payload) != expected:
+            raise InvalidTransition(f"{label} has unexpected or missing fields")
+
+    def _required_fidelity_digest(
+        self,
+        payload: JsonObject,
+        key: str,
+        *,
+        expected_kind: HashKindV1,
+    ) -> DigestV1:
+        raw = self._required_object(payload, key)
+        self._require_exact_object_keys(
+            raw,
+            _DIGEST_V1_FIELDS,
+            label=f"Builder fidelity artifact {key}",
+        )
+        try:
+            digest = DigestV1.model_validate(raw)
+        except ValueError as error:
+            raise InvalidTransition(
+                f"Builder fidelity artifact {key} has an invalid digest"
+            ) from error
+        if digest.kind is not expected_kind:
+            raise InvalidTransition(
+                f"Builder fidelity artifact {key} has an unexpected digest kind"
+            )
+        return digest
 
     def _verify_verification_attestation(
         self,
@@ -1387,6 +1687,15 @@ class ControlPlane:
         value = payload.get(key)
         if not isinstance(value, str) or not value:
             raise InvalidTransition(f"corrupt control-plane payload: {key}")
+        return value
+
+    @classmethod
+    def _required_nonblank_fidelity_obligation_text(cls, payload: JsonObject, key: str) -> str:
+        value = cls._required_text(payload, key)
+        if not value.strip():
+            raise InvalidTransition(
+                f"Builder fidelity artifact task obligation {key} must not be blank"
+            )
         return value
 
     @staticmethod

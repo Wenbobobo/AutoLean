@@ -10,8 +10,10 @@ The offline integration fixture in
    `FidelityEvidenceArtifactRefV1`;
 3. only the reviewed draft can freeze, and only that frozen revision can produce a signed
    `FormalizationTaskBundleV1`;
-4. the control plane rehashes and minimally cross-binds the canonical fidelity artifact, roots
-   its reference in `task.registered`, and only then permits a fenced claim;
+4. the control plane requires the pre-RC V1 generation projection and typed prompt digests,
+   rebuilds each source claim from frozen source-span bindings while rehashing its private excerpt,
+   validates the private obligation projection against frozen spans and normalized text, roots the
+   artifact reference in `task.registered`, and only then permits a fenced claim;
 5. a Prover-side failure can append a revision-bound `GapReportV1` and
    `ContractChangeRequestV1`, but neither command can mutate the registered bundle;
 6. the next revision begins as a draft, rejects the old fidelity evaluation, and must run the
@@ -28,8 +30,12 @@ the authoritative Linux/OCI verifier path.
 
 - `FidelityReportV1.evidence_hash`, the typed bundle reference, Builder handoff hash, retained
   bytes, and `task.registered` reference now form one content chain. Production registration
-  requires it. Synthetic legacy fixtures must opt into the conspicuously named
-  `allow_test_only_unreviewed_bundles` switch; that switch is not a migration or release mode.
+  requires it. Before the first RC, the artifact schema string remains V1 but new registration
+  fails closed unless the complete generation projection and all typed prompt digests validate.
+  Earlier source-backed V1 evidence without those fields is retained for historical replay only,
+  not new registration or promotion. Synthetic unreviewed fixtures may opt into the conspicuously
+  named `allow_test_only_unreviewed_bundles` switch only when they carry neither report nor
+  artifact; that switch is not a migration or release mode.
 - Registration now commits the `task.registered` event, Builder-attestation nonce, idempotency
   record, and immutable `(contract_id, revision) -> (bundle_id, handoff_hash)` projection in one
   SQLite transaction. Exact retries reuse the original event; conflicting legacy events make

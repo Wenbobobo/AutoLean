@@ -13,7 +13,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from enum import StrEnum
-from typing import Protocol
+from typing import Literal, Protocol
 
 from autolean_contracts import (
     DecisionV1,
@@ -22,6 +22,7 @@ from autolean_contracts import (
     FidelityCheckV1,
     FidelityReportV1,
     HashKindV1,
+    MathematicalSpecificationV1,
     MutationKindV1,
     MutationProbeV1,
     MutationResultV1,
@@ -29,6 +30,7 @@ from autolean_contracts import (
     ReviewerSignoffV1,
     StableIdentifierV1,
     StatementContractV1,
+    TaskKindV1,
     canonical_json_bytes,
     digest_bytes,
     digest_text,
@@ -146,6 +148,8 @@ class SemanticObligation:
             raise FidelityHarnessError("semantic obligation descriptions must not be empty")
         if not self.source_span_ids:
             raise FidelityHarnessError("semantic obligations must cite at least one source span")
+        if len(set(self.source_span_ids)) != len(self.source_span_ids):
+            raise FidelityHarnessError("semantic obligation source span identifiers must be unique")
         if not self.normalized_fragment.strip() or not self.lean_fragment.strip():
             raise FidelityHarnessError(
                 "semantic obligations require normalized and Lean target fragments"
@@ -268,8 +272,195 @@ class TranslationTask:
 
 
 @dataclass(frozen=True, slots=True)
+class CandidateGenerationObligation:
+    """The selected-formal-field-blind portion of an obligation visible to a translator.
+
+    Lean fragments are deliberately retained only in :class:`SemanticObligation`, which is
+    supplied after candidate generation to mutation and semantic-review roles.  This projection
+    keeps the translator input distinct from the later reviewer-visible obligation record.
+    """
+
+    obligation_id: str
+    kind: SemanticObligationKind
+    source_span_ids: tuple[StableIdentifierV1, ...]
+    normalized_fragment: str
+
+    @classmethod
+    def from_semantic_obligation(
+        cls,
+        obligation: SemanticObligation,
+    ) -> CandidateGenerationObligation:
+        return cls(
+            obligation_id=obligation.obligation_id,
+            kind=obligation.kind,
+            source_span_ids=obligation.source_span_ids,
+            normalized_fragment=obligation.normalized_fragment,
+        )
+
+    def __post_init__(self) -> None:
+        if not self.obligation_id.strip():
+            raise FidelityHarnessError("candidate-generation obligations require an id")
+        if not self.source_span_ids or not self.normalized_fragment.strip():
+            raise FidelityHarnessError(
+                "candidate-generation obligations require source spans and normalized text"
+            )
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "obligation_id": self.obligation_id,
+            "kind": self.kind.value,
+            "source_span_ids": [item.value for item in self.source_span_ids],
+            "normalized_fragment": self.normalized_fragment,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateGenerationEnvelope:
+    """Selected-formal-field-blind Lean context needed to render a declaration candidate."""
+
+    task_kind: TaskKindV1
+    declaration_name: str
+    namespace: str
+    lean_version: str
+    mathlib_revision: str
+    imports_allowlist: tuple[str, ...]
+    axioms_allowlist: tuple[str, ...]
+    rendering_profile: Literal["autolean.full-declaration-exact.v1"] = (
+        "autolean.full-declaration-exact.v1"
+    )
+
+    @classmethod
+    def from_contract(cls, contract: StatementContractV1) -> CandidateGenerationEnvelope:
+        return cls(
+            task_kind=contract.task_kind,
+            declaration_name=contract.formal.declaration_name,
+            namespace=contract.formal.namespace,
+            lean_version=contract.formal.environment.lean_version,
+            mathlib_revision=contract.formal.environment.mathlib_revision,
+            imports_allowlist=contract.formal.imports_allowlist,
+            axioms_allowlist=contract.formal.axioms_allowlist,
+        )
+
+    def __post_init__(self) -> None:
+        for label, value in (
+            ("declaration_name", self.declaration_name),
+            ("namespace", self.namespace),
+            ("lean_version", self.lean_version),
+            ("mathlib_revision", self.mathlib_revision),
+        ):
+            if not value.strip() or value != value.strip():
+                raise FidelityHarnessError(f"candidate-generation {label} must be trimmed text")
+        if self.rendering_profile != "autolean.full-declaration-exact.v1":
+            raise FidelityHarnessError("candidate-generation rendering profile is unsupported")
+
+    def payload(self) -> dict[str, object]:
+        return {
+            "task_kind": self.task_kind.value,
+            "declaration_name": self.declaration_name,
+            "namespace": self.namespace,
+            "lean_version": self.lean_version,
+            "mathlib_revision": self.mathlib_revision,
+            "imports_allowlist": list(self.imports_allowlist),
+            "axioms_allowlist": list(self.axioms_allowlist),
+            "rendering_profile": self.rendering_profile,
+        }
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateGenerationTask:
+    """The only task payload visible to a V2 translation agent.
+
+    This selected-formal projection excludes all selected Lean statement bytes and hashes, every
+    ``SemanticObligation.lean_fragment``, and the target-dependent draft contract hash.  The
+    Harness owns the full :class:`TranslationTask` and binds a returned proposal to it server-side
+    before any later role sees the candidate.
+    """
+
+    source_spans: tuple[SourceClaimSpan, ...]
+    mathematics: MathematicalSpecificationV1
+    formalization: CandidateGenerationEnvelope
+    obligations: tuple[CandidateGenerationObligation, ...]
+
+    @classmethod
+    def from_contract(
+        cls,
+        contract: StatementContractV1,
+        task: TranslationTask,
+    ) -> CandidateGenerationTask:
+        return cls(
+            source_spans=task.source_spans,
+            mathematics=contract.mathematics,
+            formalization=CandidateGenerationEnvelope.from_contract(contract),
+            obligations=tuple(
+                CandidateGenerationObligation.from_semantic_obligation(item)
+                for item in task.obligations
+            ),
+        )
+
+    def __post_init__(self) -> None:
+        if not self.source_spans:
+            raise FidelityHarnessError("candidate generation requires at least one source span")
+        if not self.obligations:
+            raise FidelityHarnessError("candidate generation requires semantic obligations")
+        obligation_ids = [item.obligation_id for item in self.obligations]
+        if len(set(obligation_ids)) != len(obligation_ids):
+            raise FidelityHarnessError("candidate-generation obligation identifiers must be unique")
+        known_spans = {item.span_id for item in self.source_spans}
+        if any(not set(item.source_span_ids) <= known_spans for item in self.obligations):
+            raise FidelityHarnessError(
+                "candidate-generation obligation cites an unknown source span"
+            )
+        if any(
+            item.normalized_fragment not in self.mathematics.normalized_statement
+            for item in self.obligations
+        ):
+            raise FidelityHarnessError(
+                "candidate-generation obligation is absent from the normalized statement"
+            )
+
+    def payload(self) -> dict[str, object]:
+        """Serialize precisely the agent-visible payload for transport and auditing."""
+
+        return {
+            "source_spans": [item.payload() for item in self.source_spans],
+            "mathematics": self.mathematics.model_dump(mode="json"),
+            "formalization": self.formalization.payload(),
+            "obligations": [item.payload() for item in self.obligations],
+        }
+
+    @property
+    def content_hash(self) -> DigestV1:
+        """Identify the canonical bytes visible to every registered translation agent."""
+
+        return digest_bytes(HashKindV1.PROMPT, canonical_json_bytes(self.payload()))
+
+
+@dataclass(frozen=True, slots=True)
+class CandidateProposal:
+    """The minimal answer returned by a translation agent before Harness binding."""
+
+    candidate_id: str
+    lean_statement_source: str
+    reverse_rendering: str
+    covered_obligation_ids: tuple[str, ...]
+
+    def __post_init__(self) -> None:
+        for label, value in (
+            ("candidate_id", self.candidate_id),
+            ("lean_statement_source", self.lean_statement_source),
+            ("reverse_rendering", self.reverse_rendering),
+        ):
+            if not value.strip():
+                raise FidelityHarnessError(f"{label} must not be empty")
+        if not self.covered_obligation_ids:
+            raise FidelityHarnessError(
+                "candidate proposal must declare semantic obligation coverage"
+            )
+
+
+@dataclass(frozen=True, slots=True)
 class CandidateFormalization:
-    """One independently generated, contract-bound translation candidate."""
+    """One Harness-bound translation candidate from a declared agent registration."""
 
     candidate_id: str
     actor_id: str
@@ -279,6 +470,7 @@ class CandidateFormalization:
     draft_contract_hash: DigestV1
     source_hash: DigestV1
     normalized_statement_sha256: str
+    generation_task_hash: DigestV1
     lean_statement_source: str
     reverse_rendering: str
     covered_obligation_ids: tuple[str, ...]
@@ -321,18 +513,97 @@ class CandidateFormalization:
             "draft_contract_hash": self.draft_contract_hash.model_dump(mode="json"),
             "source_hash": self.source_hash.model_dump(mode="json"),
             "normalized_statement_sha256": self.normalized_statement_sha256,
+            "generation_task_hash": self.generation_task_hash.model_dump(mode="json"),
             "lean_statement_source": self.lean_statement_source,
             "reverse_rendering": self.reverse_rendering,
             "covered_obligation_ids": list(self.covered_obligation_ids),
         }
 
 
-class TranslationAgent(Protocol):
+class TranslationAgentV2(Protocol):
     actor_id: str
     independence_group: str
 
-    def translate(self, task: TranslationTask) -> CandidateFormalization:
-        """Return a candidate bound to the supplied task."""
+    def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+        """Return a proposal from the selected-formal-field-blind generation task."""
+
+
+# Deprecated pre-RC alias. New code must use TranslationAgentV2.
+type TranslationAgent = TranslationAgentV2
+
+
+@dataclass(frozen=True, slots=True)
+class _TranslationAgentRegistration:
+    agent: TranslationAgentV2
+    actor_id: str
+    independence_group: str
+
+
+def _validated_role_identity(value: object, *, role: str, field: str) -> str:
+    if not isinstance(value, str) or not value.strip() or value != value.strip():
+        raise FidelityHarnessError(f"{role} {field} must be trimmed text")
+    return value
+
+
+def _register_translation_agents(
+    agents: tuple[TranslationAgentV2, ...],
+) -> tuple[_TranslationAgentRegistration, ...]:
+    """Snapshot every declared identity before any untrusted translation call runs."""
+
+    if len(agents) < 2:
+        raise FidelityHarnessError("at least two translation agents are required")
+    registrations = tuple(
+        _TranslationAgentRegistration(
+            agent=agent,
+            actor_id=_validated_role_identity(
+                agent.actor_id,
+                role="translation agent",
+                field="actor_id",
+            ),
+            independence_group=_validated_role_identity(
+                agent.independence_group,
+                role="translation agent",
+                field="independence_group",
+            ),
+        )
+        for agent in agents
+    )
+    if len({item.actor_id for item in registrations}) != len(registrations):
+        raise FidelityHarnessError("translation agents must have distinct actor identities")
+    if len({item.independence_group for item in registrations}) < 2:
+        raise FidelityHarnessError("translation agents require two independence groups")
+    return registrations
+
+
+def _bind_candidate_proposal(
+    task: TranslationTask,
+    generation_task: CandidateGenerationTask,
+    registration: _TranslationAgentRegistration,
+    proposal: CandidateProposal,
+) -> CandidateFormalization:
+    """Attach authoritative bindings after the translation agent has returned.
+
+    A proposal cannot nominate its contract revision, source hash, normalized statement hash,
+    actor identity, or independence group.  Those values are set once here from the full,
+    server-owned task and the registered agent configuration.
+    """
+
+    if not isinstance(proposal, CandidateProposal):
+        raise FidelityHarnessError("translation agent must return a CandidateProposal")
+    return CandidateFormalization(
+        candidate_id=proposal.candidate_id,
+        actor_id=registration.actor_id,
+        independence_group=registration.independence_group,
+        contract_id=task.contract_id,
+        revision=task.revision,
+        draft_contract_hash=task.draft_contract_hash,
+        source_hash=task.source_hash,
+        normalized_statement_sha256=task.normalized_statement_sha256,
+        generation_task_hash=generation_task.content_hash,
+        lean_statement_source=proposal.lean_statement_source,
+        reverse_rendering=proposal.reverse_rendering,
+        covered_obligation_ids=proposal.covered_obligation_ids,
+    )
 
 
 class MutationSuiteAgent(Protocol):
@@ -344,6 +615,23 @@ class MutationSuiteAgent(Protocol):
         selected_candidate: CandidateFormalization,
     ) -> tuple[MutationProbeV1, ...]:
         """Return the complete adversarial mutation suite."""
+
+
+@dataclass(frozen=True, slots=True)
+class _MutationAgentRegistration:
+    agent: MutationSuiteAgent
+    actor_id: str
+
+
+def _register_mutation_agent(agent: MutationSuiteAgent) -> _MutationAgentRegistration:
+    return _MutationAgentRegistration(
+        agent=agent,
+        actor_id=_validated_role_identity(
+            agent.actor_id,
+            role="mutation agent",
+            field="actor_id",
+        ),
+    )
 
 
 @dataclass(frozen=True, slots=True)
@@ -472,6 +760,23 @@ class SemanticReviewAgent(Protocol):
 
 
 @dataclass(frozen=True, slots=True)
+class _SemanticReviewerRegistration:
+    agent: SemanticReviewAgent
+    reviewer_id: str
+
+
+def _register_semantic_reviewer(agent: SemanticReviewAgent) -> _SemanticReviewerRegistration:
+    return _SemanticReviewerRegistration(
+        agent=agent,
+        reviewer_id=_validated_role_identity(
+            agent.reviewer_id,
+            role="semantic reviewer",
+            field="reviewer_id",
+        ),
+    )
+
+
+@dataclass(frozen=True, slots=True)
 class AutomaticCheckResult:
     check_name: str
     authority: EvidenceAuthority
@@ -490,6 +795,7 @@ class AutomaticCheckResult:
 @dataclass(frozen=True, slots=True)
 class FidelityEvaluation:
     task: TranslationTask
+    generation_task: CandidateGenerationTask
     candidates: tuple[CandidateFormalization, ...]
     mutation_agent_id: str
     mutation_probes: tuple[MutationProbeV1, ...]
@@ -504,6 +810,7 @@ class FidelityEvaluation:
 
         return _evaluation_payload(
             self.task,
+            self.generation_task,
             self.candidates,
             self.mutation_agent_id,
             self.mutation_probes,
@@ -529,8 +836,17 @@ class FidelityEvaluation:
             raise FidelityHarnessError(
                 "translation task does not reproduce from the draft contract"
             )
+        expected_generation_task = CandidateGenerationTask.from_contract(contract, expected_task)
+        if self.generation_task != expected_generation_task:
+            raise FidelityHarnessError(
+                "candidate-generation task does not reproduce from the draft contract"
+            )
         expected_automatic = (
-            *_candidate_structure_checks(self.task, self.candidates),
+            *_candidate_structure_checks(
+                self.task,
+                self.generation_task,
+                self.candidates,
+            ),
             *_mutation_structure_checks(
                 self.task,
                 self.mutation_agent_id,
@@ -555,6 +871,7 @@ class FidelityEvaluation:
         )
         expected = _evaluation_hash(
             self.task,
+            self.generation_task,
             self.candidates,
             self.mutation_agent_id,
             self.mutation_probes,
@@ -601,7 +918,7 @@ class FidelityEvaluation:
             ),
             FidelityCheckKindV1.INDEPENDENT_TRANSLATION: (
                 candidates_accepted and len(self.candidates) >= 2,
-                "expert compared independently generated candidates",
+                "expert compared candidates from separately declared registrations",
             ),
             FidelityCheckKindV1.POSITIVE_EXAMPLE: (
                 self.review.positive_example_valid,
@@ -662,7 +979,7 @@ class FidelityEvaluation:
 
 
 class StatementFidelityHarness:
-    """Run independent translation, mutation, semantic review, and evidence assembly."""
+    """Run declared-group translation, mutation, semantic review, and evidence assembly."""
 
     def __init__(self, *, clock: Callable[[], datetime] = utc_now) -> None:
         self._clock = clock
@@ -673,37 +990,59 @@ class StatementFidelityHarness:
         *,
         obligations: tuple[SemanticObligation, ...],
         source_claims: tuple[SourceClaimSpan, ...] | None = None,
-        translators: tuple[TranslationAgent, ...],
+        translators: tuple[TranslationAgentV2, ...],
         mutation_agent: MutationSuiteAgent,
         reviewer: SemanticReviewAgent,
         additional_signoffs: tuple[ReviewerSignoffV1, ...] = (),
     ) -> FidelityEvaluation:
+        registrations = _register_translation_agents(translators)
+        mutation_registration = _register_mutation_agent(mutation_agent)
+        reviewer_registration = _register_semantic_reviewer(reviewer)
         task = TranslationTask.from_contract(
             contract,
             obligations,
             source_claims=source_claims,
         )
-        candidates = tuple(agent.translate(task) for agent in translators)
-        automatic_checks = self._validate_candidates(task, translators, candidates)
-        probes = mutation_agent.generate(task, candidates[0])
-        automatic_checks += self._validate_mutations(task, mutation_agent, probes)
+        generation_task = CandidateGenerationTask.from_contract(contract, task)
+        candidates = tuple(
+            _bind_candidate_proposal(
+                task,
+                generation_task,
+                registration,
+                registration.agent.translate(generation_task),
+            )
+            for registration in registrations
+        )
+        automatic_checks = self._validate_candidates(
+            task,
+            generation_task,
+            registrations,
+            candidates,
+        )
+        probes = mutation_registration.agent.generate(task, candidates[0])
+        automatic_checks += self._validate_mutations(
+            task,
+            mutation_registration.actor_id,
+            probes,
+        )
         packet = SemanticReviewPacket(
             task=task,
             candidates=candidates,
             mutation_probes=probes,
         )
-        review = reviewer.review(packet)
-        self._validate_review_structure(packet, reviewer, review)
+        review = reviewer_registration.agent.review(packet)
+        self._validate_review_structure(packet, reviewer_registration.reviewer_id, review)
         _assert_declared_actor_separation(
             candidates,
-            mutation_agent.actor_id,
+            mutation_registration.actor_id,
             review,
             additional_signoffs,
         )
         evidence_hash = _evaluation_hash(
             task,
+            generation_task,
             candidates,
-            mutation_agent.actor_id,
+            mutation_registration.actor_id,
             probes,
             review,
             automatic_checks,
@@ -719,8 +1058,9 @@ class StatementFidelityHarness:
         )
         evaluation = FidelityEvaluation(
             task=task,
+            generation_task=generation_task,
             candidates=candidates,
-            mutation_agent_id=mutation_agent.actor_id,
+            mutation_agent_id=mutation_registration.actor_id,
             mutation_probes=probes,
             review=review,
             automatic_checks=automatic_checks,
@@ -734,38 +1074,35 @@ class StatementFidelityHarness:
     def _validate_candidates(
         self,
         task: TranslationTask,
-        translators: tuple[TranslationAgent, ...],
+        generation_task: CandidateGenerationTask,
+        registrations: tuple[_TranslationAgentRegistration, ...],
         candidates: tuple[CandidateFormalization, ...],
     ) -> tuple[AutomaticCheckResult, ...]:
-        if len(translators) < 2 or len(candidates) != len(translators):
+        if len(registrations) < 2 or len(candidates) != len(registrations):
             raise FidelityHarnessError("at least two translation agents are required")
-        if len({item.actor_id for item in translators}) != len(translators):
-            raise FidelityHarnessError("translation agents must have distinct actor identities")
-        if len({item.independence_group for item in translators}) < 2:
-            raise FidelityHarnessError("translation agents require two independence groups")
-        for agent, candidate in zip(translators, candidates, strict=True):
+        for registration, candidate in zip(registrations, candidates, strict=True):
             if (
-                candidate.actor_id != agent.actor_id
-                or candidate.independence_group != agent.independence_group
+                candidate.actor_id != registration.actor_id
+                or candidate.independence_group != registration.independence_group
             ):
                 raise FidelityHarnessError("candidate misrepresents its generating agent")
-        return _candidate_structure_checks(task, candidates)
+        return _candidate_structure_checks(task, generation_task, candidates)
 
     def _validate_mutations(
         self,
         task: TranslationTask,
-        mutation_agent: MutationSuiteAgent,
+        mutation_agent_id: str,
         probes: tuple[MutationProbeV1, ...],
     ) -> tuple[AutomaticCheckResult, ...]:
-        return _mutation_structure_checks(task, mutation_agent.actor_id, probes)
+        return _mutation_structure_checks(task, mutation_agent_id, probes)
 
     def _validate_review_structure(
         self,
         packet: SemanticReviewPacket,
-        reviewer: SemanticReviewAgent,
+        reviewer_id: str,
         review: SemanticReviewVerdict,
     ) -> None:
-        if review.reviewer_id != reviewer.reviewer_id:
+        if review.reviewer_id != reviewer_id:
             raise FidelityHarnessError("semantic verdict misrepresents its reviewer")
         if not review.independent:
             raise FidelityHarnessError("semantic review must be independently authored")
@@ -824,7 +1161,9 @@ class StatementFidelityHarness:
                 ),
                 kind=FidelityCheckKindV1.INDEPENDENT_TRANSLATION,
                 passed=candidates_accepted and len(candidates) >= 2,
-                evidence=f"{marker}; expert compared independently generated candidates",
+                evidence=(
+                    f"{marker}; expert compared candidates from separately declared registrations"
+                ),
                 reviewer_id=review.reviewer_id,
                 independent=review.independent,
             ),
@@ -904,6 +1243,7 @@ class StatementFidelityHarness:
 
 def _candidate_structure_checks(
     task: TranslationTask,
+    generation_task: CandidateGenerationTask,
     candidates: tuple[CandidateFormalization, ...],
 ) -> tuple[AutomaticCheckResult, ...]:
     if len(candidates) < 2:
@@ -922,6 +1262,7 @@ def _candidate_structure_checks(
             or candidate.draft_contract_hash != task.draft_contract_hash
             or candidate.source_hash != task.source_hash
             or candidate.normalized_statement_sha256 != task.normalized_statement_sha256
+            or candidate.generation_task_hash != generation_task.content_hash
         ):
             raise FidelityHarnessError("candidate is not bound to the translation task")
         if candidate.statement_hash != task.selected_statement_hash:
@@ -936,7 +1277,10 @@ def _candidate_structure_checks(
             check_name="candidate_contract_bindings",
             authority=EvidenceAuthority.AUTOMATIC,
             passed=True,
-            evidence="all candidate hashes and revision bindings match the translation task",
+            evidence=(
+                "all candidate hashes and revision bindings match the translation task; "
+                f"generation_task_hash={generation_task.content_hash.value}"
+            ),
         ),
         AutomaticCheckResult(
             check_name="candidate_independence",
@@ -1059,6 +1403,7 @@ def _text_sha256(value: str) -> str:
 
 def _evaluation_hash(
     task: TranslationTask,
+    generation_task: CandidateGenerationTask,
     candidates: tuple[CandidateFormalization, ...],
     mutation_agent_id: str,
     probes: tuple[MutationProbeV1, ...],
@@ -1071,6 +1416,7 @@ def _evaluation_hash(
         canonical_json_bytes(
             _evaluation_payload(
                 task,
+                generation_task,
                 candidates,
                 mutation_agent_id,
                 probes,
@@ -1084,6 +1430,7 @@ def _evaluation_hash(
 
 def _evaluation_payload(
     task: TranslationTask,
+    generation_task: CandidateGenerationTask,
     candidates: tuple[CandidateFormalization, ...],
     mutation_agent_id: str,
     probes: tuple[MutationProbeV1, ...],
@@ -1094,6 +1441,8 @@ def _evaluation_payload(
     return {
         "schema_version": "autolean.builder-fidelity-evidence.v1",
         "task": task.payload(),
+        "generation_task": generation_task.payload(),
+        "generation_task_hash": generation_task.content_hash.model_dump(mode="json"),
         "candidates": [item.payload() for item in candidates],
         "mutation_agent_id": mutation_agent_id,
         "mutation_probes": [item.model_dump(mode="json") for item in probes],
