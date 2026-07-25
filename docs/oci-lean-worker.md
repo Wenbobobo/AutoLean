@@ -112,15 +112,20 @@ helper OLean, direct-import dependency manifest/count, target OLean, and runtime
 claims before emitting JSON. The receipt retains its existing `import_closure` field names for
 schema compatibility; those fields do not claim a transitive closure.
 
-This source-built profile completed all 889 build targets and produced the local test-only image
-`autolean/mathlib-worker@sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`.
+The source-v2 profile completed all 889 build targets and produced the local test-only image
+`autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6`.
 The canonical in-image receipt SHA-256 is
-`801959222c195e249e320a0568418d177022c8dbd925b70ad34ee28c0c2e2a90`; it records the helper's
-four-file direct import dependency set with SHA-256
-`2983d74fceb7bd025939793e1a9690653cf113f89d547f5e33bdcefc9fa8d44e` and target OLean SHA-256
+`40e15776cec80a03b9d5b0affd59a3f613b7f1855c48aa0c1e91f24ec0e1eed7`; it binds the image-owned
+single-declaration and multi-declaration helpers, the latter's wrapper, the same four-file direct
+mathlib import dependency set with SHA-256
+`2983d74fceb7bd025939793e1a9690653cf113f89d547f5e33bdcefc9fa8d44e`, and target OLean SHA-256
 `6ecddc1bdec0ef5e871cac0feb5880a9b4048067bed154b95e0ba8f0c8e49297`. The ignored build evidence
-file has SHA-256 `bd7576eb489c140704c691aadb80669ed462133b973848b4a49871c0cf5b4aab`.
-Enumerating and binding the complete transitive import closure remains a T6 requirement.
+file has SHA-256 `3c340227a423ff5440aa67c63023f02e1468577eac317df8e2db2200e3212d7f`.
+
+The earlier source-v1 image
+`sha256:83daaa542ee407c0fbb1ba93f2a0b40fde1621cc5ad2e689ab7d5392b76d03ff`
+remains the historical image binding in the immutable model-theory V2 gap decision. The source-v2
+image and query evidence do not rewrite or upgrade that decision in place.
 
 ## Replay
 
@@ -211,10 +216,21 @@ compiles `AutoLean.OCI.fixture`, observing the exact type
 `/deps/Mathlib/ModelTheory/Semantics.olean` bind does not influence compilation, demonstrating that
 this profile uses its image-owned dependency path rather than the host dependency mount. The
 canary evidence SHA-256 is
-`95505c212b7bf32b027766399322d3a4af96d2a30cf1b309a869d8f2f64971ce`.
+`0931e138fdc4bf67374dc1a42978c92e49f786bece95fcf812c425fc7fd8ad0e`.
 The ignored evidence files are
 `release-evidence/oci-worker/mathlib-build.v1.json` and
 `release-evidence/oci-worker/mathlib-canary.v1.json`.
+
+The source-v2 multi-declaration query separately compiled the retained `UniversalLK` source once,
+sealed `Candidate.olean`, and queried all 46 Candidate-owned declarations in a second read-only
+container. Artifact SHA-256
+`167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a`
+binds the canonical types, axiom lists, two direct imports (`Init` and
+`Mathlib.ModelTheory.Semantics`), and the complete 2,744-module transitive import closure. Of the
+46 declarations, 41 have nonempty axiom sets; `Deriv.closed_sound` uses exactly
+`Classical.choice`, `Quot.sound`, and `propext`. The operator-local file is
+`release-evidence/oci-worker/mathlib-declarations.v1.json`; its byte-exact public attachment and
+non-authority binding live under `Builder/pilots/model-theory-admission/`.
 
 This is a focused import/type/axiom/path canary. The complete pure-worker adversarial V3 suite,
 including every statement-replacement, wrong-profile, stdout-spoof, persistent-writer, and
@@ -237,13 +253,17 @@ statement fidelity, or model proof-search quality.
 The second Docker execution establishes an important anti-spoofing software boundary; it does not
 make two processes operated by one local fixture authority independent in the production sense.
 The pure profile establishes its two-container boundary, while the mathlib profile adds a
-source-built, image-owned direct import dependency set and focused V2 canary, but no
-signing-gateway observation or complete transitive-closure enumeration.
+source-built, image-owned dependency set, focused V2 canary, and a complete transitive-closure
+enumeration for the retained candidate. It still has no frozen-contract or signing-gateway
+observation against the source-v2 image.
 FATE's mounted mathlib smoke wrapper has not been rerun here and remains explicitly
 non-promotable.
 
 Neither local image is a registry publication or promotion attestation. Promotion requires clean
 registry/SBOM provenance, the signing gateway under an operator-authenticated mTLS/ACL boundary,
 non-exportable KMS/HSM custody, lease- and bundle-bound integration, and the required adversarial
-canaries rerun against the exact mathlib digest. The current mathlib record explicitly has
-`promotion_attestation_created=false`.
+canaries rerun against the exact mathlib digest. The source-v2 evidence is local test-only and
+does not match the immutable V2 decision's source-v1 image, import policy, or strict empty-axiom
+profile. Resolving that mismatch requires an explicit successor formal profile, semantic review,
+and authenticated Builder authority; it is not an admission, Prover handoff, promotion, or Phase
+1 release-candidate result.

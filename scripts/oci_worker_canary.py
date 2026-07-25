@@ -75,6 +75,7 @@ from benchmarks.source_backed_oci_fixture import (  # noqa: E402
 )
 
 DECLARATION: Final[str] = _DECLARATION
+SEALED_CANDIDATE_MAX_BYTES: Final[int] = 256 * 1024 * 1024
 _VERIFIER_KEY: Final[HmacAttestationKeyV1] = HmacAttestationKeyV1(
     key_id="oci-canary-verifier-v1",
     secret=b"local-oci-canary-verifier-key-0123456789",
@@ -374,7 +375,7 @@ def _seal_direct_olean(source_directory: Path, sealed_directory: Path) -> tuple[
         if (
             not stat.S_ISREG(before.st_mode)
             or before.st_size <= 0
-            or before.st_size > 256 * 1024 * 1024
+            or before.st_size > SEALED_CANDIDATE_MAX_BYTES
         ):
             raise RuntimeError("OCI canary compile output is not a bounded regular file")
         output_descriptor = os.open(
@@ -393,7 +394,7 @@ def _seal_direct_olean(source_directory: Path, sealed_directory: Path) -> tuple[
                 if not block:
                     break
                 copied += len(block)
-                if copied > 256 * 1024 * 1024:
+                if copied > SEALED_CANDIDATE_MAX_BYTES:
                     raise RuntimeError("OCI canary compile output exceeds the verifier limit")
                 digest.update(block)
                 view = memoryview(block)

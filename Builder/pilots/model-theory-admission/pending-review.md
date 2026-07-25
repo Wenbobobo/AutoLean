@@ -18,12 +18,18 @@ Only the following confirmations can change the current disposition:
 4. **Fragment boundary.** Confirm a name and scope that explicitly excludes existential
    constructors, structural rules, completeness, and full-`LK` claims. Decide whether the
    existential gap must be implemented before admission or retained as a deliberate exclusion.
-5. **Authorized disposition.** Through the Builder authority path, record either an authenticated
+5. **Formal profile.** The exact source-v2 image query covers all 46 retained declarations, but it
+   does not match the image or strict empty-axiom profile in the immutable V2 decision. Decide
+   whether `Init` is an explicit import-policy member and whether the standard mathlib axioms
+   `Classical.choice`, `Quot.sound`, and `propext` are permitted for this pilot. Any accepted change
+   requires a new decision revision.
+6. **Authorized disposition.** Through the Builder authority path, record either an authenticated
    admission for revision `t3-boundary-v2` or an immutable gap/backup decision. Automated
    agreement, compilation, this matrix, and Prover success cannot supply that authority.
 
-Engineering work does not require a user decision: the project still must recompute the complete
-Library input tree and query each claimed declaration, canonical type, import closure, and axiom
-set in the pinned T4 image before designing a versioned admission capability.
+The tracked T4 attachment now retains each claimed declaration, canonical type, import closure,
+and axiom set from the exact source-v2 image. Engineering still must recompute the complete Library
+input tree and design a successor formal profile; neither task may reinterpret the immutable V2
+decision or issue an admission receipt.
 
 No textbook excerpt or private review material belongs in this public file.

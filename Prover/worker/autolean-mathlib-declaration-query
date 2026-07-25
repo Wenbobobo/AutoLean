@@ -1,0 +1,78 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-mathlib-declaration-query: $1" >&2
+  exit 2
+}
+
+[ "$#" -ge 6 ] || fail "expected the frozen declaration-query argument profile"
+[ "$1" = "--protocol" ] || fail "missing protocol argument"
+[ "$2" = "autolean.mathlib-declaration-query.v1" ] || fail "unsupported protocol"
+[ "$3" = "--compiled" ] || fail "missing compiled argument"
+[ "$4" = "/compiled/Candidate.olean" ] || fail "compiled candidate path is not frozen"
+[ -f /compiled/Candidate.olean ] || fail "compiled candidate is unavailable"
+[ ! -L /compiled/Candidate.olean ] || fail "compiled candidate must not be a symbolic link"
+
+wrapper_sha256=$(sha256sum /opt/autolean/bin/autolean-mathlib-declaration-query | awk '{print $1}')
+helper_sha256=$(sha256sum /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean | awk '{print $1}')
+case "$wrapper_sha256:$helper_sha256" in
+  *[!0-9a-f:]*|*:|:*|*::* ) fail "image-owned declaration-query hashes are malformed" ;;
+esac
+
+lean_path=$(cat /opt/autolean/environment/lean-path)
+[ -n "$lean_path" ] || fail "image-owned mathlib LEAN_PATH is unavailable"
+case "$lean_path" in
+  *"
+"*|*"
+"*) fail "image-owned mathlib LEAN_PATH is malformed" ;;
+esac
+
+shift 4
+scratch=$(mktemp -d /tmp/autolean-mathlib-declaration-query.XXXXXX)
+cleanup() {
+  rm -rf "$scratch"
+}
+trap cleanup EXIT HUP INT TERM
+
+declaration_file="$scratch/declarations"
+: >"$declaration_file"
+declarations=0
+previous=
+while [ "$#" -gt 0 ]; do
+  [ "$1" = "--declaration" ] || fail "expected declaration argument"
+  [ "$#" -ge 2 ] || fail "declaration value is missing"
+  declaration=$2
+  case "$declaration" in
+    ""|*[!A-Za-z0-9_.]*) fail "declaration uses unsupported characters" ;;
+    .*|*..*|*.) fail "declaration is not a canonical dotted name" ;;
+  esac
+  [ "$declaration" != "$previous" ] || fail "declarations must be unique"
+  if [ -n "$previous" ] && [ "$declaration" \< "$previous" ]; then
+    fail "declarations must be sorted"
+  fi
+  previous=$declaration
+  printf '%s\n' "$declaration" >>"$declaration_file"
+  declarations=$((declarations + 1))
+  [ "$declarations" -le 128 ] || fail "too many declarations"
+  shift 2
+done
+[ "$declarations" -gt 0 ] || fail "at least one declaration is required"
+
+set -- "$wrapper_sha256" "$helper_sha256"
+while IFS= read -r declaration; do
+  set -- "$@" "$declaration"
+done <"$declaration_file"
+
+if ! LEAN_PATH="/compiled:$lean_path" lean --run \
+  /opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean \
+  "$@" \
+  >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+then
+  sed -n '1,200p' "$scratch/query.stderr" >&2
+  exit 21
+fi
+
+result_lines=$(wc -l <"$scratch/query.stdout")
+[ "$result_lines" -eq 1 ] || fail "query helper did not emit exactly one record"
+cat "$scratch/query.stdout"

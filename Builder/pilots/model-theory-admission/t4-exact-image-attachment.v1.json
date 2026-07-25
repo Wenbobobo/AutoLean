@@ -1,0 +1,114 @@
+{
+  "schema_version": "autolean.public-t4-exact-image-attachment.v1",
+  "artifact_kind": "public_safe_t4_gap_attachment",
+  "decision_binding": {
+    "decision_path": "Builder/pilots/model-theory-admission/decision.v2.json",
+    "decision_canonical_sha256": "f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5",
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "candidate_revision": "t3-boundary-v2",
+    "candidate_sha256": "9e2b9535414bad0c3c9adf55446d60a70452f9052258dcf4cef3105dbe4b2530",
+    "t3_disposition": "gap",
+    "selection": "not_selected",
+    "statement_contract": "not_frozen"
+  },
+  "query_evidence_binding": {
+    "path": "Builder/pilots/model-theory-admission/t4-declaration-query.v1.json",
+    "schema_version": "autolean.mathlib-declaration-query-evidence.v1",
+    "size_bytes": 158805,
+    "sha256": "167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a"
+  },
+  "source_binding": {
+    "source_path": "Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean",
+    "decision_source_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+    "query_source_snapshot_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+    "source_snapshot_matches_decision": true,
+    "source_inputs_sha256": "0b52f422abf66fcd136ae6aefccd57e3ca4add09cc4abb7d2d22bc01e59f719a"
+  },
+  "execution_binding": {
+    "worker_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",
+    "worker_image_digest": "sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6",
+    "build_receipt_canonical_sha256": "40e15776cec80a03b9d5b0affd59a3f613b7f1855c48aa0c1e91f24ec0e1eed7",
+    "execution_policy_sha256": "3fd3bb859e1b64f965f7187806867c86e527a64aac5faa1f0d721a1ef2eeeb87",
+    "image_owned_query_identity_sha256": "5e98f0038308f74470ec5afa62d2e9049576f257b2c9e12fa7bf9ca280a689b1",
+    "query_helper_source_sha256": "7131aa621d4d8858e87bb274450a061df1b90a640a22510072aa58a5fbe741b4",
+    "query_wrapper_sha256": "8daeedce7172fc04c91f51ef5d71a719a5cfc7d6f6d97590a9c313006080e6bf",
+    "sealed_candidate_sha256": "71dd796831ce3e95497545f7cda6ff5242030afc137775d56a5961f38b9798ae",
+    "operator_local_build_evidence_sha256": "3c340227a423ff5440aa67c63023f02e1468577eac317df8e2db2200e3212d7f",
+    "operator_local_canary_evidence_sha256": "0931e138fdc4bf67374dc1a42978c92e49f786bece95fcf812c425fc7fd8ad0e",
+    "operator_local_artifacts_committed": false
+  },
+  "observation_summary": {
+    "declaration_count": 46,
+    "declaration_names_sha256": "782dbef4396201d5a262a3859407c491e8dfc43c02f2faaabd3d3ce5bc606eca",
+    "declaration_records_sha256": "15e399ac881ce93a6acddba73c0edc08d87e7fbafc86770cb1f209ba15d57e65",
+    "decision_declaration_set_match": true,
+    "canonical_types_and_axioms_retained_in_query_artifact": true,
+    "candidate_direct_imports": [
+      "Init",
+      "Mathlib.ModelTheory.Semantics"
+    ],
+    "candidate_direct_imports_sha256": "11f93b1bb64285c9ec7b1df120e7f4e48341ef073c9099c074541553e39361cd",
+    "module_import_closure_count": 2744,
+    "module_import_closure_sha256": "a10239138591c69cf70a398a897fb5ef9b5300964af90f44109a1262d8f05229",
+    "axiom_distribution": [
+      {
+        "observed_axioms": [],
+        "declaration_count": 5
+      },
+      {
+        "observed_axioms": [
+          "propext"
+        ],
+        "declaration_count": 1
+      },
+      {
+        "observed_axioms": [
+          "Quot.sound"
+        ],
+        "declaration_count": 6
+      },
+      {
+        "observed_axioms": [
+          "Quot.sound",
+          "propext"
+        ],
+        "declaration_count": 29
+      },
+      {
+        "observed_axioms": [
+          "Classical.choice",
+          "Quot.sound",
+          "propext"
+        ],
+        "declaration_count": 5
+      }
+    ],
+    "closed_sound_declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Deriv.closed_sound",
+    "closed_sound_observed_axioms": [
+      "Classical.choice",
+      "Quot.sound",
+      "propext"
+    ]
+  },
+  "compatibility": {
+    "decision_worker_image_matches_observation": false,
+    "decision_imports_allowlist_matches_direct_imports": false,
+    "init_import_treatment_requires_explicit_resolution": true,
+    "decision_strict_empty_axiom_profile_matches_observation": false,
+    "observed_nonempty_axiom_declaration_count": 41,
+    "declaration_specific_evidence_missing_closed": true,
+    "effect_on_t3": "gap_remains_open"
+  },
+  "authority_boundary": {
+    "human_review_present": false,
+    "expert_review_present": false,
+    "authenticated_independence_present": false,
+    "builder_admission_authority_present": false,
+    "may_change_boundary_decision": false,
+    "may_issue_admission_receipt": false,
+    "may_freeze_statement": false,
+    "may_handoff_to_prover": false,
+    "may_promote": false,
+    "may_claim_open_problem_progress": false
+  }
+}

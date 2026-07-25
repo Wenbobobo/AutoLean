@@ -5,7 +5,8 @@ json_sha256_field() {
   receipt=$1
   field=$2
   case "$field" in
-    helper_olean_sha256 | mathlib_import_closure_sha256 | \
+    declaration_query_helper_olean_sha256 | helper_olean_sha256 | \
+      mathlib_import_closure_sha256 | \
       mathlib_target_olean_sha256 | runtime_files_manifest_sha256) ;;
     *) return 1 ;;
   esac
@@ -21,12 +22,14 @@ json_sha256_field() {
 verify_dynamic_claims() {
   receipt=$1
   helper_olean=$2
-  closure_manifest=$3
-  target_olean=$4
-  runtime_manifest=$5
+  declaration_query_helper_olean=$3
+  closure_manifest=$4
+  target_olean=$5
+  runtime_manifest=$6
 
   for artifact in \
-    "$receipt" "$helper_olean" "$closure_manifest" "$target_olean" "$runtime_manifest"
+    "$receipt" "$helper_olean" "$declaration_query_helper_olean" \
+    "$closure_manifest" "$target_olean" "$runtime_manifest"
   do
     [ -f "$artifact" ] && [ ! -L "$artifact" ]
   done
@@ -42,6 +45,8 @@ verify_dynamic_claims() {
   [ "$claimed_closure_count" -eq "$(wc -l <"$closure_manifest" | tr -d ' ')" ]
   [ "$(json_sha256_field "$receipt" helper_olean_sha256)" = \
     "$(sha256sum "$helper_olean" | awk '{print $1}')" ]
+  [ "$(json_sha256_field "$receipt" declaration_query_helper_olean_sha256)" = \
+    "$(sha256sum "$declaration_query_helper_olean" | awk '{print $1}')" ]
   [ "$(json_sha256_field "$receipt" mathlib_import_closure_sha256)" = \
     "$(sha256sum "$closure_manifest" | awk '{print $1}')" ]
   [ "$(json_sha256_field "$receipt" mathlib_target_olean_sha256)" = \
@@ -51,7 +56,7 @@ verify_dynamic_claims() {
 }
 
 if [ "${AUTOLEAN_RECEIPT_VERIFY_DYNAMIC_ONLY:-0}" = 1 ]; then
-  [ "$#" -eq 5 ]
+  [ "$#" -eq 6 ]
   verify_dynamic_claims "$@"
   exit 0
 fi
@@ -61,8 +66,9 @@ fi
   exit 2
 }
 
-receipt=/opt/autolean/attestations/mathlib-source-build-receipt.v1.json
+receipt=/opt/autolean/attestations/mathlib-source-build-receipt.v2.json
 helper_olean=/opt/autolean/lib/AutoleanLeanQuery.olean
+declaration_query_helper_olean=/opt/autolean/lib/AutoleanMathlibDeclarationQuery.olean
 closure_manifest=/opt/autolean/attestations/mathlib-import-closure.sha256
 target_olean=/opt/mathlib/.lake/build/lib/lean/Mathlib/ModelTheory/Semantics.olean
 runtime_manifest=/opt/autolean/attestations/runtime-files.sha256
@@ -72,7 +78,8 @@ sha256sum --check --strict --status \
 sha256sum --check --strict --status \
   "$runtime_manifest"
 verify_dynamic_claims \
-  "$receipt" "$helper_olean" "$closure_manifest" "$target_olean" "$runtime_manifest"
+  "$receipt" "$helper_olean" "$declaration_query_helper_olean" \
+  "$closure_manifest" "$target_olean" "$runtime_manifest"
 
 proofwidgets_build=/opt/mathlib/.lake/packages/proofwidgets/.lake/build
 proofwidgets_manifest=/opt/autolean/attestations/proofwidgets-js.sha256
