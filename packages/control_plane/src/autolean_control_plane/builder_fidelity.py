@@ -75,6 +75,7 @@ _OBSERVATION_FIELDS = frozenset(
 )
 _QUERY_FIELDS = frozenset(
     {
+        "query_output_canonical_json",
         "query_output_sha256",
         "source_snapshot_sha256",
         "sealed_candidate_sha256",
@@ -84,9 +85,32 @@ _QUERY_FIELDS = frozenset(
         "observed_axioms_sha256",
     }
 )
+_QUERY_SHA256_FIELDS = frozenset(
+    {
+        "query_output_sha256",
+        "source_snapshot_sha256",
+        "sealed_candidate_sha256",
+        "candidate_direct_imports_sha256",
+        "module_import_closure_sha256",
+        "observed_axioms_sha256",
+    }
+)
 _DIGEST_FIELDS = frozenset({"schema_version", "kind", "algorithm", "value"})
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
-_NON_AUTHORITATIVE_ASSURANCES = frozenset({"scripted_fake", "local_oci_prefreeze"})
+_ASSURANCE_PROFILES = {
+    "scripted_fake": (
+        "autolean_builder.testing.ScriptedCanonicalTypeQuery",
+        "autolean.scripted-canonical-query.v1",
+        "autolean.scripted-canonical-query.v1",
+        "autolean.scripted-header.v1",
+    ),
+    "local_oci_prefreeze": (
+        "scripts.oci_mathlib_worker.query_declarations",
+        "autolean.mathlib-declaration-query-evidence.v1",
+        "autolean.mathlib-declaration-query.v1",
+        "autolean.declaration-type-observation.v1",
+    ),
+}
 
 
 @dataclass(frozen=True, slots=True)
@@ -151,9 +175,13 @@ def validate_canonical_type_check(
     declaration = f"{formal.namespace}.{formal.declaration_name}"
     _validate_observation(
         _object(record.get("reference"), "Builder canonical type reference"),
+        assurance=assurance,
+        environment=environment,
         subject_id="contract-selected-reference",
+        statement_source=formal.lean_statement_source,
         statement_source_hash=formal.statement_source_hash,
         declaration=declaration,
+        imports_allowlist=tuple(formal.imports_allowlist),
         canonical_type=formal.elaborated_type,
         canonical_type_hash=formal.elaborated_type_hash,
         environment_hash=environment_hash,
@@ -178,12 +206,16 @@ def validate_canonical_type_check(
                 observation_value,
                 f"Builder canonical type candidate {index}",
             ),
+            assurance=assurance,
+            environment=environment,
             subject_id=candidate_id,
+            statement_source=_text(candidate, "lean_statement_source"),
             statement_source_hash=digest_text(
                 HashKindV1.STATEMENT_SOURCE,
                 _text(candidate, "lean_statement_source"),
             ),
             declaration=declaration,
+            imports_allowlist=tuple(formal.imports_allowlist),
             canonical_type=formal.elaborated_type,
             canonical_type_hash=formal.elaborated_type_hash,
             environment_hash=environment_hash,
@@ -218,7 +250,7 @@ def _validate_environment(
 ) -> tuple[str, str]:
     _exact(environment, _ENVIRONMENT_FIELDS, "Builder canonical type environment")
     assurance = _text(environment, "assurance")
-    if assurance not in _NON_AUTHORITATIVE_ASSURANCES:
+    if assurance not in _ASSURANCE_PROFILES:
         raise InvalidTransition("Builder canonical type assurance is unsupported")
     if not allow_test_only_non_authoritative:
         raise InvalidTransition("non-authoritative canonical type evidence cannot be registered")
@@ -240,13 +272,19 @@ def _validate_environment(
         raise InvalidTransition(
             "Builder canonical type environment differs from the frozen contract"
         )
-    for key in (
-        "adapter_id",
-        "query_schema_version",
-        "query_protocol",
-        "source_rendering_profile",
-    ):
+    observed_profile = tuple(
         _text(environment, key)
+        for key in (
+            "adapter_id",
+            "query_schema_version",
+            "query_protocol",
+            "source_rendering_profile",
+        )
+    )
+    if observed_profile != _ASSURANCE_PROFILES[assurance]:
+        raise InvalidTransition(
+            "Builder canonical type assurance differs from its closed execution profile"
+        )
     for key in (
         "query_identity_sha256",
         "build_receipt_canonical_sha256",
@@ -260,20 +298,30 @@ def _validate_environment(
 def _validate_observation(
     observation: JsonObject,
     *,
+    assurance: str,
+    environment: JsonObject,
     subject_id: str,
+    statement_source: str,
     statement_source_hash: DigestV1,
     declaration: str,
+    imports_allowlist: tuple[str, ...],
     canonical_type: str,
     canonical_type_hash: DigestV1,
     environment_hash: str,
 ) -> None:
     _exact(observation, _OBSERVATION_FIELDS, "Builder canonical type observation")
+    canonical_type_value = _text(observation, "canonical_type")
+    observed_type_hash = _digest(
+        observation,
+        "canonical_type_hash",
+        HashKindV1.ELABORATED_TYPE,
+    )
     if (
         _text(observation, "subject_id") != subject_id
         or _text(observation, "declaration") != declaration
-        or _text(observation, "canonical_type") != canonical_type
+        or canonical_type_value != canonical_type
         or _sha256(observation, "canonical_type_sha256")
-        != hashlib.sha256(canonical_type.encode("utf-8")).hexdigest()
+        != hashlib.sha256(canonical_type_value.encode("utf-8")).hexdigest()
         or _sha256(observation, "environment_facts_sha256") != environment_hash
         or _digest(
             observation,
@@ -281,23 +329,278 @@ def _validate_observation(
             HashKindV1.STATEMENT_SOURCE,
         )
         != statement_source_hash
-        or _digest(
-            observation,
-            "canonical_type_hash",
-            HashKindV1.ELABORATED_TYPE,
-        )
-        != canonical_type_hash
+        or observed_type_hash != canonical_type_hash
+        or observed_type_hash != digest_text(HashKindV1.ELABORATED_TYPE, canonical_type_value)
     ):
         raise InvalidTransition(
             "Builder canonical type observation differs from its Builder inputs"
         )
     query = _object(observation.get("query"), "Builder canonical type query facts")
     _exact(query, _QUERY_FIELDS, "Builder canonical type query facts")
-    for key in _QUERY_FIELDS - {"observed_axioms"}:
+    for key in _QUERY_SHA256_FIELDS:
         _sha256(query, key)
+    query_output = _text(query, "query_output_canonical_json")
+    _canonical_json_object(query_output)
+    if (
+        _sha256(query, "query_output_sha256")
+        != hashlib.sha256(query_output.encode("ascii")).hexdigest()
+    ):
+        raise InvalidTransition("Builder canonical query output hash is inconsistent")
     axioms = _texts(query, "observed_axioms")
     if axioms != tuple(sorted(set(axioms))) or any(item != item.strip() for item in axioms):
         raise InvalidTransition("Builder canonical type observed axioms are invalid")
+    expected_axioms_sha256 = hashlib.sha256(canonical_json_bytes(axioms) + b"\n").hexdigest()
+    if _sha256(query, "observed_axioms_sha256") != expected_axioms_sha256:
+        raise InvalidTransition("Builder canonical type observed axiom hash is inconsistent")
+    _validate_raw_query_output(
+        _canonical_json_object(query_output),
+        assurance=assurance,
+        environment=environment,
+        subject_id=subject_id,
+        statement_source=statement_source,
+        statement_source_hash=statement_source_hash,
+        declaration=declaration,
+        imports_allowlist=imports_allowlist,
+        canonical_type=canonical_type_value,
+        canonical_type_sha256=_sha256(observation, "canonical_type_sha256"),
+        query=query,
+        observed_axioms=axioms,
+    )
+
+
+def _validate_raw_query_output(
+    document: JsonObject,
+    *,
+    assurance: str,
+    environment: JsonObject,
+    subject_id: str,
+    statement_source: str,
+    statement_source_hash: DigestV1,
+    declaration: str,
+    imports_allowlist: tuple[str, ...],
+    canonical_type: str,
+    canonical_type_sha256: str,
+    query: JsonObject,
+    observed_axioms: tuple[str, ...],
+) -> None:
+    if assurance == "scripted_fake":
+        _validate_scripted_raw_query_output(
+            document,
+            subject_id=subject_id,
+            statement_source=statement_source,
+            statement_source_hash=statement_source_hash,
+            declaration=declaration,
+            imports_allowlist=imports_allowlist,
+            canonical_type=canonical_type,
+            canonical_type_sha256=canonical_type_sha256,
+            query=query,
+            observed_axioms=observed_axioms,
+        )
+        return
+    if assurance == "local_oci_prefreeze":
+        _validate_local_oci_raw_query_output(
+            document,
+            environment=environment,
+            subject_id=subject_id,
+            statement_source=statement_source,
+            declaration=declaration,
+            imports_allowlist=imports_allowlist,
+            canonical_type=canonical_type,
+            canonical_type_sha256=canonical_type_sha256,
+            query=query,
+            observed_axioms=observed_axioms,
+        )
+        return
+    raise InvalidTransition("Builder canonical type assurance is unsupported")
+
+
+_SCRIPTED_RAW_FIELDS = frozenset(
+    {
+        "canonical_type",
+        "canonical_type_sha256",
+        "declaration",
+        "imports_allowlist",
+        "observed_axioms",
+        "observed_axioms_sha256",
+        "schema_version",
+        "source_snapshot_sha256",
+        "statement_source_hash",
+        "subject_id",
+    }
+)
+_LOCAL_RAW_FIELDS = frozenset(
+    {
+        "build_receipt_canonical_sha256",
+        "execution_policy",
+        "execution_policy_sha256",
+        "image",
+        "observation",
+        "schema_version",
+        "sealed_candidate_sha256",
+        "source_inputs_sha256",
+        "source_snapshot_sha256",
+    }
+)
+_LOCAL_OBSERVATION_FIELDS = frozenset(
+    {
+        "candidate_direct_imports",
+        "candidate_direct_imports_sha256",
+        "declarations",
+        "image_identity",
+        "module_import_closure",
+        "module_import_closure_sha256",
+    }
+)
+_LOCAL_DECLARATION_FIELDS = frozenset(
+    {
+        "canonical_type",
+        "canonical_type_sha256",
+        "declaration",
+        "observed_axioms",
+        "observed_axioms_sha256",
+    }
+)
+_LOCAL_EXECUTION_POLICY_FIELDS = frozenset(
+    {"container_policy", "image", "phases", "schema_version"}
+)
+
+
+def _validate_scripted_raw_query_output(
+    document: JsonObject,
+    *,
+    subject_id: str,
+    statement_source: str,
+    statement_source_hash: DigestV1,
+    declaration: str,
+    imports_allowlist: tuple[str, ...],
+    canonical_type: str,
+    canonical_type_sha256: str,
+    query: JsonObject,
+    observed_axioms: tuple[str, ...],
+) -> None:
+    _exact(document, _SCRIPTED_RAW_FIELDS, "Builder scripted canonical query output")
+    if (
+        _text(document, "schema_version") != "autolean.scripted-canonical-query-output.v1"
+        or _text(document, "subject_id") != subject_id
+        or _digest(document, "statement_source_hash", HashKindV1.STATEMENT_SOURCE)
+        != statement_source_hash
+        or _text(document, "declaration") != declaration
+        or _text(document, "canonical_type") != canonical_type
+        or _sha256(document, "canonical_type_sha256") != canonical_type_sha256
+        or tuple(_texts(document, "imports_allowlist")) != imports_allowlist
+        or _sha256(document, "source_snapshot_sha256")
+        != hashlib.sha256(statement_source.encode("utf-8")).hexdigest()
+        or _sha256(document, "source_snapshot_sha256") != _sha256(query, "source_snapshot_sha256")
+        or tuple(_texts(document, "observed_axioms")) != observed_axioms
+        or _sha256(document, "observed_axioms_sha256") != _sha256(query, "observed_axioms_sha256")
+    ):
+        raise InvalidTransition("Builder scripted raw query output is detached")
+
+
+def _validate_local_oci_raw_query_output(
+    document: JsonObject,
+    *,
+    environment: JsonObject,
+    subject_id: str,
+    statement_source: str,
+    declaration: str,
+    imports_allowlist: tuple[str, ...],
+    canonical_type: str,
+    canonical_type_sha256: str,
+    query: JsonObject,
+    observed_axioms: tuple[str, ...],
+) -> None:
+    _exact(document, _LOCAL_RAW_FIELDS, "Builder local OCI canonical query output")
+    raw_observation = _object(document.get("observation"), "Builder local OCI observation")
+    _exact(raw_observation, _LOCAL_OBSERVATION_FIELDS, "Builder local OCI observation")
+    declarations = _list(raw_observation, "declarations")
+    if len(declarations) != 1:
+        raise InvalidTransition("Builder local OCI query must contain one declaration")
+    raw_declaration = _object(declarations[0], "Builder local OCI declaration")
+    _exact(raw_declaration, _LOCAL_DECLARATION_FIELDS, "Builder local OCI declaration")
+    execution_policy = _object(
+        document.get("execution_policy"), "Builder local OCI execution policy"
+    )
+    _exact(execution_policy, _LOCAL_EXECUTION_POLICY_FIELDS, "Builder local OCI execution policy")
+    image_identity = _object(raw_observation.get("image_identity"), "Builder local OCI identity")
+    phases = _list(execution_policy, "phases")
+    query_phases = [
+        phase for phase in phases if isinstance(phase, dict) and phase.get("name") == "query"
+    ]
+    if len(query_phases) != 1:
+        raise InvalidTransition("Builder local OCI execution policy has no unique query phase")
+    query_phase = _object(query_phases[0], "Builder local OCI query phase")
+    direct_imports = tuple(_texts(raw_observation, "candidate_direct_imports"))
+    import_closure = tuple(_texts(raw_observation, "module_import_closure"))
+    expected_snapshot = _render_oci_type_query_source_hash(
+        statement_source=statement_source,
+        namespace=declaration.rpartition(".")[0],
+        imports_allowlist=imports_allowlist,
+    )
+    if (
+        _text(document, "schema_version") != _text(environment, "query_schema_version")
+        or _text(document, "image") != _text(environment, "image")
+        or _sha256(document, "build_receipt_canonical_sha256")
+        != _sha256(environment, "build_receipt_canonical_sha256")
+        or _sha256(document, "execution_policy_sha256")
+        != _sha256(environment, "execution_policy_sha256")
+        or _sha256(document, "source_inputs_sha256") != _sha256(environment, "source_inputs_sha256")
+        or _sha256(document, "source_snapshot_sha256") != expected_snapshot
+        or _sha256(document, "source_snapshot_sha256") != _sha256(query, "source_snapshot_sha256")
+        or _sha256(document, "sealed_candidate_sha256") != _sha256(query, "sealed_candidate_sha256")
+        or _text(execution_policy, "image") != _text(environment, "image")
+        or _text(execution_policy, "schema_version")
+        != "autolean.mathlib-declaration-execution-policy.v1"
+        or query_phase.get("declarations") != [declaration]
+        or query_phase.get("protocol") != _text(environment, "query_protocol")
+        or hashlib.sha256(canonical_json_bytes(execution_policy) + b"\n").hexdigest()
+        != _sha256(environment, "execution_policy_sha256")
+        or hashlib.sha256(canonical_json_bytes(image_identity)).hexdigest()
+        != _sha256(environment, "query_identity_sha256")
+        or _sha256(raw_observation, "candidate_direct_imports_sha256")
+        != _sha256(query, "candidate_direct_imports_sha256")
+        or hashlib.sha256(canonical_json_bytes(direct_imports) + b"\n").hexdigest()
+        != _sha256(query, "candidate_direct_imports_sha256")
+        or _sha256(raw_observation, "module_import_closure_sha256")
+        != _sha256(query, "module_import_closure_sha256")
+        or hashlib.sha256(canonical_json_bytes(import_closure) + b"\n").hexdigest()
+        != _sha256(query, "module_import_closure_sha256")
+        or not set(imports_allowlist) <= set(direct_imports)
+        or not set(direct_imports) <= {*imports_allowlist, "Init"}
+        or "Candidate" not in import_closure
+        or _text(raw_declaration, "declaration") != declaration
+        or _text(raw_declaration, "canonical_type") != canonical_type
+        or _sha256(raw_declaration, "canonical_type_sha256") != canonical_type_sha256
+        or tuple(_texts(raw_declaration, "observed_axioms")) != observed_axioms
+        or _sha256(raw_declaration, "observed_axioms_sha256")
+        != _sha256(query, "observed_axioms_sha256")
+    ):
+        raise InvalidTransition(f"Builder local OCI raw query output is detached from {subject_id}")
+
+
+_DECLARATION_HEADER_RE = re.compile(r"\A(?:theorem|lemma)\b")
+
+
+def _render_oci_type_query_source_hash(
+    *,
+    statement_source: str,
+    namespace: str,
+    imports_allowlist: tuple[str, ...],
+) -> str:
+    statement = statement_source
+    if ":=" in statement:
+        carrier = statement
+    else:
+        match = _DECLARATION_HEADER_RE.match(statement)
+        if match is None:
+            raise InvalidTransition("Builder local OCI statement is not a theorem or lemma")
+        carrier = f"axiom{statement[match.end() :]}"
+    imports = [f"import {name}" for name in imports_allowlist]
+    lines = [*imports]
+    if imports:
+        lines.append("")
+    lines.extend((f"namespace {namespace}", "", carrier, ""))
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
 
 
 def _canonical_json_object(value: str) -> JsonObject:

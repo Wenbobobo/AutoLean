@@ -5,6 +5,8 @@ from __future__ import annotations
 import hashlib
 from dataclasses import dataclass
 
+from autolean_contracts import canonical_json_bytes
+
 from .canonical_type_gate import (
     CanonicalTypeEnvironmentFacts,
     CanonicalTypeGateError,
@@ -35,10 +37,28 @@ class ScriptedCanonicalTypeQuery:
                 "scripted canonical query has no result for the statement hash"
             ) from error
         identity = f"{self.fixture_id}:{request.subject_id}"
+        canonical_type_sha256 = _sha256(canonical_type)
+        source_snapshot_sha256 = _sha256(request.statement_source)
+        observed_axioms: tuple[str, ...] = ()
+        observed_axioms_sha256 = _sha256("[]\n")
+        query_output_canonical_json = canonical_json_bytes(
+            {
+                "canonical_type": canonical_type,
+                "canonical_type_sha256": canonical_type_sha256,
+                "declaration": request.declaration,
+                "imports_allowlist": list(request.imports_allowlist),
+                "observed_axioms": list(observed_axioms),
+                "observed_axioms_sha256": observed_axioms_sha256,
+                "schema_version": "autolean.scripted-canonical-query-output.v1",
+                "source_snapshot_sha256": source_snapshot_sha256,
+                "statement_source_hash": request.statement_source_hash.model_dump(mode="json"),
+                "subject_id": request.subject_id,
+            }
+        ).decode("ascii")
         return CanonicalTypeQueryResult(
             declaration=request.declaration,
             canonical_type=canonical_type,
-            canonical_type_sha256=_sha256(canonical_type),
+            canonical_type_sha256=canonical_type_sha256,
             environment=CanonicalTypeEnvironmentFacts(
                 assurance=CanonicalTypeQueryAssurance.SCRIPTED_FAKE,
                 adapter_id="autolean_builder.testing.ScriptedCanonicalTypeQuery",
@@ -57,13 +77,14 @@ class ScriptedCanonicalTypeQuery:
                 source_rendering_profile="autolean.scripted-header.v1",
             ),
             query=CanonicalTypeQueryFacts(
-                query_output_sha256=_sha256(f"{identity}:query-output"),
-                source_snapshot_sha256=_sha256(request.statement_source),
+                query_output_canonical_json=query_output_canonical_json,
+                query_output_sha256=_sha256(query_output_canonical_json),
+                source_snapshot_sha256=source_snapshot_sha256,
                 sealed_candidate_sha256=_sha256(f"{identity}:sealed-candidate"),
                 candidate_direct_imports_sha256=_sha256(f"{self.fixture_id}:direct-imports"),
                 module_import_closure_sha256=_sha256(f"{self.fixture_id}:import-closure"),
-                observed_axioms=(),
-                observed_axioms_sha256=_sha256("[]\n"),
+                observed_axioms=observed_axioms,
+                observed_axioms_sha256=observed_axioms_sha256,
             ),
         )
 

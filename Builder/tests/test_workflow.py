@@ -17,6 +17,8 @@ from autolean_builder import (
     CandidateProposal,
     CandidateReviewVerdict,
     CanonicalTypeEnvironmentFacts,
+    CanonicalTypeGateBinding,
+    CanonicalTypeGateError,
     CanonicalTypeQueryAssurance,
     CanonicalTypeQueryFacts,
     CanonicalTypeQueryRequest,
@@ -35,6 +37,7 @@ from autolean_builder import (
     StatementFidelityHarness,
     TranslationTask,
     create_next_revision,
+    run_canonical_type_gate,
 )
 from autolean_builder.workflow import (
     _bridge_frozen_contract as bridge_frozen_contract,
@@ -75,6 +78,7 @@ from autolean_contracts import (
     TaskKindV1,
     TaskPolicyV1,
     builder_attestation_payload,
+    canonical_json_bytes,
     digest_bytes,
     digest_model,
     digest_text,
@@ -284,6 +288,7 @@ class FakeCanonicalTypeQuery:
     failures: dict[str, str] | None = None
     hash_mismatch_subjects: frozenset[str] = frozenset()
     environment_drift_subjects: frozenset[str] = frozenset()
+    assurance_profile_drift_subjects: frozenset[str] = frozenset()
     calls: list[str] | None = None
 
     def query(self, request: CanonicalTypeQueryRequest) -> CanonicalTypeQueryResult:
@@ -299,21 +304,43 @@ class FakeCanonicalTypeQuery:
             if self.canonical_types is not None
             else formal.elaborated_type
         )
+        canonical_type_sha256 = (
+            "0" * 64
+            if request.subject_id in self.hash_mismatch_subjects
+            else hashlib.sha256(canonical_type.encode()).hexdigest()
+        )
+        source_snapshot_sha256 = hashlib.sha256(request.statement_source.encode()).hexdigest()
+        observed_axioms: tuple[str, ...] = ()
+        observed_axioms_sha256 = hashlib.sha256(b"[]\n").hexdigest()
         worker_digest = formal.environment.verifier_execution_policy.worker_image_digest
         if request.subject_id in self.environment_drift_subjects:
             worker_digest = "sha256:" + "d" * 64
         lake_manifest = formal.environment.lake_manifest_hash
+        query_output_canonical_json = canonical_json_bytes(
+            {
+                "canonical_type": canonical_type,
+                "canonical_type_sha256": canonical_type_sha256,
+                "declaration": request.declaration,
+                "imports_allowlist": list(request.imports_allowlist),
+                "observed_axioms": list(observed_axioms),
+                "observed_axioms_sha256": observed_axioms_sha256,
+                "schema_version": "autolean.scripted-canonical-query-output.v1",
+                "source_snapshot_sha256": source_snapshot_sha256,
+                "statement_source_hash": request.statement_source_hash.model_dump(mode="json"),
+                "subject_id": request.subject_id,
+            }
+        ).decode("ascii")
         return CanonicalTypeQueryResult(
             declaration=request.declaration,
             canonical_type=canonical_type,
-            canonical_type_sha256=(
-                "0" * 64
-                if request.subject_id in self.hash_mismatch_subjects
-                else hashlib.sha256(canonical_type.encode()).hexdigest()
-            ),
+            canonical_type_sha256=canonical_type_sha256,
             environment=CanonicalTypeEnvironmentFacts(
                 assurance=CanonicalTypeQueryAssurance.SCRIPTED_FAKE,
-                adapter_id="builder.tests.scripted-canonical-query",
+                adapter_id=(
+                    "detached.scripted-canonical-query"
+                    if request.subject_id in self.assurance_profile_drift_subjects
+                    else "autolean_builder.testing.ScriptedCanonicalTypeQuery"
+                ),
                 image=f"autolean/scripted-builder-query@{worker_digest}",
                 worker_image_digest=worker_digest,
                 lean_version=formal.environment.lean_version,
@@ -329,15 +356,14 @@ class FakeCanonicalTypeQuery:
                 source_rendering_profile="autolean.scripted-header.v1",
             ),
             query=CanonicalTypeQueryFacts(
-                query_output_sha256=_sha256(f"query:{request.subject_id}"),
-                source_snapshot_sha256=hashlib.sha256(
-                    request.statement_source.encode()
-                ).hexdigest(),
+                query_output_canonical_json=query_output_canonical_json,
+                query_output_sha256=_sha256(query_output_canonical_json),
+                source_snapshot_sha256=source_snapshot_sha256,
                 sealed_candidate_sha256=_sha256(f"sealed:{request.subject_id}"),
                 candidate_direct_imports_sha256=_sha256("scripted-direct-imports"),
                 module_import_closure_sha256=_sha256("scripted-import-closure"),
-                observed_axioms=(),
-                observed_axioms_sha256=hashlib.sha256(b"[]\n").hexdigest(),
+                observed_axioms=observed_axioms,
+                observed_axioms_sha256=observed_axioms_sha256,
             ),
         )
 
@@ -743,6 +769,104 @@ def test_harness_rejects_candidate_query_environment_drift_before_callbacks() ->
         )
 
 
+def test_harness_rejects_assurance_profile_relabel_before_callbacks() -> None:
+    contract = _contract()
+    query = FakeCanonicalTypeQuery(
+        contract,
+        assurance_profile_drift_subjects=frozenset({"candidate-a"}),
+    )
+
+    with pytest.raises(FidelityHarnessError, match="closed execution profile"):
+        _fidelity_harness(contract, query=query).run(
+            contract,
+            obligations=_obligations(contract),
+            translators=_translators(),
+            mutation_agent=UnreachableMutationAgent(),
+            reviewer=UnreachableReviewer(),
+        )
+
+
+@pytest.mark.parametrize(
+    "detachment",
+    (
+        "reference_declaration",
+        "candidate_declaration",
+        "reference_hash",
+        "reference_subject",
+    ),
+)
+def test_canonical_gate_rejects_declaration_detachment_before_query(
+    detachment: str,
+) -> None:
+    contract = _contract()
+    formal = contract.formal
+    assert formal.elaborated_type is not None
+    assert formal.elaborated_type_hash is not None
+    lake_manifest = formal.environment.lake_manifest_hash
+    declaration = f"{formal.namespace}.{formal.declaration_name}"
+    binding = CanonicalTypeGateBinding(
+        contract_id=contract.contract_id.value,
+        revision=contract.revision,
+        draft_contract_hash=contract.semantic_hash(),
+        source_hash=contract.source.content_hash,
+        generation_task_hash=digest_text(HashKindV1.PROMPT, "declaration-binding-fixture"),
+        selected_statement_hash=formal.statement_source_hash,
+        environment_hash=formal.environment.environment_hash,
+        declaration=declaration,
+        lean_version=formal.environment.lean_version,
+        mathlib_revision=formal.environment.mathlib_revision,
+        lake_manifest_sha256=None if lake_manifest is None else lake_manifest.value,
+        worker_image_digest=formal.environment.verifier_execution_policy.worker_image_digest,
+        expected_elaborated_type=formal.elaborated_type,
+        expected_elaborated_type_hash=formal.elaborated_type_hash,
+    )
+    reference_source = (
+        "theorem detached_reference : True"
+        if detachment == "reference_hash"
+        else formal.lean_statement_source
+    )
+    reference = CanonicalTypeQueryRequest(
+        subject_id=(
+            "detached-reference"
+            if detachment == "reference_subject"
+            else "contract-selected-reference"
+        ),
+        statement_source=reference_source,
+        statement_source_hash=digest_text(
+            HashKindV1.STATEMENT_SOURCE,
+            reference_source,
+        ),
+        declaration=(
+            "Detached.reference" if detachment == "reference_declaration" else declaration
+        ),
+        namespace=formal.namespace,
+        imports_allowlist=formal.imports_allowlist,
+    )
+    candidate = replace(
+        reference,
+        subject_id="candidate-a",
+        declaration=(
+            "Detached.candidate" if detachment == "candidate_declaration" else declaration
+        ),
+    )
+    second_candidate = replace(
+        reference,
+        subject_id="candidate-b",
+        declaration=declaration,
+    )
+    query = FakeCanonicalTypeQuery(contract, calls=[])
+
+    with pytest.raises(CanonicalTypeGateError, match="contract binding"):
+        run_canonical_type_gate(
+            query,
+            binding=binding,
+            reference=reference,
+            candidates=(candidate, second_candidate),
+        )
+
+    assert query.calls == []
+
+
 def test_mutation_baseline_is_selected_statement_not_first_candidate() -> None:
     contract = _contract()
     first_candidate_source = _golden()["lean_statement"].replace(
@@ -966,6 +1090,57 @@ def test_translation_agent_receives_selected_formal_field_blind_generation_paylo
         canonical_type="True",
     )
     with pytest.raises(FidelityHarnessError, match="observation is detached"):
+        replace(
+            evaluation,
+            canonical_type_gate=replace(
+                evaluation.canonical_type_gate,
+                reference=tampered_reference,
+            ),
+        ).assert_binds(contract)
+
+
+@pytest.mark.parametrize(
+    ("field", "expected_error"),
+    (
+        ("query_output_sha256", "query output text differs from its hash"),
+        ("observed_axioms_sha256", "observed axiom text differs from its hash"),
+        ("environment_facts_sha256", "observation is detached"),
+        ("canonical_type_sha256", "observation is detached"),
+        ("canonical_type_hash", "observation is detached"),
+    ),
+)
+def test_evaluation_recomputes_canonical_evidence_derived_fields(
+    field: str,
+    expected_error: str,
+) -> None:
+    contract = _contract()
+    evaluation = _evaluation(contract)
+    reference = evaluation.canonical_type_gate.reference
+    if field == "query_output_sha256":
+        tampered_reference = replace(
+            reference,
+            query=replace(reference.query, query_output_sha256="0" * 64),
+        )
+    elif field == "observed_axioms_sha256":
+        tampered_reference = replace(
+            reference,
+            query=replace(reference.query, observed_axioms_sha256="0" * 64),
+        )
+    elif field == "canonical_type_hash":
+        tampered_reference = replace(
+            reference,
+            canonical_type_hash=digest_text(
+                HashKindV1.ELABORATED_TYPE,
+                "detached canonical type",
+            ),
+        )
+    elif field == "environment_facts_sha256":
+        tampered_reference = replace(reference, environment_facts_sha256="0" * 64)
+    else:
+        assert field == "canonical_type_sha256"
+        tampered_reference = replace(reference, canonical_type_sha256="0" * 64)
+
+    with pytest.raises(FidelityHarnessError, match=expected_error):
         replace(
             evaluation,
             canonical_type_gate=replace(

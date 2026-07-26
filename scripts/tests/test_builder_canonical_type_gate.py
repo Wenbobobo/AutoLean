@@ -152,6 +152,16 @@ def test_oci_adapter_calls_existing_query_boundary_and_normalizes_facts(
     assert result.environment.lake_manifest_sha256 == _sha256(manifest.read_bytes())
     assert result.query.source_snapshot_sha256 == _sha256(calls[0][2].encode())
     assert result.query.observed_axioms == (request.declaration,)
+    expected_query_output = canonical_json_bytes(
+        _query_document(
+            image=image,
+            declaration=request.declaration,
+            canonical_type="∀ (n : Nat), @Eq.{1} Nat n n",
+            rendered_source=calls[0][2],
+        )
+    ).decode("ascii")
+    assert result.query.query_output_canonical_json == expected_query_output
+    assert result.query.query_output_sha256 == _sha256(expected_query_output.encode("ascii"))
 
 
 def test_oci_adapter_rejects_detached_snapshot_hash() -> None:

@@ -80,6 +80,57 @@ from autolean_control_plane.errors import (
 from autolean_control_plane.events import StoredEvent
 
 
+def _oci_type_query_source_hash(
+    *,
+    statement_source: str,
+    namespace: str,
+    imports_allowlist: tuple[str, ...],
+) -> str:
+    statement = statement_source
+    if ":=" in statement:
+        carrier = statement
+    else:
+        for prefix in ("theorem", "lemma"):
+            if statement.startswith(prefix):
+                carrier = f"axiom{statement[len(prefix) :]}"
+                break
+        else:  # pragma: no cover - fixture contracts always use theorem/lemma syntax.
+            raise AssertionError("fixture statement must be a theorem or lemma")
+    lines = [*(f"import {name}" for name in imports_allowlist)]
+    if lines:
+        lines.append("")
+    lines.extend((f"namespace {namespace}", "", carrier, ""))
+    return hashlib.sha256("\n".join(lines).encode("utf-8")).hexdigest()
+
+
+def _scripted_query_output(
+    *,
+    observation: dict[str, object],
+    statement_source: str,
+    imports_allowlist: tuple[str, ...],
+) -> str:
+    query = observation["query"]
+    assert isinstance(query, dict)
+    observed_axioms = query["observed_axioms"]
+    assert isinstance(observed_axioms, list)
+    statement_source_hash = observation["statement_source_hash"]
+    assert isinstance(statement_source_hash, dict)
+    return canonical_json_bytes(
+        {
+            "canonical_type": observation["canonical_type"],
+            "canonical_type_sha256": observation["canonical_type_sha256"],
+            "declaration": observation["declaration"],
+            "imports_allowlist": list(imports_allowlist),
+            "observed_axioms": observed_axioms,
+            "observed_axioms_sha256": query["observed_axioms_sha256"],
+            "schema_version": "autolean.scripted-canonical-query-output.v1",
+            "source_snapshot_sha256": hashlib.sha256(statement_source.encode("utf-8")).hexdigest(),
+            "statement_source_hash": statement_source_hash,
+            "subject_id": observation["subject_id"],
+        }
+    ).decode("ascii")
+
+
 def _id(key: str) -> StableIdentifierV1:
     return stable_identifier("control-test", key)
 
@@ -348,7 +399,32 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
     elaborated_type_hash = draft.formal.elaborated_type_hash
     assert elaborated_type is not None
     assert elaborated_type_hash is not None
+    declaration = f"{draft.formal.namespace}.{draft.formal.declaration_name}"
+    imports_allowlist = tuple(draft.formal.imports_allowlist)
     worker_image_digest = draft.formal.environment.verifier_execution_policy.worker_image_digest
+    image_identity = {
+        "query_helper_path": "/opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean",
+        "query_helper_sha256": hashlib.sha256(b"query-helper").hexdigest(),
+        "schema_version": "autolean.image-owned-declaration-query-identity.v1",
+        "wrapper_path": "/opt/autolean/bin/autolean-mathlib-declaration-query",
+        "wrapper_sha256": hashlib.sha256(b"query-wrapper").hexdigest(),
+    }
+    execution_policy = {
+        "container_policy": {},
+        "image": f"autolean/mathlib-worker@{worker_image_digest}",
+        "phases": [
+            {
+                "name": "query",
+                "declarations": [declaration],
+                "protocol": "autolean.mathlib-declaration-query.v1",
+            }
+        ],
+        "schema_version": "autolean.mathlib-declaration-execution-policy.v1",
+    }
+    execution_policy_sha256 = hashlib.sha256(
+        canonical_json_bytes(execution_policy) + b"\n"
+    ).hexdigest()
+    source_inputs_sha256 = hashlib.sha256(b"source-inputs").hexdigest()
     environment = {
         "assurance": "local_oci_prefreeze",
         "adapter_id": "scripts.oci_mathlib_worker.query_declarations",
@@ -360,10 +436,10 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
         "type_format": "autolean.lean-pp-expr.v1",
         "query_schema_version": "autolean.mathlib-declaration-query-evidence.v1",
         "query_protocol": "autolean.mathlib-declaration-query.v1",
-        "query_identity_sha256": hashlib.sha256(b"query-identity").hexdigest(),
+        "query_identity_sha256": hashlib.sha256(canonical_json_bytes(image_identity)).hexdigest(),
         "build_receipt_canonical_sha256": hashlib.sha256(b"build-receipt").hexdigest(),
-        "execution_policy_sha256": hashlib.sha256(b"execution-policy").hexdigest(),
-        "source_inputs_sha256": hashlib.sha256(b"source-inputs").hexdigest(),
+        "execution_policy_sha256": execution_policy_sha256,
+        "source_inputs_sha256": source_inputs_sha256,
         "source_rendering_profile": "autolean.declaration-type-observation.v1",
     }
     environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
@@ -377,30 +453,68 @@ def _fidelity_payload(draft: StatementContractV1) -> dict[str, object]:
             HashKindV1.STATEMENT_SOURCE,
             statement_source,
         )
+        source_snapshot_sha256 = _oci_type_query_source_hash(
+            statement_source=statement_source,
+            namespace=draft.formal.namespace,
+            imports_allowlist=imports_allowlist,
+        )
+        sealed_candidate_sha256 = hashlib.sha256(
+            f"{subject_id}:sealed-candidate".encode()
+        ).hexdigest()
+        direct_imports = tuple(sorted({*imports_allowlist, "Init"}))
+        import_closure = tuple(sorted({*direct_imports, "Candidate"}))
+        candidate_direct_imports_sha256 = hashlib.sha256(
+            canonical_json_bytes(direct_imports) + b"\n"
+        ).hexdigest()
+        module_import_closure_sha256 = hashlib.sha256(
+            canonical_json_bytes(import_closure) + b"\n"
+        ).hexdigest()
+        query_output = {
+            "build_receipt_canonical_sha256": environment["build_receipt_canonical_sha256"],
+            "execution_policy": execution_policy,
+            "execution_policy_sha256": execution_policy_sha256,
+            "image": environment["image"],
+            "observation": {
+                "candidate_direct_imports": list(direct_imports),
+                "candidate_direct_imports_sha256": candidate_direct_imports_sha256,
+                "declarations": [
+                    {
+                        "canonical_type": elaborated_type,
+                        "canonical_type_sha256": hashlib.sha256(
+                            elaborated_type.encode("utf-8")
+                        ).hexdigest(),
+                        "declaration": declaration,
+                        "observed_axioms": observed_axioms,
+                        "observed_axioms_sha256": observed_axioms_sha256,
+                    }
+                ],
+                "image_identity": image_identity,
+                "module_import_closure": list(import_closure),
+                "module_import_closure_sha256": module_import_closure_sha256,
+            },
+            "schema_version": environment["query_schema_version"],
+            "sealed_candidate_sha256": sealed_candidate_sha256,
+            "source_inputs_sha256": source_inputs_sha256,
+            "source_snapshot_sha256": source_snapshot_sha256,
+        }
+        query_output_canonical_json = canonical_json_bytes(query_output).decode("ascii")
         return {
             "subject_id": subject_id,
             "statement_source_hash": statement_source_hash.model_dump(mode="json"),
-            "declaration": (f"{draft.formal.namespace}.{draft.formal.declaration_name}"),
+            "declaration": declaration,
             "canonical_type": elaborated_type,
             "canonical_type_hash": elaborated_type_hash.model_dump(mode="json"),
             "canonical_type_sha256": hashlib.sha256(elaborated_type.encode("utf-8")).hexdigest(),
             "environment_facts_sha256": environment_facts_sha256,
             "query": {
+                "query_output_canonical_json": query_output_canonical_json,
                 "query_output_sha256": hashlib.sha256(
-                    f"{subject_id}:query-output".encode()
+                    query_output_canonical_json.encode("ascii")
                 ).hexdigest(),
-                "source_snapshot_sha256": hashlib.sha256(
-                    f"{subject_id}:source-snapshot".encode()
-                ).hexdigest(),
-                "sealed_candidate_sha256": hashlib.sha256(
-                    f"{subject_id}:sealed-candidate".encode()
-                ).hexdigest(),
-                "candidate_direct_imports_sha256": hashlib.sha256(
-                    b"candidate-direct-imports"
-                ).hexdigest(),
-                "module_import_closure_sha256": hashlib.sha256(
-                    b"module-import-closure"
-                ).hexdigest(),
+                "source_snapshot_sha256": source_snapshot_sha256,
+                "sealed_candidate_sha256": sealed_candidate_sha256,
+                "candidate_direct_imports_sha256": candidate_direct_imports_sha256,
+                "module_import_closure_sha256": module_import_closure_sha256,
                 "observed_axioms": observed_axioms,
                 "observed_axioms_sha256": observed_axioms_sha256,
             },
@@ -823,6 +937,122 @@ def test_registration_rejects_detached_candidate_canonical_type(
         plane.register_bundle(tampered, idempotency_key="detached-canonical-candidate")
 
 
+@pytest.mark.parametrize(
+    ("field", "expected_error"),
+    (
+        ("query_output_sha256", "query output hash is inconsistent"),
+        ("observed_axioms_sha256", "observed axiom hash is inconsistent"),
+        ("environment_facts_sha256", "differs from its Builder inputs"),
+        ("canonical_type_sha256", "differs from its Builder inputs"),
+        ("canonical_type_hash", "differs from its Builder inputs"),
+    ),
+)
+def test_registration_recomputes_canonical_evidence_derived_fields(
+    tmp_path: Path,
+    field: str,
+    expected_error: str,
+) -> None:
+    plane = _plane(tmp_path)
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    canonical_evidence = _canonical_evidence_payload(tampered_payload)
+    observations = canonical_evidence["candidates"]
+    assert isinstance(observations, list)
+    observation = observations[0]
+    assert isinstance(observation, dict)
+    if field in {"query_output_sha256", "observed_axioms_sha256"}:
+        query = observation["query"]
+        assert isinstance(query, dict)
+        query[field] = "0" * 64
+    elif field == "canonical_type_hash":
+        canonical_type_hash = observation[field]
+        assert isinstance(canonical_type_hash, dict)
+        canonical_type_hash["value"] = "0" * 64
+    else:
+        observation[field] = "0" * 64
+    _replace_canonical_evidence_payload(tampered_payload, canonical_evidence)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match=expected_error):
+        plane.register_bundle(
+            tampered,
+            idempotency_key=f"tampered-canonical-derived-field-{field}",
+        )
+
+
+def test_registration_rejects_unrelated_raw_canonical_query_output(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(
+        tmp_path,
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
+    )
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    canonical_evidence = _canonical_evidence_payload(tampered_payload)
+    observations = [canonical_evidence["reference"], *canonical_evidence["candidates"]]
+    unrelated_raw = canonical_json_bytes({"unrelated": "valid canonical JSON"}).decode("ascii")
+    for observation in observations:
+        assert isinstance(observation, dict)
+        query = observation["query"]
+        assert isinstance(query, dict)
+        query["query_output_canonical_json"] = unrelated_raw
+        query["query_output_sha256"] = hashlib.sha256(unrelated_raw.encode("ascii")).hexdigest()
+    _replace_canonical_evidence_payload(tampered_payload, canonical_evidence)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="unexpected or missing fields"):
+        plane.register_bundle(tampered, idempotency_key="unrelated-raw-canonical-query")
+
+
+def test_registration_rejects_coupled_typed_axiom_and_environment_tamper(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(
+        tmp_path,
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
+    )
+    base, payload = _reviewed_bundle(plane.artifacts)
+    tampered_payload = json.loads(canonical_json_bytes(payload))
+    assert isinstance(tampered_payload, dict)
+    canonical_evidence = _canonical_evidence_payload(tampered_payload)
+    environment = canonical_evidence["environment"]
+    assert isinstance(environment, dict)
+    environment["query_identity_sha256"] = "9" * 64
+    environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
+    observations = [canonical_evidence["reference"], *canonical_evidence["candidates"]]
+    tampered_axioms = ["Injected.axiom"]
+    tampered_axioms_sha256 = hashlib.sha256(
+        canonical_json_bytes(tampered_axioms) + b"\n"
+    ).hexdigest()
+    for observation in observations:
+        assert isinstance(observation, dict)
+        observation["environment_facts_sha256"] = environment_facts_sha256
+        query = observation["query"]
+        assert isinstance(query, dict)
+        query["observed_axioms"] = tampered_axioms
+        query["observed_axioms_sha256"] = tampered_axioms_sha256
+    _replace_canonical_evidence_payload(tampered_payload, canonical_evidence)
+    tampered, _ = _reviewed_bundle(
+        plane.artifacts,
+        fidelity_payload=tampered_payload,
+        base=base,
+    )
+
+    with pytest.raises(InvalidTransition, match="raw query output is detached"):
+        plane.register_bundle(tampered, idempotency_key="coupled-canonical-tamper")
+
+
 def test_scripted_canonical_type_evidence_requires_explicit_test_only_mode(
     tmp_path: Path,
 ) -> None:
@@ -839,9 +1069,33 @@ def test_scripted_canonical_type_evidence_requires_explicit_test_only_mode(
     environment["assurance"] = "scripted_fake"
     observations = [canonical_evidence["reference"], *canonical_evidence["candidates"]]
     environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
-    for observation in observations:
+    raw_candidates = scripted_payload["candidates"]
+    assert isinstance(raw_candidates, list)
+    statement_sources = [
+        base.contract.formal.lean_statement_source,
+        *[
+            str(candidate["lean_statement_source"])
+            for candidate in raw_candidates
+            if isinstance(candidate, dict)
+        ],
+    ]
+    for observation, statement_source in zip(observations, statement_sources, strict=True):
         assert isinstance(observation, dict)
         observation["environment_facts_sha256"] = environment_facts_sha256
+        query = observation["query"]
+        assert isinstance(query, dict)
+        query_output_canonical_json = _scripted_query_output(
+            observation=observation,
+            statement_source=statement_source,
+            imports_allowlist=tuple(base.contract.formal.imports_allowlist),
+        )
+        query["query_output_canonical_json"] = query_output_canonical_json
+        query["query_output_sha256"] = hashlib.sha256(
+            query_output_canonical_json.encode("ascii")
+        ).hexdigest()
+        query["source_snapshot_sha256"] = hashlib.sha256(
+            statement_source.encode("utf-8")
+        ).hexdigest()
     _replace_canonical_evidence_payload(scripted_payload, canonical_evidence)
     scripted, _ = _reviewed_bundle(
         rejecting_plane.artifacts,
@@ -851,6 +1105,31 @@ def test_scripted_canonical_type_evidence_requires_explicit_test_only_mode(
 
     with pytest.raises(InvalidTransition, match="non-authoritative canonical type evidence"):
         rejecting_plane.register_bundle(scripted, idempotency_key="scripted-default-reject")
+
+    relabeling_plane = _plane(
+        tmp_path / "relabeling",
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
+    )
+    relabeled, _ = _reviewed_bundle(
+        relabeling_plane.artifacts,
+        fidelity_payload=scripted_payload,
+    )
+    with pytest.raises(InvalidTransition, match="closed execution profile"):
+        relabeling_plane.register_bundle(relabeled, idempotency_key="scripted-relabel-reject")
+
+    environment.update(
+        {
+            "adapter_id": "autolean_builder.testing.ScriptedCanonicalTypeQuery",
+            "query_schema_version": "autolean.scripted-canonical-query.v1",
+            "query_protocol": "autolean.scripted-canonical-query.v1",
+            "source_rendering_profile": "autolean.scripted-header.v1",
+        }
+    )
+    environment_facts_sha256 = hashlib.sha256(canonical_json_bytes(environment)).hexdigest()
+    for observation in observations:
+        assert isinstance(observation, dict)
+        observation["environment_facts_sha256"] = environment_facts_sha256
+    _replace_canonical_evidence_payload(scripted_payload, canonical_evidence)
 
     allowing_plane = _plane(
         tmp_path / "allowing",

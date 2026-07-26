@@ -50,8 +50,10 @@ digest and byte length.
    reproduce the contract-bound canonical elaborated type, then requires every candidate's exact
    canonical printer text and both raw/typed hashes to equal that reference. The retained typed
    record binds task, source, generation-task, environment, image, query identity, compile/seal
-   facts, reference, and candidate observations into one automatic check. The check wraps that
-   record with a typed, independently recomputable record digest.
+   facts, reference, and candidate observations into one automatic check. Each observation retains
+   the canonical raw query JSON as the preimage of its query-output hash; this private artifact is
+   not projected into a public contract. The check wraps the complete record with a typed,
+   independently recomputable record digest.
 5. A `MutationSuiteAgent` receives a `SelectedStatementBaseline` derived directly from the
    contract-owned task and emits the required adversarial variants. It never receives
    `candidates[0]` as the baseline.
@@ -69,6 +71,8 @@ No current canonical-query assurance is a production authority. The supported so
 freeze/bridge path therefore rejects both `scripted_fake` and `local_oci_prefreeze` by default.
 Unit and operator-local integration fixtures may cross that boundary only through the explicit
 `allow_test_only_non_authoritative_canonical_type_freeze` switch.
+Each assurance is also bound to one closed adapter/schema/protocol/rendering profile. Changing only
+the assurance label is rejected even in test-only mode.
 
 `FidelityEvaluation.render_artifact()` returns the canonical JSON bytes that an artifact store
 must retain before bridging. `FidelityEvidenceArtifactRefV1` carries its typed digest and size in
@@ -198,8 +202,9 @@ retained record before freeze.
 
 For a newly registered reviewed V1 artifact, the control plane requires exactly one such check,
 strictly parses the envelope, recomputes the record digest, and cross-binds contract, task, source,
-generation, candidates, and environment. Normal registration rejects every current
-non-authoritative assurance. The independent
+generation, candidates, and environment. It independently recomputes the environment-content,
+raw-query, observed-axiom, canonical-type raw/typed, and record hashes from their retained
+preimages. Normal registration rejects every current non-authoritative assurance. The independent
 `allow_test_only_non_authoritative_canonical_type_evidence` switch permits only test execution;
 the append-only `task.registered` event records its assurance and
 `canonical_type_promotion_authority=false`. Existing historical events remain replayable.

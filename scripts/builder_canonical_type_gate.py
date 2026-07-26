@@ -32,7 +32,6 @@ from autolean_builder import (
 from autolean_contracts import (
     HashKindV1,
     canonical_json_bytes,
-    digest_bytes,
     digest_text,
 )
 
@@ -186,6 +185,7 @@ def _normalize_query_result(
         raise CanonicalTypeGateError(
             "mathlib declaration query snapshot differs from the axiom type carrier"
         )
+    query_output_canonical_json = canonical_json_bytes(document).decode("ascii")
     return CanonicalTypeQueryResult(
         declaration=declaration,
         canonical_type=canonical_type,
@@ -211,7 +211,10 @@ def _normalize_query_result(
             source_rendering_profile=_SOURCE_RENDERING_PROFILE,
         ),
         query=CanonicalTypeQueryFacts(
-            query_output_sha256=_sha256_json(document),
+            query_output_canonical_json=query_output_canonical_json,
+            query_output_sha256=hashlib.sha256(
+                query_output_canonical_json.encode("ascii")
+            ).hexdigest(),
             source_snapshot_sha256=source_snapshot_sha256,
             sealed_candidate_sha256=_text(document, "sealed_candidate_sha256"),
             candidate_direct_imports_sha256=_text(
@@ -326,7 +329,6 @@ def _canary_document(
         reference=reference,
         candidates=(candidate, second_candidate),
     )
-    evidence_payload = evidence.payload()
     return {
         "schema_version": "autolean.builder-canonical-type-canary.v1",
         "status": "passed",
@@ -334,11 +336,8 @@ def _canary_document(
         "promotion_authority": False,
         "proof_or_axiom_admission": False,
         "image": image,
-        "canonical_type_gate_sha256": digest_bytes(
-            HashKindV1.FREEZE_EVIDENCE,
-            canonical_json_bytes(evidence_payload),
-        ).value,
-        "canonical_type_gate": evidence_payload,
+        "canonical_type_gate_sha256": evidence.record_hash.value,
+        "canonical_type_gate": evidence.payload(),
     }
 
 

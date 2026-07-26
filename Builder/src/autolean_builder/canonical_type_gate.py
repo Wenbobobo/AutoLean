@@ -7,10 +7,11 @@ does not infer definitional, propositional, or mathematical equivalence.
 from __future__ import annotations
 
 import hashlib
+import json
 import re
 from dataclasses import dataclass
 from enum import StrEnum
-from typing import Literal, Protocol
+from typing import Literal, Protocol, cast
 
 from autolean_contracts import (
     DigestV1,
@@ -22,6 +23,7 @@ from autolean_contracts import (
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
+_DECLARATION_HEADER_RE = re.compile(r"\A(?:theorem|lemma)\b")
 _TYPE_FORMAT = "autolean.lean-pp-expr.v1"
 
 
@@ -34,6 +36,71 @@ class CanonicalTypeQueryAssurance(StrEnum):
 
     SCRIPTED_FAKE = "scripted_fake"
     LOCAL_OCI_PREFREEZE = "local_oci_prefreeze"
+
+
+_ASSURANCE_PROFILES = {
+    CanonicalTypeQueryAssurance.SCRIPTED_FAKE: (
+        "autolean_builder.testing.ScriptedCanonicalTypeQuery",
+        "autolean.scripted-canonical-query.v1",
+        "autolean.scripted-canonical-query.v1",
+        "autolean.scripted-header.v1",
+    ),
+    CanonicalTypeQueryAssurance.LOCAL_OCI_PREFREEZE: (
+        "scripts.oci_mathlib_worker.query_declarations",
+        "autolean.mathlib-declaration-query-evidence.v1",
+        "autolean.mathlib-declaration-query.v1",
+        "autolean.declaration-type-observation.v1",
+    ),
+}
+_LOCAL_QUERY_OUTPUT_FIELDS = frozenset(
+    {
+        "build_receipt_canonical_sha256",
+        "execution_policy",
+        "execution_policy_sha256",
+        "image",
+        "observation",
+        "schema_version",
+        "sealed_candidate_sha256",
+        "source_inputs_sha256",
+        "source_snapshot_sha256",
+    }
+)
+_LOCAL_OBSERVATION_FIELDS = frozenset(
+    {
+        "candidate_direct_imports",
+        "candidate_direct_imports_sha256",
+        "declarations",
+        "image_identity",
+        "module_import_closure",
+        "module_import_closure_sha256",
+    }
+)
+_LOCAL_DECLARATION_FIELDS = frozenset(
+    {
+        "canonical_type",
+        "canonical_type_sha256",
+        "declaration",
+        "observed_axioms",
+        "observed_axioms_sha256",
+    }
+)
+_LOCAL_EXECUTION_POLICY_FIELDS = frozenset(
+    {"container_policy", "image", "phases", "schema_version"}
+)
+_SCRIPTED_QUERY_OUTPUT_FIELDS = frozenset(
+    {
+        "canonical_type",
+        "canonical_type_sha256",
+        "declaration",
+        "imports_allowlist",
+        "observed_axioms",
+        "observed_axioms_sha256",
+        "schema_version",
+        "source_snapshot_sha256",
+        "statement_source_hash",
+        "subject_id",
+    }
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -63,6 +130,27 @@ class CanonicalTypeQueryRequest:
             raise CanonicalTypeGateError(
                 "canonical query statement source differs from its bound hash"
             )
+
+
+def render_oci_type_query_source(request: CanonicalTypeQueryRequest) -> str:
+    """Render the exact local-OCI source snapshot for one declaration-type observation."""
+
+    statement = request.statement_source
+    if ":=" in statement:
+        carrier = statement
+    else:
+        match = _DECLARATION_HEADER_RE.match(statement)
+        if match is None:
+            raise CanonicalTypeGateError(
+                "canonical type query requires a theorem or lemma declaration"
+            )
+        carrier = f"axiom{statement[match.end() :]}"
+    imports = [f"import {name}" for name in request.imports_allowlist]
+    lines = [*imports]
+    if imports:
+        lines.append("")
+    lines.extend((f"namespace {request.namespace}", "", carrier, ""))
+    return "\n".join(lines)
 
 
 @dataclass(frozen=True, slots=True)
@@ -107,6 +195,16 @@ class CanonicalTypeEnvironmentFacts:
             raise CanonicalTypeGateError("canonical query image reference differs from its digest")
         if self.type_format != _TYPE_FORMAT:
             raise CanonicalTypeGateError("canonical query type format is unsupported")
+        observed_profile = (
+            self.adapter_id,
+            self.query_schema_version,
+            self.query_protocol,
+            self.source_rendering_profile,
+        )
+        if observed_profile != _ASSURANCE_PROFILES[self.assurance]:
+            raise CanonicalTypeGateError(
+                "canonical query assurance differs from its closed execution profile"
+            )
         for label, value in (
             ("query_identity_sha256", self.query_identity_sha256),
             ("build_receipt_canonical_sha256", self.build_receipt_canonical_sha256),
@@ -145,6 +243,7 @@ class CanonicalTypeEnvironmentFacts:
 class CanonicalTypeQueryFacts:
     """Per-invocation facts returned after compile, seal, and image-owned query."""
 
+    query_output_canonical_json: str
     query_output_sha256: str
     source_snapshot_sha256: str
     sealed_candidate_sha256: str
@@ -154,8 +253,13 @@ class CanonicalTypeQueryFacts:
     observed_axioms_sha256: str
 
     def validate(self) -> None:
+        query_output = _parse_query_output(self.query_output_canonical_json)
+        if (
+            self.query_output_sha256
+            != hashlib.sha256(canonical_json_bytes(query_output)).hexdigest()
+        ):
+            raise CanonicalTypeGateError("canonical query output text differs from its hash")
         for label, value in (
-            ("query_output_sha256", self.query_output_sha256),
             ("source_snapshot_sha256", self.source_snapshot_sha256),
             ("sealed_candidate_sha256", self.sealed_candidate_sha256),
             ("candidate_direct_imports_sha256", self.candidate_direct_imports_sha256),
@@ -181,6 +285,7 @@ class CanonicalTypeQueryFacts:
 
     def payload(self) -> dict[str, object]:
         return {
+            "query_output_canonical_json": self.query_output_canonical_json,
             "query_output_sha256": self.query_output_sha256,
             "source_snapshot_sha256": self.source_snapshot_sha256,
             "sealed_candidate_sha256": self.sealed_candidate_sha256,
@@ -315,6 +420,7 @@ class CanonicalTypeGateEvidence:
             raise CanonicalTypeGateError(
                 "canonical type gate candidate evidence count differs from the task"
             )
+        _assert_requests_bind_binding(binding, reference, candidates)
         _assert_observation_binds_request(self.reference, reference, self.environment)
         if (
             self.reference.canonical_type != binding.expected_elaborated_type
@@ -386,6 +492,7 @@ def run_canonical_type_gate(
         raise CanonicalTypeGateError(
             "canonical type gate requires at least two independent candidates"
         )
+    _assert_requests_bind_binding(binding, reference, candidates)
     reference_result = _run_query(query, reference)
     _validate_query_result(reference_result, request=reference, binding=binding)
     if (
@@ -474,6 +581,11 @@ def _validate_query_result(
         raise CanonicalTypeGateError(
             f"canonical query type text/hash mismatch for {request.subject_id}"
         )
+    _assert_raw_query_output_binds(
+        CanonicalTypeObservation.from_result(request, result),
+        result.environment,
+        request,
+    )
 
 
 def _assert_environment_matches_binding(
@@ -513,14 +625,234 @@ def _assert_observation_binds_request(
         raise CanonicalTypeGateError(
             f"canonical type observation is detached from {request.subject_id}"
         )
+    _assert_raw_query_output_binds(observation, environment, request)
+
+
+def _parse_query_output(value: str) -> dict[str, object]:
+    try:
+        parsed = json.loads(value)
+        canonical = canonical_json_bytes(parsed)
+    except (json.JSONDecodeError, TypeError, ValueError) as error:
+        raise CanonicalTypeGateError(
+            "canonical query output is not strict canonical JSON"
+        ) from error
+    if not isinstance(parsed, dict) or canonical.decode("ascii") != value:
+        raise CanonicalTypeGateError("canonical query output is not strict canonical JSON")
+    return cast(dict[str, object], parsed)
+
+
+def _assert_raw_query_output_binds(
+    observation: CanonicalTypeObservation,
+    environment: CanonicalTypeEnvironmentFacts,
+    request: CanonicalTypeQueryRequest,
+) -> None:
+    document = _parse_query_output(observation.query.query_output_canonical_json)
+    if environment.assurance is CanonicalTypeQueryAssurance.SCRIPTED_FAKE:
+        _assert_scripted_query_output_binds(document, observation, request)
+        return
+    _assert_local_oci_query_output_binds(document, observation, environment, request)
+
+
+def _assert_scripted_query_output_binds(
+    document: dict[str, object],
+    observation: CanonicalTypeObservation,
+    request: CanonicalTypeQueryRequest,
+) -> None:
+    _require_exact_query_fields(document, _SCRIPTED_QUERY_OUTPUT_FIELDS, label="scripted output")
+    axioms = _query_names(document, "observed_axioms")
+    if (
+        _query_text(document, "schema_version") != "autolean.scripted-canonical-query-output.v1"
+        or _query_text(document, "subject_id") != request.subject_id
+        or _query_object(document, "statement_source_hash")
+        != request.statement_source_hash.model_dump(mode="json")
+        or _query_text(document, "declaration") != request.declaration
+        or _query_text(document, "canonical_type") != observation.canonical_type
+        or _query_sha256(document, "canonical_type_sha256") != observation.canonical_type_sha256
+        or tuple(_query_names(document, "imports_allowlist")) != request.imports_allowlist
+        or _query_sha256(document, "source_snapshot_sha256")
+        != hashlib.sha256(request.statement_source.encode("utf-8")).hexdigest()
+        or axioms != observation.query.observed_axioms
+        or _query_sha256(document, "observed_axioms_sha256")
+        != observation.query.observed_axioms_sha256
+    ):
+        raise CanonicalTypeGateError(
+            f"scripted raw query output is detached from {request.subject_id}"
+        )
+
+
+def _assert_local_oci_query_output_binds(
+    document: dict[str, object],
+    observation: CanonicalTypeObservation,
+    environment: CanonicalTypeEnvironmentFacts,
+    request: CanonicalTypeQueryRequest,
+) -> None:
+    _require_exact_query_fields(document, _LOCAL_QUERY_OUTPUT_FIELDS, label="local OCI output")
+    raw_observation = _query_object(document, "observation")
+    _require_exact_query_fields(
+        raw_observation,
+        _LOCAL_OBSERVATION_FIELDS,
+        label="local OCI observation",
+    )
+    declarations = _query_list(raw_observation, "declarations")
+    if len(declarations) != 1 or not isinstance(declarations[0], dict):
+        raise CanonicalTypeGateError(
+            "local OCI raw query output must contain exactly one declaration"
+        )
+    declaration = cast(dict[str, object], declarations[0])
+    _require_exact_query_fields(
+        declaration,
+        _LOCAL_DECLARATION_FIELDS,
+        label="local OCI declaration",
+    )
+    execution_policy = _query_object(document, "execution_policy")
+    _require_exact_query_fields(
+        execution_policy,
+        _LOCAL_EXECUTION_POLICY_FIELDS,
+        label="local OCI execution policy",
+    )
+    phases = _query_list(execution_policy, "phases")
+    query_phases = [
+        phase for phase in phases if isinstance(phase, dict) and phase.get("name") == "query"
+    ]
+    if len(query_phases) != 1:
+        raise CanonicalTypeGateError("local OCI execution policy has no unique query phase")
+    query_phase = cast(dict[str, object], query_phases[0])
+    image_identity = _query_object(raw_observation, "image_identity")
+    _require_exact_query_fields(
+        image_identity,
+        frozenset(
+            {
+                "query_helper_path",
+                "query_helper_sha256",
+                "schema_version",
+                "wrapper_path",
+                "wrapper_sha256",
+            }
+        ),
+        label="local OCI image identity",
+    )
+    direct_imports = _query_names(raw_observation, "candidate_direct_imports")
+    import_closure = _query_names(raw_observation, "module_import_closure")
+    axioms = _query_names(declaration, "observed_axioms")
+    expected_snapshot = hashlib.sha256(
+        render_oci_type_query_source(request).encode("utf-8")
+    ).hexdigest()
+    if (
+        _query_text(document, "schema_version") != environment.query_schema_version
+        or _query_text(document, "image") != environment.image
+        or _query_sha256(document, "build_receipt_canonical_sha256")
+        != environment.build_receipt_canonical_sha256
+        or _query_sha256(document, "execution_policy_sha256") != environment.execution_policy_sha256
+        or _worker_payload_sha256(execution_policy) != environment.execution_policy_sha256
+        or _query_text(execution_policy, "image") != environment.image
+        or _query_text(execution_policy, "schema_version")
+        != "autolean.mathlib-declaration-execution-policy.v1"
+        or query_phase.get("declarations") != [request.declaration]
+        or query_phase.get("protocol") != environment.query_protocol
+        or _query_sha256(document, "source_inputs_sha256") != environment.source_inputs_sha256
+        or _query_sha256(document, "source_snapshot_sha256") != expected_snapshot
+        or _query_sha256(document, "source_snapshot_sha256")
+        != observation.query.source_snapshot_sha256
+        or _query_sha256(document, "sealed_candidate_sha256")
+        != observation.query.sealed_candidate_sha256
+        or hashlib.sha256(canonical_json_bytes(image_identity)).hexdigest()
+        != environment.query_identity_sha256
+        or _query_text(image_identity, "schema_version")
+        != "autolean.image-owned-declaration-query-identity.v1"
+        or _query_text(image_identity, "query_helper_path")
+        != "/opt/autolean/lib/AutoleanMathlibDeclarationQuery.lean"
+        or _query_text(image_identity, "wrapper_path")
+        != "/opt/autolean/bin/autolean-mathlib-declaration-query"
+        or _worker_payload_sha256(direct_imports)
+        != observation.query.candidate_direct_imports_sha256
+        or _query_sha256(raw_observation, "candidate_direct_imports_sha256")
+        != observation.query.candidate_direct_imports_sha256
+        or _worker_payload_sha256(import_closure) != observation.query.module_import_closure_sha256
+        or _query_sha256(raw_observation, "module_import_closure_sha256")
+        != observation.query.module_import_closure_sha256
+        or not set(direct_imports) <= set(import_closure)
+        or "Candidate" not in import_closure
+        or not set(request.imports_allowlist) <= set(direct_imports)
+        or not set(direct_imports) <= {*request.imports_allowlist, "Init"}
+        or _query_text(declaration, "declaration") != observation.declaration
+        or _query_text(declaration, "canonical_type") != observation.canonical_type
+        or _query_sha256(declaration, "canonical_type_sha256") != observation.canonical_type_sha256
+        or axioms != observation.query.observed_axioms
+        or _query_sha256(declaration, "observed_axioms_sha256")
+        != observation.query.observed_axioms_sha256
+    ):
+        raise CanonicalTypeGateError(
+            f"local OCI raw query output is detached from {request.subject_id}"
+        )
+
+
+def _require_exact_query_fields(
+    value: dict[str, object],
+    expected: frozenset[str],
+    *,
+    label: str,
+) -> None:
+    if set(value) != expected:
+        raise CanonicalTypeGateError(f"canonical query {label} has unexpected fields")
+
+
+def _query_object(value: dict[str, object], key: str) -> dict[str, object]:
+    result = value.get(key)
+    if not isinstance(result, dict):
+        raise CanonicalTypeGateError(f"canonical query {key} is not an object")
+    return cast(dict[str, object], result)
+
+
+def _query_list(value: dict[str, object], key: str) -> list[object]:
+    result = value.get(key)
+    if not isinstance(result, list):
+        raise CanonicalTypeGateError(f"canonical query {key} is not a list")
+    return result
+
+
+def _query_text(value: dict[str, object], key: str) -> str:
+    result = value.get(key)
+    if not isinstance(result, str) or not result:
+        raise CanonicalTypeGateError(f"canonical query {key} is not text")
+    return result
+
+
+def _query_names(value: dict[str, object], key: str) -> tuple[str, ...]:
+    result = _query_list(value, key)
+    if not all(isinstance(item, str) and item for item in result):
+        raise CanonicalTypeGateError(f"canonical query {key} is not a name list")
+    names = tuple(cast(list[str], result))
+    if names != tuple(sorted(set(names))) or any(item != item.strip() for item in names):
+        raise CanonicalTypeGateError(f"canonical query {key} is not sorted and unique")
+    return names
+
+
+def _query_sha256(value: dict[str, object], key: str) -> str:
+    result = _query_text(value, key)
+    _require_sha256(result, label=key)
+    return result
+
+
+def _worker_payload_sha256(value: object) -> str:
+    return hashlib.sha256(canonical_json_bytes(value) + b"\n").hexdigest()
+
+
+def _assert_requests_bind_binding(
+    binding: CanonicalTypeGateBinding,
+    reference: CanonicalTypeQueryRequest,
+    candidates: tuple[CanonicalTypeQueryRequest, ...],
+) -> None:
+    if (
+        reference.subject_id != "contract-selected-reference"
+        or reference.statement_source_hash != binding.selected_statement_hash
+        or reference.declaration != binding.declaration
+        or any(request.declaration != binding.declaration for request in candidates)
+    ):
+        raise CanonicalTypeGateError(
+            "canonical type query request differs from the contract binding"
+        )
 
 
 def _require_sha256(value: str, *, label: str) -> None:
     if not _SHA256_RE.fullmatch(value):
         raise CanonicalTypeGateError(f"canonical query {label} is not a SHA-256 digest")
-
-
-def query_payload_sha256(document: object) -> str:
-    """Hash one normalized query document for adapter evidence."""
-
-    return digest_bytes(HashKindV1.TOOL, canonical_json_bytes(document)).value
