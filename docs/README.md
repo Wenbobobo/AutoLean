@@ -76,10 +76,13 @@ runner reports success.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
-25. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
+25. [Domain pilot discovery gates](research/domain-pilot-discovery-2026-07-26.md) distinguish
+    prerequisite-definition coverage from exact theorem reuse and record the SDE, PDE,
+    Riemannian, and metric-algebraic-geometry source decisions without selecting a pilot.
+26. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.
-26. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
+27. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
     `Arithmetic.score` API change to separate declaration-invalidation and module-rebuild plans,
     then records the non-acceptance failure/rebuild/reuse boundary.
 27. [Pre-T6 Builder query route](pre-t6-builder-query-route.md) chooses a Builder-only
