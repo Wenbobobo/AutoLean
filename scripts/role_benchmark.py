@@ -61,8 +61,10 @@ def main() -> None:
         RoleBenchmarkRawOutputStore,
         RoleBenchmarkStore,
         ScriptedFakeRoleExecutor,
+        compare_report_suite,
         compare_reports,
         comparison_json,
+        comparison_suite_json,
         load_fake_fixture,
         load_raw_artifact_manifest_json,
         operator_private_benchmark_paths,
@@ -112,6 +114,22 @@ def main() -> None:
     compare_parser.add_argument("--candidate-run", required=True)
     compare_parser.add_argument("--candidate-cell", required=True)
     compare_parser.add_argument("--output")
+
+    compare_suite_parser = subparsers.add_parser(
+        "compare-suite",
+        help="compare multiple paired role cells from one database",
+    )
+    compare_suite_parser.add_argument("--database", required=True)
+    compare_suite_parser.add_argument("--baseline-run", required=True)
+    compare_suite_parser.add_argument("--candidate-run", required=True)
+    compare_suite_parser.add_argument(
+        "--cell-pair",
+        action="append",
+        required=True,
+        metavar="BASELINE_CELL=CANDIDATE_CELL",
+        help="repeatable paired cells; each pair must stay within one role",
+    )
+    compare_suite_parser.add_argument("--output")
 
     args = parser.parse_args()
     if args.command == "readiness":
@@ -189,7 +207,7 @@ def main() -> None:
                 raise ValueError("raw artifact manifest does not match the stored run")
             validate_report_private_manifest(report, expected)
             _write_or_print(report_json(report), args.output)
-        else:
+        elif args.command == "compare":
             baseline = store.report(str(args.baseline_run))
             candidate = store.report(str(args.candidate_run))
             comparison = compare_reports(
@@ -199,6 +217,21 @@ def main() -> None:
                 candidate_cell_id=str(args.candidate_cell),
             )
             _write_or_print(comparison_json(comparison), args.output)
+        else:
+            pairs: list[tuple[str, str]] = []
+            for raw_pair in args.cell_pair:
+                left, separator, right = str(raw_pair).partition("=")
+                if not separator or not left or not right:
+                    raise ValueError("--cell-pair must be BASELINE_CELL=CANDIDATE_CELL")
+                pairs.append((left, right))
+            baseline = store.report(str(args.baseline_run))
+            candidate = store.report(str(args.candidate_run))
+            suite = compare_report_suite(
+                baseline,
+                candidate=candidate,
+                cell_pairs=pairs,
+            )
+            _write_or_print(comparison_suite_json(suite), args.output)
 
 
 if __name__ == "__main__":

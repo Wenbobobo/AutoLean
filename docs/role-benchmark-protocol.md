@@ -145,7 +145,7 @@ The granular `readiness`, `run`, `report`, and `compare` commands exist for auto
 
 The CLI has no endpoint, credential, or provider-selection option. This is deliberate.
 
-To compare stored cells or repeated runs:
+To compare one stored cell pair or repeated run:
 
 ```powershell
 uv run python scripts/role_benchmark.py compare `
@@ -155,6 +155,25 @@ uv run python scripts/role_benchmark.py compare `
   --candidate-run candidate-v1 `
   --candidate-cell fake.prover
 ```
+
+To compare a whole role-calibration suite, use repeated `--cell-pair` arguments rather than
+manually merging per-role outputs:
+
+```powershell
+uv run python scripts/role_benchmark.py compare-suite `
+  --database .tmp-role-benchmark/roles.sqlite3 `
+  --baseline-run calibration-v1 `
+  --candidate-run calibration-v1 `
+  --cell-pair fake.oracle.prover=fake.mutant.prover `
+  --cell-pair fake.oracle.statement-formalizer=fake.mutant.statement-formalizer `
+  --cell-pair fake.oracle.fidelity-reviewer=fake.mutant.fidelity-reviewer `
+  --cell-pair fake.oracle.cheating-supervisor=fake.mutant.cheating-supervisor `
+  --cell-pair fake.oracle.task-allocator=fake.mutant.task-allocator
+```
+
+The suite output is only a deterministic bundle of pairwise comparisons. It rejects cross-role
+pairs and duplicate roles, and it does not compute a global score across Prover, formalizer,
+reviewer, supervisor, and allocator roles.
 
 Use a script or short command file for repeated production runs rather than expanding this into a
 long shell command.

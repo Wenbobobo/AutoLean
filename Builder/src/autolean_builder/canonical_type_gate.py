@@ -20,6 +20,7 @@ from autolean_contracts import (
     digest_bytes,
     digest_text,
 )
+from autolean_contracts.hashing import require_digest_kind
 
 _SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 _IMAGE_DIGEST_RE = re.compile(r"^sha256:[0-9a-f]{64}$")
@@ -479,6 +480,145 @@ class CanonicalTypeGateEvidence:
         ).decode("ascii")
 
 
+@dataclass(frozen=True, slots=True)
+class BuilderStatementObservationEvidence:
+    """Builder-owned bridge evidence for one frozen statement observation.
+
+    This is deliberately not a proof carrier and must never be accepted by the Prover as a
+    ProofSubmissionV1. Its only job is to bind the selected statement source, canonical type,
+    and query receipt to the Builder handoff boundary before proof search starts.
+    """
+
+    contract_id: str
+    revision: int
+    contract_hash: DigestV1
+    selected_statement_hash: DigestV1
+    environment_hash: DigestV1
+    declaration: str
+    observation: CanonicalTypeObservation
+    environment: CanonicalTypeEnvironmentFacts
+    carrier_non_proof: Literal[True] = True
+    promotion_authority: Literal[False] = False
+    prover_submission_eligible: Literal[False] = False
+    public_protocol_command: Literal["builder_statement_observation"] = (
+        "builder_statement_observation"
+    )
+
+    @classmethod
+    def from_gate_evidence(
+        cls,
+        evidence: CanonicalTypeGateEvidence,
+        *,
+        contract_hash: DigestV1,
+    ) -> BuilderStatementObservationEvidence:
+        """Project exact-type gate evidence into the standardized non-proof bridge record."""
+
+        return cls(
+            contract_id=evidence.contract_id,
+            revision=evidence.revision,
+            contract_hash=contract_hash,
+            selected_statement_hash=evidence.selected_statement_hash,
+            environment_hash=evidence.environment_hash,
+            declaration=evidence.reference.declaration,
+            observation=evidence.reference,
+            environment=evidence.environment,
+        )
+
+    def assert_internal_only(self) -> None:
+        """Fail closed if this evidence has been reshaped into a proof-like authority."""
+
+        if (
+            self.carrier_non_proof is not True
+            or self.promotion_authority is not False
+            or self.prover_submission_eligible is not False
+            or self.public_protocol_command != "builder_statement_observation"
+        ):
+            raise CanonicalTypeGateError(
+                "Builder statement observation cannot be promoted as proof evidence"
+            )
+        require_digest_kind(self.contract_hash, HashKindV1.CONTRACT, "contract_hash")
+        require_digest_kind(
+            self.selected_statement_hash,
+            HashKindV1.STATEMENT_SOURCE,
+            "selected_statement_hash",
+        )
+        require_digest_kind(self.environment_hash, HashKindV1.ENVIRONMENT, "environment_hash")
+        self.environment.validate()
+        _assert_observation_binds_requestless(self.observation, self.environment)
+        if (
+            self.observation.statement_source_hash != self.selected_statement_hash
+            or self.observation.declaration != self.declaration
+            or self.observation.environment_facts_sha256 != self.environment.content_sha256
+        ):
+            raise CanonicalTypeGateError(
+                "Builder statement observation is detached from its frozen boundary"
+            )
+
+    def assert_binds_frozen_contract(
+        self,
+        *,
+        contract_id: str,
+        revision: int,
+        contract_hash: DigestV1,
+        selected_statement_hash: DigestV1,
+        environment_hash: DigestV1,
+        declaration: str,
+        expected_elaborated_type_hash: DigestV1,
+    ) -> None:
+        """Validate this record against a frozen contract or Prover proof boundary.
+
+        This is a Builder-side handoff check only. It establishes that the statement observation
+        matches the frozen contract hashes the Prover will receive; it does not verify a proof.
+        """
+
+        self.assert_internal_only()
+        require_digest_kind(
+            expected_elaborated_type_hash,
+            HashKindV1.ELABORATED_TYPE,
+            "expected_elaborated_type_hash",
+        )
+        if (
+            self.contract_id != contract_id
+            or self.revision != revision
+            or self.contract_hash != contract_hash
+            or self.selected_statement_hash != selected_statement_hash
+            or self.environment_hash != environment_hash
+            or self.declaration != declaration
+            or self.observation.canonical_type_hash != expected_elaborated_type_hash
+        ):
+            raise CanonicalTypeGateError(
+                "Builder statement observation does not bind the frozen Prover boundary"
+            )
+
+    def payload(self) -> dict[str, object]:
+        self.assert_internal_only()
+        return {
+            "schema_version": "autolean.builder-statement-observation-evidence.v1",
+            "authority": "builder_internal_prefreeze_observation",
+            "carrier_non_proof": self.carrier_non_proof,
+            "promotion_authority": self.promotion_authority,
+            "prover_submission_eligible": self.prover_submission_eligible,
+            "public_protocol_command": self.public_protocol_command,
+            "contract_id": self.contract_id,
+            "revision": self.revision,
+            "contract_hash": self.contract_hash.model_dump(mode="json"),
+            "selected_statement_hash": self.selected_statement_hash.model_dump(mode="json"),
+            "environment_hash": self.environment_hash.model_dump(mode="json"),
+            "declaration": self.declaration,
+            "canonical_type_hash": self.observation.canonical_type_hash.model_dump(mode="json"),
+            "canonical_type_sha256": self.observation.canonical_type_sha256,
+            "environment": self.environment.payload(),
+            "observation": self.observation.payload(),
+        }
+
+    @property
+    def record_hash(self) -> DigestV1:
+        return digest_bytes(
+            HashKindV1.FREEZE_EVIDENCE,
+            canonical_json_bytes(self.payload()),
+        )
+
+
 def run_canonical_type_gate(
     query: CanonicalTypeQuery,
     *,
@@ -626,6 +766,21 @@ def _assert_observation_binds_request(
             f"canonical type observation is detached from {request.subject_id}"
         )
     _assert_raw_query_output_binds(observation, environment, request)
+
+
+def _assert_observation_binds_requestless(
+    observation: CanonicalTypeObservation,
+    environment: CanonicalTypeEnvironmentFacts,
+) -> None:
+    observation.query.validate()
+    if (
+        observation.environment_facts_sha256 != environment.content_sha256
+        or observation.canonical_type_hash
+        != digest_text(HashKindV1.ELABORATED_TYPE, observation.canonical_type)
+        or observation.canonical_type_sha256
+        != hashlib.sha256(observation.canonical_type.encode("utf-8")).hexdigest()
+    ):
+        raise CanonicalTypeGateError("Builder statement observation is internally detached")
 
 
 def _parse_query_output(value: str) -> dict[str, object]:

@@ -39,6 +39,7 @@ from autolean_contracts import (
 )
 
 from .canonical_type_gate import (
+    BuilderStatementObservationEvidence,
     CanonicalTypeGateBinding,
     CanonicalTypeGateError,
     CanonicalTypeGateEvidence,
@@ -859,6 +860,18 @@ class FidelityEvaluation:
 
     def render_artifact(self) -> bytes:
         return canonical_json_bytes(self.artifact_payload())
+
+    def builder_statement_observation(
+        self,
+        *,
+        contract_hash: DigestV1,
+    ) -> BuilderStatementObservationEvidence:
+        """Return the standardized Builder-to-Prover non-proof observation record."""
+
+        return BuilderStatementObservationEvidence.from_gate_evidence(
+            self.canonical_type_gate,
+            contract_hash=contract_hash,
+        )
 
     def assert_binds(self, contract: StatementContractV1) -> None:
         if self.task.contract_id != contract.contract_id or self.task.revision != contract.revision:

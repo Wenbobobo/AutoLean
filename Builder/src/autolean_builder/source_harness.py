@@ -37,7 +37,7 @@ from autolean_contracts import (
     utc_now,
 )
 
-from .canonical_type_gate import CanonicalTypeQuery
+from .canonical_type_gate import BuilderStatementObservationEvidence, CanonicalTypeQuery
 from .fidelity_harness import (
     FidelityEvaluation,
     MutationSuiteAgent,
@@ -626,7 +626,7 @@ class SourceToStatementHarness:
         frozen_at = self._require_aware(frozen.freeze.frozen_at, "freeze record")
         if frozen_at > bundle_issued_at:
             raise SourceHarnessError("freeze timestamp is later than bundle issue timestamp")
-        return _bridge_frozen_contract(
+        bundle = _bridge_frozen_contract(
             frozen,
             graphs,
             bundle_key=bundle_key,
@@ -636,6 +636,36 @@ class SourceToStatementHarness:
             attestation_ttl_seconds=attestation_ttl_seconds,
             bundle_issued_at=bundle_issued_at,
         )
+        self.builder_statement_observation(evaluation, bundle=bundle)
+        return bundle
+
+    @staticmethod
+    def builder_statement_observation(
+        evaluation: FidelityEvaluation,
+        *,
+        bundle: FormalizationTaskBundleV1,
+    ) -> BuilderStatementObservationEvidence:
+        """Project Builder canonical-type evidence onto the Prover bridge boundary.
+
+        The returned record is intentionally not part of FormalizationTaskBundleV1 and is not a
+        proof submission. It is a standardized Builder-side audit surface for checking that the
+        selected statement observation, frozen contract hash, environment hash, and proof-boundary
+        type hash all agree before Prover proof search starts.
+        """
+
+        observation = evaluation.builder_statement_observation(
+            contract_hash=bundle.contract.semantic_hash(),
+        )
+        observation.assert_binds_frozen_contract(
+            contract_id=bundle.contract.contract_id.value,
+            revision=bundle.contract.revision,
+            contract_hash=bundle.contract.semantic_hash(),
+            selected_statement_hash=bundle.contract.formal.statement_source_hash,
+            environment_hash=bundle.contract.formal.environment.environment_hash,
+            declaration=bundle.proof_boundary.expected_declaration,
+            expected_elaborated_type_hash=bundle.proof_boundary.expected_elaborated_type_hash,
+        )
+        return observation
 
     def _now(self, stage: str) -> datetime:
         return self._require_aware(self._clock(), f"{stage} clock")

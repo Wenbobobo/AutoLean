@@ -1,4 +1,4 @@
-import type { GraphKind, GraphNode } from "./types";
+import type { EventView, GraphKind, GraphNode } from "./types";
 
 export type GraphScope = GraphKind | "all";
 export type HealthTone = "nominal" | "active" | "attention" | "critical" | "unknown";
@@ -50,6 +50,47 @@ export interface GridSummary {
   overallTone: HealthTone;
   total: number;
   unknown: number;
+}
+
+export type DagEventState = "attempt" | "gap" | "contract_change" | "verification" | "other" | null;
+
+export interface DagHealthCell {
+  attempts: number;
+  dependencies: number;
+  dependents: number;
+  eventState: DagEventState;
+  gaps: number;
+  graph: GraphKind;
+  healthLabel: string;
+  id: string;
+  kind: string;
+  label: string;
+  revision: number;
+  taskId: string;
+  tone: HealthTone;
+}
+
+export interface DagHealthColumn {
+  attempts: number;
+  cells: DagHealthCell[];
+  externalDependencies: number;
+  gaps: number;
+  graph: GraphKind;
+  label: string;
+  nodeCount: number;
+  omitted: number;
+  shortLabel: string;
+  tone: HealthTone;
+}
+
+export interface DagHealthMap {
+  columns: DagHealthColumn[];
+  scope: GraphScope;
+  totalAttempts: number;
+  totalEdges: number;
+  totalGaps: number;
+  totalNodes: number;
+  unresolvedDependencies: number;
 }
 
 export const graphOrder: GraphKind[] = ["mathematical", "formal", "execution"];
@@ -282,6 +323,132 @@ export function buildGridModel(nodes: GraphNode[], scope: GraphScope = "all"): G
     links,
     nodes: positioned,
     summary: summarizeGrid(visibleNodes),
+    unresolvedDependencies
+  };
+}
+
+function eventStateForType(eventType: string): Exclude<DagEventState, null> {
+  if (eventType === "gap.reported") return "gap";
+  if (eventType === "contract_change.requested") return "contract_change";
+  if (eventType === "proof.submitted") return "attempt";
+  if (eventType.startsWith("verification.")) return "verification";
+  return "other";
+}
+
+function eventMatchesNode(event: EventView, node: GraphNode): boolean {
+  return (
+    event.task_id === node.task_id ||
+    event.entity_id === node.id ||
+    event.entity_id === node.source_node_id
+  );
+}
+
+function relevantEventsForNodes(events: EventView[], nodes: GraphNode[]): EventView[] {
+  const bySequence = new Map<number, EventView>();
+  for (const event of events) {
+    if (nodes.some((node) => eventMatchesNode(event, node))) {
+      bySequence.set(event.sequence, event);
+    }
+  }
+  return [...bySequence.values()].sort((left, right) => right.sequence - left.sequence);
+}
+
+function countEvents(events: EventView[], eventType: string): number {
+  return events.filter((event) => event.event_type === eventType).length;
+}
+
+function dominantEventState(events: EventView[]): DagEventState {
+  if (events.some((event) => event.event_type === "gap.reported")) return "gap";
+  if (events.some((event) => event.event_type === "contract_change.requested")) {
+    return "contract_change";
+  }
+  if (events.some((event) => event.event_type === "proof.submitted")) return "attempt";
+  if (events.some((event) => event.event_type.startsWith("verification."))) return "verification";
+  return events.length > 0 ? eventStateForType(events[0]!.event_type) : null;
+}
+
+/**
+ * Read-only operational minimap: node colors remain current projected health;
+ * attempt/gap markers are immutable event pressure, not automatic promotion state.
+ */
+export function buildDagHealthMap(
+  nodes: GraphNode[],
+  events: EventView[],
+  scope: GraphScope = "all",
+  cellLimit = 48
+): DagHealthMap {
+  if (!Number.isInteger(cellLimit) || cellLimit < 1) {
+    throw new RangeError("cellLimit must be a positive integer");
+  }
+  const visibleGraphs = scope === "all" ? graphOrder : [scope];
+  const visibleNodes = nodes.filter((node) => visibleGraphs.includes(node.graph));
+  const visibleById = new Map(visibleNodes.map((node) => [node.id, node]));
+  const dependents = new Map(visibleNodes.map((node) => [node.id, 0]));
+  let totalEdges = 0;
+  let unresolvedDependencies = 0;
+
+  for (const node of visibleNodes) {
+    for (const dependency of node.dependencies) {
+      if (visibleById.has(dependency)) {
+        totalEdges += 1;
+        dependents.set(dependency, (dependents.get(dependency) ?? 0) + 1);
+      } else {
+        unresolvedDependencies += 1;
+      }
+    }
+  }
+
+  const columns = visibleGraphs.map((graph) => {
+    const graphNodes = visibleNodes.filter((node) => node.graph === graph);
+    const ordered = topologicalOrder(graphNodes);
+    const graphEvents = relevantEventsForNodes(events, graphNodes);
+    const attempts = countEvents(graphEvents, "proof.submitted");
+    const gaps = countEvents(graphEvents, "gap.reported");
+    const externalDependencies = graphNodes.reduce(
+      (total, node) =>
+        total + node.dependencies.filter((dependency) => !visibleById.has(dependency)).length,
+      0
+    );
+
+    return {
+      attempts,
+      cells: ordered.slice(0, cellLimit).map((node) => {
+        const nodeEvents = relevantEventsForNodes(events, [node]);
+        const health = healthForStatus(node.status);
+        return {
+          attempts: countEvents(nodeEvents, "proof.submitted"),
+          dependencies: node.dependencies.length,
+          dependents: dependents.get(node.id) ?? 0,
+          eventState: dominantEventState(nodeEvents),
+          gaps: countEvents(nodeEvents, "gap.reported"),
+          graph,
+          healthLabel: health.label,
+          id: node.id,
+          kind: node.kind,
+          label: node.label,
+          revision: node.revision,
+          taskId: node.task_id,
+          tone: health.tone
+        };
+      }),
+      externalDependencies,
+      gaps,
+      graph,
+      label: graphPresentation[graph].label,
+      nodeCount: graphNodes.length,
+      omitted: Math.max(0, graphNodes.length - cellLimit),
+      shortLabel: graphPresentation[graph].shortLabel,
+      tone: strongestTone(graphNodes)
+    };
+  });
+
+  return {
+    columns,
+    scope,
+    totalAttempts: columns.reduce((total, column) => total + column.attempts, 0),
+    totalEdges,
+    totalGaps: columns.reduce((total, column) => total + column.gaps, 0),
+    totalNodes: visibleNodes.length,
     unresolvedDependencies
   };
 }

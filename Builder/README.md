@@ -43,6 +43,9 @@ protocol are documented in
 The public draft and frozen contract store only each span ID, locator, byte offsets, and excerpt
 hash. Verbatim excerpts remain in the private preparation packet and fidelity artifact; the
 Builder-to-Prover bundle carries only the typed fidelity-artifact reference.
+The companion BuilderStatementObservationEvidence record standardizes the selected-statement
+canonical-type observation for Builder/Prover audits, but it is deliberately marked non-proof and
+ineligible for ProofSubmissionV1.
 
 Raw freeze and bridge primitives are no longer exported by `autolean_builder`; the supported
 source-backed handoff is `SourceToStatementHarness.revalidate_freeze_and_bridge`. Python module

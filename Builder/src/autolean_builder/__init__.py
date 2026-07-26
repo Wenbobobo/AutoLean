@@ -1,6 +1,7 @@
 """Statement-fidelity workflow for the Builder side of AutoLean."""
 
 from .canonical_type_gate import (
+    BuilderStatementObservationEvidence,
     CanonicalTypeEnvironmentFacts,
     CanonicalTypeGateBinding,
     CanonicalTypeGateError,
@@ -163,6 +164,7 @@ __all__ = [
     "BuilderCase",
     "BuilderError",
     "BuilderStage",
+    "BuilderStatementObservationEvidence",
     "CalibrationRequirementV1",
     "CalibrationReviewEvidenceV1",
     "CalibrationRoleV1",

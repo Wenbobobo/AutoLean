@@ -1408,6 +1408,46 @@ class RoleBenchmarkComparisonV1(ContractModel):
         return canonical_json_bytes(self) + b"\n"
 
 
+class RoleBenchmarkComparisonSuiteV1(ContractModel):
+    """A deterministic bundle of paired role-cell comparisons.
+
+    The suite aggregates already-validated pairwise comparisons. It does not relax the
+    per-role binding checks performed by compare_reports and it never merges scores across roles.
+    """
+
+    schema_version: Literal["autolean.role-benchmark-comparison-suite.v1"] = (
+        "autolean.role-benchmark-comparison-suite.v1"
+    )
+    baseline_run_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    candidate_run_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    comparisons: tuple[RoleBenchmarkComparisonV1, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_suite_accounting(self) -> Self:
+        pairs: set[tuple[str, str]] = set()
+        roles: list[BenchmarkRoleV1] = []
+        for comparison in self.comparisons:
+            if comparison.baseline_run_id != self.baseline_run_id:
+                raise ValueError("comparison suite baseline run ID drift")
+            if comparison.candidate_run_id != self.candidate_run_id:
+                raise ValueError("comparison suite candidate run ID drift")
+            pair = (comparison.baseline_cell_id, comparison.candidate_cell_id)
+            if pair in pairs:
+                raise ValueError("comparison suite cell pairs must be unique")
+            pairs.add(pair)
+            roles.append(comparison.role)
+        if len(roles) != len(set(roles)):
+            raise ValueError("comparison suite roles must be unique")
+        return self
+
+    @property
+    def roles(self) -> tuple[BenchmarkRoleV1, ...]:
+        return tuple(comparison.role for comparison in self.comparisons)
+
+    def canonical_json_bytes(self) -> bytes:
+        return canonical_json_bytes(self) + b"\n"
+
+
 def _run_cell(report: RoleBenchmarkReportV1, cell_id: str) -> RoleBenchmarkRunCellV1:
     matches = tuple(cell for cell in report.run.cells if cell.cell_id == cell_id)
     if len(matches) != 1:
@@ -1611,6 +1651,30 @@ def compare_reports(
         discordant_trials=wins + losses,
         baseline_unstable_cases=baseline_metric.unstable_cases,
         candidate_unstable_cases=candidate_metric.unstable_cases,
+    )
+
+
+def compare_report_suite(
+    baseline: RoleBenchmarkReportV1,
+    *,
+    candidate: RoleBenchmarkReportV1,
+    cell_pairs: Iterable[tuple[str, str]],
+) -> RoleBenchmarkComparisonSuiteV1:
+    """Compare multiple role cells without weakening pairwise role isolation."""
+
+    comparisons = tuple(
+        compare_reports(
+            baseline,
+            baseline_cell_id=baseline_cell_id,
+            candidate=candidate,
+            candidate_cell_id=candidate_cell_id,
+        )
+        for baseline_cell_id, candidate_cell_id in cell_pairs
+    )
+    return RoleBenchmarkComparisonSuiteV1(
+        baseline_run_id=baseline.run.run_id,
+        candidate_run_id=candidate.run.run_id,
+        comparisons=comparisons,
     )
 
 
@@ -2624,6 +2688,11 @@ def report_json(report: RoleBenchmarkReportV1) -> str:
 
 def comparison_json(comparison: RoleBenchmarkComparisonV1) -> str:
     validated = RoleBenchmarkComparisonV1.model_validate(comparison.model_dump(mode="json"))
+    return validated.canonical_json_bytes().decode("ascii")
+
+
+def comparison_suite_json(comparison: RoleBenchmarkComparisonSuiteV1) -> str:
+    validated = RoleBenchmarkComparisonSuiteV1.model_validate(comparison.model_dump(mode="json"))
     return validated.canonical_json_bytes().decode("ascii")
 
 

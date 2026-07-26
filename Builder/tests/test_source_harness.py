@@ -16,9 +16,11 @@ import autolean_builder
 import autolean_builder.source_harness as source_harness_module
 import pytest
 from autolean_builder import (
+    BuilderStatementObservationEvidence,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
+    CanonicalTypeGateError,
     ChapterSourceSpan,
     DownloadObservation,
     FidelityEvaluation,
@@ -812,6 +814,53 @@ def test_source_harness_revalidates_freezes_and_bridges_to_prover_bundle(
         expected_purpose=AttestationPurposeV1.BUILDER_FREEZE,
         payload=builder_attestation_payload(bundle),
     )
+
+    observation = harness.builder_statement_observation(evaluation, bundle=bundle)
+    payload = observation.payload()
+    assert isinstance(observation, BuilderStatementObservationEvidence)
+    assert payload["schema_version"] == "autolean.builder-statement-observation-evidence.v1"
+    assert payload["carrier_non_proof"] is True
+    assert payload["promotion_authority"] is False
+    assert payload["prover_submission_eligible"] is False
+    assert payload["public_protocol_command"] == "builder_statement_observation"
+    assert payload["contract_hash"] == bundle.contract.semantic_hash().model_dump(mode="json")
+    assert payload["selected_statement_hash"] == (
+        bundle.contract.formal.statement_source_hash.model_dump(mode="json")
+    )
+    assert payload["environment_hash"] == (
+        bundle.contract.formal.environment.environment_hash.model_dump(mode="json")
+    )
+    assert payload["declaration"] == bundle.proof_boundary.expected_declaration
+    assert payload["canonical_type_hash"] == (
+        bundle.proof_boundary.expected_elaborated_type_hash.model_dump(mode="json")
+    )
+
+    detached = observation.__class__(
+        contract_id=observation.contract_id,
+        revision=observation.revision,
+        contract_hash=observation.contract_hash,
+        selected_statement_hash=observation.selected_statement_hash,
+        environment_hash=observation.environment_hash,
+        declaration="AutoLean.Geometry.detached",
+        observation=observation.observation,
+        environment=observation.environment,
+    )
+    with pytest.raises(CanonicalTypeGateError, match="detached from its frozen boundary"):
+        detached.payload()
+
+    promoted = observation.__class__(
+        contract_id=observation.contract_id,
+        revision=observation.revision,
+        contract_hash=observation.contract_hash,
+        selected_statement_hash=observation.selected_statement_hash,
+        environment_hash=observation.environment_hash,
+        declaration=observation.declaration,
+        observation=observation.observation,
+        environment=observation.environment,
+        promotion_authority=True,  # type: ignore[arg-type]
+    )
+    with pytest.raises(CanonicalTypeGateError, match="cannot be promoted"):
+        promoted.payload()
 
 
 def test_true_statement_candidate_cannot_reproduce_name_preserving_exploit(

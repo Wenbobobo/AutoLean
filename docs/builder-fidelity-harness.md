@@ -80,6 +80,13 @@ the bundle. The Builder attestation covers that reference through the handoff ha
 registration rehashes the bytes, checks their task/statement/source binding, and records the
 reference in the append-only registration event.
 
+BuilderStatementObservationEvidence is the standardized Builder-side observation record produced
+from the same canonical-type gate before Prover proof search. It binds the selected statement hash,
+frozen contract hash, declaration, environment hash, canonical type hash, and raw query receipt, but
+it is explicitly carrier_non_proof=true, promotion_authority=false, and
+prover_submission_eligible=false. It is not a ProofSubmissionV1 and cannot satisfy kernel
+verification or promotion.
+
 The source claims, mathematical specification, and formalization envelope are the preformal trust
 boundary: the Harness copies them from an already prepared draft and does not prove that their
 contents were authored from the source without contamination. The generation-task hash proves

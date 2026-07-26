@@ -15,6 +15,7 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { api } from "./api";
 import { displayText, phaseStateLabel } from "./display";
 import { feedbackTone, leverageMetric, leverageWindow } from "./feedbackModel";
+import { DagHealthMap } from "./DagHealthMap";
 import { GraphView } from "./GraphView";
 import { summarizeGrid, type GraphScope } from "./gridModel";
 import {
@@ -214,7 +215,10 @@ export default function App() {
                 <button type="button" className="text-button on-dark" onClick={() => setView("graph")}>Open topology</button>
               </div>
               <div className="command-layout">
-                <GraphView nodes={nodes} graph="all" compact />
+                <div className="graph-stack">
+                  <GraphView nodes={nodes} graph="all" compact />
+                  <DagHealthMap nodes={nodes} events={events} compact />
+                </div>
                 <aside className="grid-journal">
                   <div className="journal-heading">
                     <p className="eyebrow">Event journal</p>
@@ -263,6 +267,7 @@ export default function App() {
                 onSelectNode={setFocusedNodeId}
               />
               <NodeInspector inspection={nodeInspection} />
+              <DagHealthMap nodes={nodes} events={events} graph={graph} />
             </div>
             <div className="node-ledger table-wrap">
               <table>

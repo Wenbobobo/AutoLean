@@ -1,16 +1,24 @@
 from __future__ import annotations
 
+import json
+import os
+import subprocess
+import sys
 from pathlib import Path
+
+import pytest
 
 from benchmarks.provider_readiness import build_scripted_fake_readiness
 from benchmarks.role_benchmark import (
     BenchmarkRoleV1,
     FakeRoleBenchmarkFixtureV1,
+    RoleBenchmarkError,
     RoleBenchmarkHarness,
     RoleBenchmarkRawOutputStore,
     RoleBenchmarkReportV1,
     RoleBenchmarkStore,
     ScriptedFakeRoleExecutor,
+    compare_report_suite,
     compare_reports,
     load_fake_fixture,
     stable_case_selection,
@@ -137,3 +145,82 @@ def test_calibration_pairs_are_balanced_sensitive_controlled_and_replayable(
         assert comparison.candidate_wins == 0
         assert comparison.candidate_losses == 3
         assert comparison.ties == 3
+
+
+def test_calibration_pair_comparison_suite_keeps_roles_separate(
+    tmp_path: Path,
+) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    report = _run_fixture(fixture, tmp_path / "suite")
+    pairs = tuple(
+        (
+            f"fake.oracle.{role.value.replace('_', '-')}",
+            f"fake.mutant.{role.value.replace('_', '-')}",
+        )
+        for role in BenchmarkRoleV1
+    )
+
+    suite = compare_report_suite(report, candidate=report, cell_pairs=pairs)
+
+    assert suite.schema_version == "autolean.role-benchmark-comparison-suite.v1"
+    assert suite.baseline_run_id == suite.candidate_run_id == "role-calibration-pairs-replay"
+    assert suite.roles == tuple(BenchmarkRoleV1)
+    assert len(suite.comparisons) == 5
+    assert all(item.comparison_kind == "controlled_ablation" for item in suite.comparisons)
+    assert all(item.changed_dimensions == ("model_target",) for item in suite.comparisons)
+    assert [item.pass_rate_delta_ppm for item in suite.comparisons] == [-500_000] * 5
+
+    with pytest.raises(RoleBenchmarkError, match="cross-role comparisons"):
+        compare_report_suite(
+            report,
+            candidate=report,
+            cell_pairs=(("fake.oracle.prover", "fake.mutant.task-allocator"),),
+        )
+
+
+def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    database = tmp_path / "roles.sqlite3"
+    raw_root = tmp_path / "operator-private-raw"
+    environment = {
+        **os.environ,
+        "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
+    }
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=ScriptedFakeRoleExecutor(fixture),
+            store=store,
+            raw_output_store=RoleBenchmarkRawOutputStore(raw_root),
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id="suite-cli-run",
+        )
+
+    script = PROJECT_ROOT / "scripts" / "role_benchmark.py"
+    output = tmp_path / "suite.json"
+    command = [
+        sys.executable,
+        str(script),
+        "compare-suite",
+        "--database",
+        str(database),
+        "--baseline-run",
+        report.run.run_id,
+        "--candidate-run",
+        report.run.run_id,
+        "--output",
+        str(output),
+    ]
+    for role in BenchmarkRoleV1:
+        slug = role.value.replace("_", "-")
+        command.extend(["--cell-pair", f"fake.oracle.{slug}=fake.mutant.{slug}"])
+
+    subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=environment)
+    payload = json.loads(output.read_text(encoding="ascii"))
+
+    assert payload["schema_version"] == "autolean.role-benchmark-comparison-suite.v1"
+    assert [item["role"] for item in payload["comparisons"]] == [
+        role.value for role in BenchmarkRoleV1
+    ]
+    assert {item["comparison_kind"] for item in payload["comparisons"]} == {"controlled_ablation"}
+    assert {item["pass_rate_delta_ppm"] for item in payload["comparisons"]} == {-500000}

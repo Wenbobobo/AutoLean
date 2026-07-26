@@ -40,6 +40,9 @@ runner reports success.
     [the current route](phase-1-plan.md) resolves active sequencing,
     [the parallel execution plan](phase-1-parallel-execution.md) assigns work packages, and
     [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
+    [The next operating plan](roadmap-next.md) is the current root-agent control plan for
+    coordinating the immediate Builder bridge, vertical fixture, role benchmark, Dashboard, and
+    research work packages without promoting them into release evidence prematurely.
 14. [Builder domain pilot](domain-pilot-selection.md) records the conditional model-theory
     primary, curvature's reference-only boundary, backups, and selection gates. The
     [T3 human-review packet](../Builder/pilots/model-theory-admission/human-review/README.md)
@@ -72,7 +75,9 @@ runner reports success.
     mathematical reviewer, or project owner.
 23. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
     the local Archon-talk evidence, Danus/Reap audit boundaries, and the resulting isolated
-    experiments without treating external performance claims as AutoLean results.
+    experiments without treating external performance claims as AutoLean results. The
+    [meeting Archon takeaways](research/meeting_archon_takeaways.md) keep the newer talk snippets,
+    adjacent assistant landscape, and Dashboard/context-pack lessons as advisory roadmap input.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
