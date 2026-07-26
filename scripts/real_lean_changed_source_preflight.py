@@ -31,6 +31,10 @@ from benchmarks.real_lean_project_dag_change import (
     RealLeanChangeCaseV1,
     load_default_real_lean_change_case,
 )
+from benchmarks.real_lean_project_dag_rebuild import (
+    RealLeanRebuildBundleV1,
+    plan_real_lean_rebuild,
+)
 from scripts.real_lean_project_dag_preflight import (
     DEFAULT_WSL_DISTRIBUTION,
     SOURCE_V2_IMAGE,
@@ -95,6 +99,42 @@ class ChangedSourceSnapshot:
     root: Path
     source_root: Path
     source_hashes: dict[str, str]
+
+
+def changed_source_rebuild_bundle(case: RealLeanChangeCaseV1) -> RealLeanRebuildBundleV1:
+    """Plan the upstream source change before successor compatibility edits are applied.
+
+    The preflight's fixed case later materializes downstream successor edits.  This
+    bundle instead preserves the causal planning boundary: it contains only the
+    observed upstream source change and derives every downstream module that must be
+    rebuilt.  It remains refused until the real control plane binds a lease and
+    fencing token.
+    """
+
+    snapshot_hashes = {
+        module.module: (
+            case.edits_by_module[module.module].successor_source_sha256
+            if module.module == case.changed_module
+            else module.source_sha256
+        )
+        for module in case.baseline.module_topological_order()
+    }
+    bundle = plan_real_lean_rebuild(
+        case.baseline,
+        snapshot_hashes,
+        changed_declaration_ids=case.changed_declaration_ids,
+    )
+    if bundle.changed_modules != (case.changed_module,):
+        raise RealLeanChangedSourcePreflightError("changed-source rebuild bundle is inconsistent")
+    if bundle.module_rebuild_plan != case.expected_module_reverse_import_closure:
+        raise RealLeanChangedSourcePreflightError(
+            "changed-source rebuild bundle closure is inconsistent"
+        )
+    if bundle.declaration_invalidation_plan != case.expected_declaration_reverse_closure:
+        raise RealLeanChangedSourcePreflightError(
+            "changed-source rebuild bundle declaration closure is inconsistent"
+        )
+    return bundle
 
 
 def _write_regular_file(path: Path, content: bytes, *, read_only: bool) -> None:
@@ -442,6 +482,7 @@ def changed_source_preflight(
         case = load_default_real_lean_change_case()
     except RealLeanChangeCaseError as error:
         raise RealLeanChangedSourcePreflightError("changed-source case is invalid") from error
+    rebuild_bundle = changed_source_rebuild_bundle(case)
     with tempfile.TemporaryDirectory(prefix="autolean-t7-changed-source-") as raw_workspace:
         workspace = Path(raw_workspace)
         baseline = _snapshot_fixture(case.baseline, workspace / "baseline-snapshot")
@@ -602,6 +643,7 @@ def changed_source_preflight(
         "canonical_elaborated_type_changed": True,
         "curated_declaration_invalidation_plan": list(case.expected_declaration_reverse_closure),
         "module_granularity_rebuild_plan": list(case.expected_module_reverse_import_closure),
+        "changed_source_rebuild_bundle": rebuild_bundle.to_dict(),
         "incomplete_change_failure": failure_record,
         "unaffected_modules": unaffected_records,
         "affected_modules": affected_records,
@@ -639,6 +681,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     try:
         if args.command == "validate":
             case = load_default_real_lean_change_case()
+            rebuild_bundle = changed_source_rebuild_bundle(case)
             result: dict[str, object] = {
                 "schema_version": "autolean.real-lean-change-case-validation.v1",
                 "status": "passed",
@@ -652,6 +695,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 "module_granularity_rebuild_plan": list(
                     case.expected_module_reverse_import_closure
                 ),
+                "changed_source_rebuild_bundle": rebuild_bundle.to_dict(),
                 "canonical_elaborated_type_change_pending_real_query": True,
             }
             if args.json:

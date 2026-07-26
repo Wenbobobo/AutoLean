@@ -9,6 +9,7 @@ from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 from typing import BinaryIO
 
+import autolean_builder.reference_cache as reference_cache_module
 import pytest
 from autolean_builder import (
     DownloadObservation,
@@ -403,6 +404,57 @@ def test_concurrent_operator_fetch_downloads_once_and_reports_actual_observation
         hashlib.sha256(_PARENT_BYTES).hexdigest()
     }
     assert not list((tmp_path / "cache").rglob(".operator-download-*.part"))
+
+
+def test_racing_identical_cas_target_is_accepted_without_replacement(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = _cache(tmp_path)
+    target = cache.path_for(_PARENT_ID)
+    real_link = reference_cache_module.os.link
+    raced = False
+
+    def race_identical_target(source: str | Path, destination: str | Path) -> None:
+        nonlocal raced
+        raced = True
+        assert Path(destination) == target
+        target.write_bytes(_PARENT_BYTES)
+        real_link(source, destination)
+
+    monkeypatch.setattr(reference_cache_module.os, "link", race_identical_target)
+
+    result = cache.operator_fetch(_PARENT_ID)
+
+    assert raced is True
+    assert result.verified.cache_path.read_bytes() == _PARENT_BYTES
+    assert result.network_used is True
+    assert not list((tmp_path / "cache").rglob(".operator-download-*.part"))
+
+
+def test_racing_different_cas_target_is_preserved_and_partial_is_removed(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache = _cache(tmp_path)
+    bootstrap = tmp_path / "bootstrap.pdf"
+    bootstrap.write_bytes(_PARENT_BYTES)
+    target = cache.path_for(_PARENT_ID)
+    conflicting_bytes = _PARENT_BYTES[:-1] + b"!"
+    real_link = reference_cache_module.os.link
+
+    def race_conflicting_target(source: str | Path, destination: str | Path) -> None:
+        assert Path(destination) == target
+        target.write_bytes(conflicting_bytes)
+        real_link(source, destination)
+
+    monkeypatch.setattr(reference_cache_module.os, "link", race_conflicting_target)
+
+    with pytest.raises(ReferenceCacheError, match="target conflicts with verified acquisition"):
+        cache.operator_import_local(_PARENT_ID, bootstrap)
+
+    assert target.read_bytes() == conflicting_bytes
+    assert not list((tmp_path / "cache").rglob(".operator-import-*.part"))
 
 
 @pytest.mark.parametrize("forbidden", ("--manifest", "--cache-root", "--receipt"))

@@ -1,6 +1,6 @@
 # Phase 1 Progress Ledger
 
-Snapshot: 2026-07-25
+Snapshot: 2026-07-25 baseline, with a 2026-07-27 working-tree addendum below
 
 Baseline: `f8bf32915a3510a4d697bd09d4b11147078abd88` on `origin/main`, after merged PRs
 [#11](https://github.com/Wenbobobo/AutoLean/pull/11),
@@ -26,6 +26,26 @@ provider/model benchmark has run, and this baseline is not a Phase 1 release can
 This ledger records observed evidence rather than estimated completion percentages. `Verified`
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
 Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by relabeling it.
+
+## 2026-07-27 working-tree addendum
+
+This addendum records source and test surfaces present in the working tree after the historical
+baseline above.  It is deliberately **not** a replacement baseline or release record: the tree is
+not yet a clean, committed candidate, and none of these rows upgrades the Phase 1 decision from
+`no-RC`.
+
+| Surface | Current evidence | Boundary that remains |
+| --- | --- | --- |
+| ModelWork V2 | `ModelWorkBundleV2` separates non-theorem model work from statement contracts. Its typed source/rights bindings, derived identifiers and hashes, parent-admission revalidation, control-plane lease, fenced authorization, revocation, and reservation paths have focused local/adversarial coverage. | Local test HMAC and process-local approval objects are not an independently operated `MODEL_WORK_ADMISSION` authority or a lawful rights decision for external source material. |
+| Authorized ten-trial role bridge | The bridge derives ten canonical trials (two for each of five roles), completes pure suite validation before registration, binds its authenticated private run index and exact private usage, and exposes only keyed, non-addressable public commitments with no private handle. The V2 evaluator accepts strict exact JSON and recomputes trial and suite usage before issuing a role-separated, explicitly non-promotable report. | It is not a production evaluator, a role-floor score, or a source of authority to send protected source text to a provider. KMS/HSM custody and an independently managed evaluator are absent. |
+| FATE common executor | The executor distinguishes `regression-48`, `model-compare-90`, and `FATE-350`; locks source selection, excludes answers, preflights authorization before state mutation, and records deterministic attempt seeds for restart-safe projection. | No authorized model/Lean/verifier run is recorded. There is no pass@1, pass@4, cost, ranking, or theorem result. |
+| Dashboard event projection | The read-only projection now keeps FATE attempts, generic verification, and T7 module receipt events in separate identities; collisions and orphan/mismatched FATE terminals are rejected. API/UI tests and the production build are local software evidence. | Controlled-browser visual QA could not run in this session, and remote authentication/operation remains unapproved. The panel is not a promotion authority. |
+| T7 module receipt | The typed module-build contract binds the frozen specification job to its lease job, source tree, environment, process receipt, and declaration fanout; injected-runner attack coverage rejects a forged cross-job receipt. | No image-owned T6 module wrapper has executed it in OCI/Lean, and it has no gateway attestation, real-worker recovery result, or theorem-level kernel acceptance. |
+| 1,000-job synthetic chaos | The synthetic control-plane harness completed 1,000 jobs with 1,000 stale/expired-fence rejections, 4,000 duplicate-delivery replays, 5,000 contiguous/replay-consistent events, 4,000 CAS checks, and no lost job or duplicate terminal verdict. | This is control-plane resilience evidence only; it does not exercise Lean, OCI, provider egress, a production signer, physical power loss, or a real worker mid-transaction. |
+| McKay opening alignment | The Builder alignment harness verified cached parent/derived-text provenance and emitted a redacted, source-bound opening-page observation with status `textbook_alignment_discovery_nonfreeze`. It did not guess a proposition from a weak extraction. | No statement was extracted, normalized, mapped to mathlib, frozen, handed to Prover, or semantically reviewed. Source text was not sent to a model. |
+| DeepSeek official-profile canary and five-role runner | The bootstrap canary returned redacted `execution_refused/network`. The V2 five-role runner then completed credential-free `plan` and authorization-aware `preflight` for ten trials; its single permitted live attempt reached redacted `reconciliation_required/network` without a model response. Private state remained outside the checkout and public output exposed no private handle. | These are failure-path and orchestration observations, not capability, role-floor, cost, or benchmark results. They grant no promotion or source-egress authority, and no automatic retry is authorized. |
+| Authority environment availability | This session's WSL invocation returned `Wsl/Service/E_ACCESSDENIED`; it therefore cannot create a fresh Docker/Lean receipt here. | This is a session-environment block, not evidence that the operator host cannot run Docker/WSL. A retained authority-environment replay is still required. |
+| Local software gates | The development-tree non-release suite completed with 1,304 passed, 9 environment-specific skips, and 2 repository-release tests deliberately deselected. In the index-aligned staged candidate, the complete partitioned suite closed with 1,300 passed and 15 explicit cache/Linux/OCI/WSL skips, including both repository-release tests passing; the extra skips reflect local caches and images intentionally excluded from the public candidate. Ruff format/check, all configured mypy package groups, 17 Dashboard UI tests, TypeScript typecheck/build, provider policy, public readiness, release evidence, source locks, SBOM/inventory, current/history secret scans, and staged `git diff --check` passed. | Local software gates do not replace T3 semantic admission, T6/T7 authority execution, a real model result, or independent kernel acceptance. |
 
 ## Evidence classes
 
@@ -66,7 +86,7 @@ These labels are deliberately non-interchangeable:
 | Ordinary proof-dependency spike | Verified, host-side executable | The Lean 4.28 query walks proof values and ordinary declaration types/values. Four committed fixtures replayed 4/4 against the exact source-v2 image: a structurally non-alias proof passed, while an exact-type known alias, a wrapper hiding a denied theorem, and a quotient dependency were exposed and rejected by their policies. The operator-local replay record binds one candidate snapshot, one helper snapshot, four query-output hashes, and aggregate output SHA `b216956433b32b4f3473889565cfe27e415564b2d768eb21650bd1acfa221116` | The helper is host-mounted and absent from the image receipt. The spike does not report canonical type hash, declaration kind, trusted module origin, or task mode; an unknown same-type alias can still pass if allowlisted. Contracts, OCI evidence, and the signing gateway do not bind or rerun it. It is not an admission gate or `independent_reproof` evidence |
 | Target-free Library split preflight | Verified static boundary; unretained operator-local diagnostic | PR #20 creates separate staged source trees and profile-selected snapshots. Its optional source-v2 canary can mount only the selected profile view and use a host-mounted diagnostic to observe Candidate ownership, direct proof dependencies, canonical type, and axioms for independent and compositional candidates | The diagnostic JSON was not retained. No new image or content-addressed receipt, complete dependency closure, imported module-origin verification, exact-type collision gate, contract/gateway binding, or T6 result |
 | Imported-declaration module-origin API note | Design note, not replayable evidence | PR #19 documents Lean 4.28's imported-only lookup: an imported `ConstantInfo` may resolve through `getModuleIdxFor?`; a declaration in the current `Candidate` normally yields `none`, so Candidate ownership remains a separate sealed-`ModuleData` check | The early ad hoc probe was not retained and is not evidence. The note supplies no image-owned helper, module-origin observation, collision check, or admission result |
-| Dashboard | Verified, loopback | Projection/API tests, 15 UI tests, production build, controlled-browser desktop/mobile rendering, XSS/display sanitization, stable three-lane graph layout, and task/gap/verification drill-down | Remote mode remains unapproved; current JS bundle has a non-blocking 500 kB chunk warning |
+| Dashboard | Verified, local projection/UI scope | Projection/API tests, UI tests, production build, display sanitization, stable three-lane graph layout, and task/gap/verification drill-down are implemented. The current event model keeps FATE, generic verification, and T7 receipt identities distinct. | Controlled-browser desktop/mobile QA was unavailable in the current session; remote mode remains unapproved and the panel is never a promotion authority. |
 | Independent Library workspace | Verified, local diagnostic | Pinned Lean 4.28.0 and mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; WSL/ext4 build of public root plus the three-node DAG fixture passed in 11.3 s | A local Lake build is not a Builder freeze, semantic review, OCI verification, or promotion |
 | Target-free Library substrate | Operator-local image preflight verified | The exact source-v2 child build completed offline at Docker RepoDigest `autolean/library-substrate@sha256:bc336196592536658395ff0867f3008fc256dc6a3fd9098f414e118f18d5d1ef`, with raw receipt SHA-256 `f98010e0c4efb3a43a06bb7782507aa74e799e10822c0cecba890a858e8590df`. Its dedicated runtime tree contains three target-free Library `.olean` files, a receipt-bound inventory of 77 typed declarations and 22 separately validated IR auxiliaries, an image-owned sealed-Candidate query, and a narrow facade accepting the existing V2 argv/result shape. The independent/facade canaries preserve the historical target type/axioms, reject direct `Deriv.sound`, replay both inventories, establish Candidate/runtime kernel-plus-IR name disjointness, and recompute staged-source and final-OLean hash/size facts against receipt-bound checksum manifests. Facade negatives bind source hash, exact phase, return code, and reason: the two forbidden target-module imports fail compilation, while a wrong-type replacement compiles and is rejected by the rich sealed query | Local V2-compatible preflight only: no registry publication, production signer, frozen contract/environment revision, formal-asset admission, provider run, V2 OCI evidence, gateway receipt, or T6 result exists. The facade does not change contracts, control plane, or gateway. The query's Lean source is embedded in its hashed wrapper; only the three Library runtime source files are absent from the dedicated final substrate tree. Receipt replay is not a claim that separate Docker builds have identical image metadata or RepoDigest |
 | Builder self-calibration and pilot selection | T3 gap, `not_selected`; review tooling merged | The pinned Library packet includes the kernel-checked `UniversalLK` micro-slice for the classical two-sided `⊥`, `→`, and `∀` fragment: level-indexed formulas, capture-avoiding instantiation, eigenvariable-safe universal rules, local/global soundness, the level-zero sentence bridge, and retained Bool rejection controls. The immutable public-safe V2 decision records the gap; a digest-only attachment covers all nine fine-anchor requirements with ten machine-located spans, and a separate exact-image attachment binds the source-v2 query artifact, all 46 declaration types/axiom sets, and the 2,744-module closure without changing that decision. PR #13 adds a byte-bound, versioned human-review packet and reproducible page-rendering workflow for the two ambiguous page pairs | No independent reviewer response has been accepted. Every fine span remains `machine_located_pending_review`; generating or visually opening the packet is not semantic review. The source-v2 observation still conflicts with the old decision's image/import/strict empty-axiom profile and requires an explicit successor profile plus authenticated admission authority. The fragment has no existential constructors or sequent-level structural rules; it is not frozen or handed to Prover |
@@ -105,6 +125,22 @@ permits an RC.
 | Lean module-origin API note, PR #19 | Merged | Imported-only API design boundary. Current-`Candidate` `none` is expected and Candidate ownership is separately sealed-module based; the unretained early probe cannot support a claim |
 | Target-free Library split preflight, PR #20 | Merged | Profile-bound staged split and unretained host-mounted direct-dependency/type/axiom diagnostic only. No image or content-addressed receipt, full closure, module-origin/collision gate, contract/gateway run, or T6 result |
 
+## 2026-07-26 execution batch
+
+This is post-baseline working-tree evidence. It records implemented local increments and their
+validation boundary; it does not revise the historical baseline or imply a Phase 1 release
+candidate.
+
+| Work item | Current result | Boundary still open |
+| --- | --- | --- |
+| `calibration-pairs-v3` role preset | Implemented as a five-role, oracle/mutant fake-provider preset. It tests role separation and evaluator wiring without secrets. | No external model or cross-model comparison has run; a fake result is not a model capability claim. |
+| T3 local review check | Implemented as a fail-closed local check. Its only non-error disposition is the existing `gap/not_selected/not_frozen` state. | It cannot decide source fidelity, resolve the two pending locator ambiguities, or substitute for independently attributable semantic review and admission authority. |
+| T6 Builder-only statement query | The query route, negative tests, and static checks are implemented. It is explicitly `proof_eligible=false`, so it cannot become a proof submission or acceptance path. | The current Codex sandbox cannot invoke the required OCI/Lean build and gateway replay; operator-host availability is not retained execution evidence. T6 is not complete until an admitted frozen contract is exercised through that exact environment and verification boundary. |
+| T7 changed-source rebuild and module-receipt contract | The reviewed witness now seals every source byte in CAS and recomputes the plan and execution graph. A typed module spec binds the complete transitive source tree, direct-import receipts/OLean, toolchain/lake/image/config/platform/policy/query identities, then atomically commits one process receipt plus complete deterministic declaration fanout under a lease fence. Same-source reuse requires an earlier durable successful module receipt. The focused injected-runner/preflight suite is non-promotable. | No module ran in OCI through this new contract. T6 does not yet contain a receipt-bound T7 module build/query wrapper; the operator preflight therefore reports `module_execution_enabled=false`. Trusted gateway attestation, crash/restart with a real worker, clean integration, and theorem-level kernel acceptance remain open. Module success and fanout are explicitly ineligible for kernel acceptance. |
+| Phase 2 pilot lanes | PDE and metric-geometry lane cards are available for public-metadata `discovery`, with node sketches, stop conditions, and conversion hazards. | They are not selected production pilots and do not authorize textbook ingestion, model egress, statement freezing, or Prover handoff. |
+| Repository visibility | A public repository can distribute the code and documentation. | Visibility is not release readiness and cannot waive secret/history, remote-CI, semantic-fidelity, authoritative Lean/OCI, or promotion gates. |
+| External-model access | The operator has supplied an experimental DeepSeek credential through an ignored local secret file. A credential-free profile and a non-promotable, authorization-complete bootstrap canary are implemented. | Network access from the current task remains blocked, so no live canary has succeeded. The static declaration is not an independent capability probe, and the canary is forbidden from role-floor admission or production promotion. |
+
 ## Current gated route
 
 | Gate | State | What remains before the gate can close |
@@ -113,10 +149,10 @@ permits an RC.
 | Pilot self-calibration | T3 gap, blocked | V2 records `gap/not_selected` and remains unchanged. Complete local review of the ten machine-located spans, resolve the Section 7.5 and universal-right (`∀R`) locator ambiguity, decide a successor formal profile consistent with the exact image/import/axiom observation, and close semantic-review and admission-authority checks. The two audited backups are not selected, so a different backup requires its own audit |
 | Pinned Library selection spike | Partial passed with gap | The universal fragment is kernel-checked, but local replay does not select it or establish source fidelity |
 | First calibrated contract slice (T5) | Blocked by T3 | A different backup may be audited, but no statement may freeze until one boundary is admitted with rights and review readiness |
-| Target-free substrate and dependency gate (T6) | Image-owned preflight verified; blocked by T5 and integration | The focused child image now binds its parent/build/runtime receipts, complete typed and IR-owned declaration inventories, imported origins, collision checks, sealed Candidate ownership, and independent ordinary-dependency observation. Its direct V2-compatible facade is preflight evidence only. T6 still needs an admitted immutable contract/environment revision, signing-gateway replay, adversarial integration rejections, and an accepted frozen-to-verified result |
-| Real project-scale loop (T7) | Input preflight only | The synthetic scheduling fixture and real Lean content fixture are both retained, but acceptance still needs changed-source rebuild, lease/bundle flow, clean integration, and per-node verification evidence |
+| Target-free substrate and dependency gate (T6) | Builder-only query implemented locally; blocked by T5 and real integration | The focused route is `proof_eligible=false` and its local negative/static coverage does not create proof evidence. T6 still needs an admitted immutable contract/environment revision, real OCI/Lean execution, signing-gateway replay, adversarial integration rejections, and an accepted frozen-to-verified result |
+| Real project-scale loop (T7) | Immutable source/witness/environment input, a typed module process receipt, durable same-source reuse, and atomic declaration fanout are implemented and tested with an injected fake runner; real execution is not admitted | The contract rejects fake/operator-local evidence at the kernel-acceptance boundary. It still needs an image-owned T6 module build/query wrapper, operator-local OCI replay, trusted gateway attestation, real-worker recovery, clean integration, and theorem-level kernel verification |
 | Authoritative Prover path | Partially verified | One unchanged source-backed synthetic bundle passed the full local pure-Lean path through real OCI, an independent gateway rerun, and terminal acceptance. Preserve that contract while extending the same path to the exact mathlib profile and closing production-authority and full adversarial-suite gaps |
-| Controlled model/benchmark evaluation | Blocked before egress | External execution authorization and production evaluators must exist before requesting an API secret. Once ready, fixed suites and ablations remain secondary diagnostics; no FATE result closes a Builder or Library gate |
+| Controlled model/benchmark evaluation | Authorized bootstrap and ten-trial role paths are implemented; one DeepSeek canary reached only a redacted network refusal | A network refusal is not a model result. Independent capability evidence, production admission/evaluator custody, a retained successful provider run, and the frozen role protocol are still required; the bootstrap canary cannot enter role-floor results, and no FATE result closes a Builder or Library gate |
 | Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
 
 ## Operator help required
@@ -182,25 +218,26 @@ weakens a theorem.
 ## Immediate execution order
 
 1. Treat the replayable T3 V2 decision as a blocking `gap/not_selected` record. Resolve its named
-   evidence gaps locally. The two audited backups are not selected; a different backup would need
-   a new read-only audit before any selection work.
+   evidence gaps locally: decide the pending spans and locator ambiguities, then obtain an
+   independently attributable semantic/admission decision. The two audited backups are not
+   selected; a different backup would need a new read-only audit before any selection work.
 2. Keep T5 blocked until one boundary is admitted. Further backup source/rule auditing may
    proceed, but no statement freeze or Prover bundle may be issued.
-3. Preserve the completed source-backed pure-Lean vertical evidence and the exact source-v2 T4
-   query attachment. PR #20's target-free split is a profile/snapshot and host-mounted diagnostic,
-   while PR #19 is only an imported-origin API design note; neither changes the immutable V2
-   decision. Build a new image-owned helper that binds canonical type, declaration kind, imported
-   module origin, full closure, collision checks, task mode, contract evidence, and gateway replay.
-   After T3 and T5 permit a frozen contract, rerun the unchanged bundle and rejected controls
-   against the new substrate digest.
-4. Keep the real Lean T7 fixture separate from the synthetic DAG: use it next for changed-source
-   rebuild, bundle/lease flow, clean integration, and per-node verification rather than relabeling
-   its source-v2 clean build as T7 acceptance.
-5. Implement external execution authorization and production role evaluators. Request an
-   operator-owned API secret reference only after those gates and the relevant source-egress
-   policy are ready; no API is requested now.
-6. After selection and rights/domain readiness, begin expert-reviewed source-to-contract
-   calibration; feed only frozen bundles to Prover.
+3. Run the T6 Builder-only query inside the real OCI/Lean environment, bind it to the signing
+   gateway, and replay the rejected controls. Keep it `proof_eligible=false`; after T3/T5 permit
+   a frozen contract, rerun the unchanged bundle against the exact substrate digest.
+4. Add the locked T7 module build/query wrapper to the T6 image receipt, then run the existing
+   immutable module request through operator-local OCI and record the non-promotable receipt and
+   atomic fanout. Only after that replay succeeds, add a separate trusted-gateway verifier path,
+   real-worker crash/restart coverage, clean integration, and theorem-level kernel acceptance.
+   Never reinterpret module success as per-declaration acceptance.
+5. Keep the authorized DeepSeek bootstrap canary non-promotable. Add independent capability
+   evidence and production role evaluators before the first real, role-separated comparison under
+   the frozen benchmark protocol. Use the operator-supplied secret only by reference and only when
+   the source-egress policy permits the exact request.
+6. Continue Phase 2 public-metadata discovery for the PDE and metric-geometry lanes without
+   production ingestion. After selection and rights/domain readiness, begin expert-reviewed
+   source-to-contract calibration; feed only frozen bundles to Prover.
 7. Run fixed regression/comparison work as controlled secondary diagnostics, then deploy
    Builder/verifier authorities behind authenticated service boundaries before any result is
    called promotable.

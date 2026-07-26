@@ -47,6 +47,16 @@ The companion BuilderStatementObservationEvidence record standardizes the select
 canonical-type observation for Builder/Prover audits, but it is deliberately marked non-proof and
 ineligible for ProofSubmissionV1.
 
+The textbook-alignment discovery writer is intentionally narrower than a general artifact store.
+It accepts only the repository root, requires a real `.git` marker and an active root
+`/.cache/` ignore rule, and requires `.cache` plus each output parent to exist as real confined
+directories before the run. It records directory identities around each write, treats identical
+existing bytes as an idempotent replay, and refuses a different-content conflict without
+overwriting either output. This protects against accidental publication and path substitution; it
+is not an isolation boundary against a malicious process running as the same local user.
+Production private packets belong on a separate operator-owned volume with access control and
+retention policy outside this discovery harness.
+
 Raw freeze and bridge primitives are no longer exported by `autolean_builder`; the supported
 source-backed handoff is `SourceToStatementHarness.revalidate_freeze_and_bridge`. Python module
 privacy and a writable local SQLite file are not authentication boundaries. A separate Builder
@@ -71,6 +81,18 @@ metadata, role reports, blockers, and the pinned Library lock. Self-reported rol
 and SHA-256 checksums are explicitly untrusted until a future external identity/run verifier
 accepts them. They cannot issue a pilot-admission receipt, freeze a Builder contract, authorize
 model egress, hand off work to Prover, or promote a Library asset.
+
+The [`project-synthetic pre-calibration fixture`](pilots/local-calibration/README.md) is an even
+earlier, deliberately non-authoritative Phase-2 preparation surface. Its ten PDE-A and MG-A
+fixtures were generated for this repository and bind exact source spans to the root Apache-2.0
+license and an adjacent corpus/renderer hash manifest. Human content review remains pending; no
+human authorship or legal-review claim is made. Each `pre_calibration_fixture` record contains
+normalization sketches, unparsed illustrative Lean-like text, reverse renderings, examples, and
+declared synthetic mutation fixtures. It neither binds normalized mathematics to Lean nor claims
+that a semantic checker executed. Real candidates are reserved for `StatementFidelityHarness`.
+The fixture permits redistribution only of its exact bound bytes, denies model egress, and sets
+production ingestion, rights clearance, promotion, freeze, and Prover handoff to `false`. It does
+not satisfy the roadmap's rights-cleared `local_calibration` state.
 
 When a round records a `partial_passed_with_gap` Library preselection spike, it references the
 tracked public-safe packet and compile receipt by repository-relative path and content digest.

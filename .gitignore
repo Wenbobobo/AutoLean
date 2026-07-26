@@ -15,7 +15,8 @@ build/
 *.db-wal
 .artifacts/
 .worktrees/
-.cache/
+/.cache/
+/.codex-tmp/
 .agents/
 .quarantine/
 .tmp-*
@@ -31,3 +32,4 @@ raw-artifact-manifest.json
 .env
 *.env
 !.env.example
+/llm.txt

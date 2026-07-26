@@ -1,0 +1,2008 @@
+{
+  "schema_version": "autolean.builder-local-calibration-fixture-corpus.v1",
+  "record_kind": "local_calibration_fixture",
+  "corpus_id": "project-synthetic-opening-pre-calibration",
+  "provenance_class": "project_synthetic_fixture",
+  "authorship_claim": "generated_for_repository_pending_human_content_review",
+  "human_content_review_completed": false,
+  "legal_review_claimed": false,
+  "repository_license_binding": {
+    "schema_version": "autolean.project-synthetic-fixture-license-binding.v1",
+    "provenance_class": "project_synthetic_fixture",
+    "authorship_claim": "generated_for_repository_pending_human_content_review",
+    "repository_license_expression": "Apache-2.0",
+    "repository_license_path": "LICENSE",
+    "repository_license_sha256": "5c9817c129b98e7bb966bca028c43c19107102ef8e03fe799bffb4354f4ef015",
+    "human_content_review_completed": false,
+    "legal_review_claimed": false
+  },
+  "production_rights_cleared": false,
+  "promotion_allowed": false,
+  "samples": [
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "pde-a-transport-sign",
+      "domain": "pde-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "For a sufficiently differentiable profile u0 and constant c, define u(t, x) = u0(x - c t). This defined function satisfies u_t + c u_x = 0 and u(0, x) = u0(x).",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:d7b1de0b-291a-56a7-90bd-dc4cef757734"
+        },
+        "work_id": "pde-a-transport-sign",
+        "title": "AutoLean project-synthetic pre-calibration fixture: pde-a-transport-sign",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/pde-a-transport-sign",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "768a56e1957e9e495e42895ed29d28aa36d299309c7552fe799c4719a2475425"
+        },
+        "snapshot_ref": "project-synthetic-fixture:pde-a-transport-sign:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:7e7db134-235c-5e2d-b766-f79987c68ece"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/pde-a-transport-sign#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "768a56e1957e9e495e42895ed29d28aa36d299309c7552fe799c4719a2475425"
+            },
+            "start_offset": 0,
+            "end_offset": 159,
+            "permitted_excerpt": "For a sufficiently differentiable profile u0 and constant c, define u(t, x) = u0(x - c t). This defined function satisfies u_t + c u_x = 0 and u(0, x) = u0(x)."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:12ea6e05-6848-577f-b4f2-55a7c35cb83c"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:d7b1de0b-291a-56a7-90bd-dc4cef757734"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:768a56e1957e9e495e42895ed29d28aa36d299309c7552fe799c4719a2475425",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every sufficiently differentiable u0 and constant c, define u(t, x) = u0(x - c t); conclude u_t + c u_x = 0 and u(0, x) = u0(x).",
+        "quantifiers": [
+          "for every sufficiently differentiable u0 and constant c"
+        ],
+        "assumptions": [
+          "u0 is sufficiently differentiable",
+          "u(t, x) = u0(x - c t)"
+        ],
+        "conclusion": "u_t + c u_x = 0 and u(0, x) = u0(x)",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:db65070f-9f4e-50e1-b98e-63409f602ddb"
+          },
+          "description": "The displayed PDE fixes the sign convention used in this sample.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "pde-a-transport-sign-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem pde_a_transport_sign (u0 : \u211d \u2192 \u211d) (c : \u211d) (h : Differentiable \u211d u0) : SatisfiesTransportEquation (fun t x => u0 (x - c * t)) c \u2227 HasInitialData (fun t x => u0 (x - c * t)) u0 := by exact transportProfile_satisfies u0 c h",
+          "reverse_rendering": "For the explicitly defined profile, the chain rule yields the stated PDE and substitution at t = 0 yields the initial data; no uniqueness claim is made.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "pde-a-transport-sign-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (u0 : \u211d \u2192 \u211d) (c : \u211d) (h : Differentiable \u211d u0) : TransportProfileSatisfies u0 c := by exact transportProfile_satisfies' u0 c h",
+          "reverse_rendering": "For the explicitly defined profile, the chain rule yields the stated PDE and substitution at t = 0 yields the initial data; no uniqueness claim is made.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "pde-a-transport-sign-positive",
+          "description": "For u0(x) = x^2, direct differentiation of u0(x - c t) cancels u_t with c u_x.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "pde-a-transport-sign-negative",
+          "description": "Replacing x - c t by x + c t changes transport direction.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "sign_flip",
+          "baseline_fragment": "u(t, x) = u0(x - c t)",
+          "mutated_fragment": "u(t, x) = u0(x + c t)",
+          "blocker_code": "TRANSPORT_SIGN_FLIP",
+          "blocker_reason": "Changing minus to plus reverses transport direction for the stated PDE.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:ce2084c9-c39b-59eb-b620-1841d5ba717e"
+            },
+            "kind": "reverse_parameters",
+            "target_path": "normalized_statement",
+            "expected_failure": "Changing minus to plus reverses transport direction for the stated PDE.",
+            "mutated_statement_source": "u(t, x) = u0(x + c t); this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "pde-a-initial-trace",
+      "domain": "pde-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "A weak heat-flow solution has an L2 initial trace when u(t) converges to u0 in L2 as t decreases to zero.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:015903ed-37a8-5182-a6c4-2296ee3a7f79"
+        },
+        "work_id": "pde-a-initial-trace",
+        "title": "AutoLean project-synthetic pre-calibration fixture: pde-a-initial-trace",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/pde-a-initial-trace",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "834351ac1d38d71a62505045a92522fdab1828221310790dfc96b69399c9d752"
+        },
+        "snapshot_ref": "project-synthetic-fixture:pde-a-initial-trace:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:16d65a51-d0b0-516a-90af-d562041474c6"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/pde-a-initial-trace#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "834351ac1d38d71a62505045a92522fdab1828221310790dfc96b69399c9d752"
+            },
+            "start_offset": 0,
+            "end_offset": 105,
+            "permitted_excerpt": "A weak heat-flow solution has an L2 initial trace when u(t) converges to u0 in L2 as t decreases to zero."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:75a153db-a577-5768-b4fc-7b39c56f94f2"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:015903ed-37a8-5182-a6c4-2296ee3a7f79"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:834351ac1d38d71a62505045a92522fdab1828221310790dfc96b69399c9d752",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every weak heat-flow solution u and datum u0, assuming u belongs to C([0, T]; L2) and u(0) = u0, conclude lim_{t \u2193 0} ||u(t) - u0||_L2 = 0.",
+        "quantifiers": [
+          "for every weak heat-flow solution u and datum u0"
+        ],
+        "assumptions": [
+          "u belongs to C([0, T]; L2)",
+          "u(0) = u0"
+        ],
+        "conclusion": "lim_{t \u2193 0} ||u(t) - u0||_L2 = 0",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:611604dc-78e7-57ca-82e5-84d5bf8d53e1"
+          },
+          "description": "L2 names the norm topology used for the trace.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "pde-a-initial-trace-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem pde_a_initial_trace (u : \u211d \u2192 L2Space) (u0 : L2Space) : HasL2InitialTrace u u0 := by exact weakHeatFlow_initialTrace u u0",
+          "reverse_rendering": "The trace uses the L2 norm topology, not pointwise convergence.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "pde-a-initial-trace-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (u : \u211d \u2192 L2Space) (u0 : L2Space) : HasL2InitialTrace u u0 \u2192 limAtZeroL2 u = u0 := by exact initialTrace_limit",
+          "reverse_rendering": "The trace uses the L2 norm topology, not pointwise convergence.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "pde-a-initial-trace-positive",
+          "description": "A continuous L2 curve with u(0) = u0 has the stated L2 trace.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "pde-a-initial-trace-negative",
+          "description": "Pointwise convergence is stronger and is not supplied by an L2 trace.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "drop_regularity",
+          "baseline_fragment": "lim_{t \u2193 0} ||u(t) - u0||_L2 = 0",
+          "mutated_fragment": "for every x, lim_{t \u2193 0} u(t, x) = u0(x)",
+          "blocker_code": "TRACE_TO_POINTWISE",
+          "blocker_reason": "An L2 trace does not entail pointwise convergence without extra regularity.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:fc044d59-f263-5682-9d6c-3f145cbdf4d7"
+            },
+            "kind": "remove_side_condition",
+            "target_path": "normalized_statement",
+            "expected_failure": "An L2 trace does not entail pointwise convergence without extra regularity.",
+            "mutated_statement_source": "for every x, lim_{t \u2193 0} u(t, x) = u0(x); this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "pde-a-parabolic-regularity",
+      "domain": "pde-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "A bounded weak heat solution is smooth in the open positive-time interior, not automatically at the initial trace.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:4f9d6411-a8d6-5744-81bc-c63358e3b4ae"
+        },
+        "work_id": "pde-a-parabolic-regularity",
+        "title": "AutoLean project-synthetic pre-calibration fixture: pde-a-parabolic-regularity",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/pde-a-parabolic-regularity",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "f65c411ed8afd8d55045991327cd1f76a44e908eab417cb745f36283ee8522c9"
+        },
+        "snapshot_ref": "project-synthetic-fixture:pde-a-parabolic-regularity:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:18b64587-c48e-55fa-b6e0-2d9606782d22"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/pde-a-parabolic-regularity#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "f65c411ed8afd8d55045991327cd1f76a44e908eab417cb745f36283ee8522c9"
+            },
+            "start_offset": 0,
+            "end_offset": 114,
+            "permitted_excerpt": "A bounded weak heat solution is smooth in the open positive-time interior, not automatically at the initial trace."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:45e19922-66c8-5b90-a14c-1bb62da4450b"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:4f9d6411-a8d6-5744-81bc-c63358e3b4ae"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:f65c411ed8afd8d55045991327cd1f76a44e908eab417cb745f36283ee8522c9",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every u, assuming u is a bounded weak solution of u_t - \u0394u = 0 on (0, T) \u00d7 \u03a9, conclude u is smooth on every compact subset of (0, T) \u00d7 \u03a9.",
+        "quantifiers": [
+          "for every u"
+        ],
+        "assumptions": [
+          "u is bounded",
+          "u is a weak solution of u_t - \u0394u = 0 on (0, T) \u00d7 \u03a9"
+        ],
+        "conclusion": "u is smooth on every compact subset of (0, T) \u00d7 \u03a9",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:f863f73f-3d20-5b6e-b3ee-ad999cfc84c4"
+          },
+          "description": "A compact positive-time subset stays a positive distance from t = 0.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "pde-a-parabolic-regularity-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem pde_a_parabolic_regularity (u : \u211d \u2192 \u03a9Type \u2192 \u211d) : BoundedWeakHeatSolution u \u2192 SmoothOnPositiveTimeInterior u := by exact heat_interior_smooth",
+          "reverse_rendering": "The conclusion is interior regularity and excludes t = 0.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "pde-a-parabolic-regularity-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (u : \u211d \u2192 \u03a9Type \u2192 \u211d) : BoundedWeakHeatSolution u \u2192 \u2200 K, CompactSubsetPositiveTime K \u2192 SmoothOn u K := by exact heat_compact_interior_smooth",
+          "reverse_rendering": "The conclusion is interior regularity and excludes t = 0.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "pde-a-parabolic-regularity-positive",
+          "description": "Rough initial data can become smooth for every positive time.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "pde-a-parabolic-regularity-negative",
+          "description": "Dropping weak-solution regularity leaves the smoothness claim unsupported.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "drop_regularity",
+          "baseline_fragment": "u is a bounded weak solution of u_t - \u0394u = 0 on (0, T) \u00d7 \u03a9",
+          "mutated_fragment": "u is a solution of u_t - \u0394u = 0",
+          "blocker_code": "DROP_WEAK_REGULARITY",
+          "blocker_reason": "The stated regularity conclusion needs the recorded weak-solution and boundedness hypotheses.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:3435a7a8-5f49-55a6-8241-b709e0bdba82"
+            },
+            "kind": "drop_assumption",
+            "target_path": "normalized_statement",
+            "expected_failure": "The stated regularity conclusion needs the recorded weak-solution and boundedness hypotheses.",
+            "mutated_statement_source": "u is a solution of u_t - \u0394u = 0; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "pde-a-weak-uniqueness",
+      "domain": "pde-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "Within a specified weak-solution class, a heat-flow problem has at most one solution; this does not assert existence.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:43d43392-379c-5503-a116-b05446901a87"
+        },
+        "work_id": "pde-a-weak-uniqueness",
+        "title": "AutoLean project-synthetic pre-calibration fixture: pde-a-weak-uniqueness",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/pde-a-weak-uniqueness",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "c06da39597645ee1f7d5436e99c8297fc151a44ff184463b8a0c5cf19365efc4"
+        },
+        "snapshot_ref": "project-synthetic-fixture:pde-a-weak-uniqueness:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:17f6b25d-2afb-52a7-ba69-702178c3e9d1"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/pde-a-weak-uniqueness#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "c06da39597645ee1f7d5436e99c8297fc151a44ff184463b8a0c5cf19365efc4"
+            },
+            "start_offset": 0,
+            "end_offset": 117,
+            "permitted_excerpt": "Within a specified weak-solution class, a heat-flow problem has at most one solution; this does not assert existence."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:860c4dc4-08fb-5342-9c34-0928d0c09325"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:43d43392-379c-5503-a116-b05446901a87"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:c06da39597645ee1f7d5436e99c8297fc151a44ff184463b8a0c5cf19365efc4",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every u and v, assuming u and v lie in the stated energy class, have the same initial trace, and solve the same heat equation, conclude u = v.",
+        "quantifiers": [
+          "for every u and v"
+        ],
+        "assumptions": [
+          "u and v lie in the stated energy class",
+          "u and v have the same initial trace",
+          "u and v solve the same heat equation"
+        ],
+        "conclusion": "u = v",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:ada7171c-797c-57ce-a36c-ad888dcf4edd"
+          },
+          "description": "The energy class belongs to uniqueness rather than an existence assertion.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "pde-a-weak-uniqueness-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem pde_a_weak_uniqueness (u v : WeakHeatSolution) : SameData u v \u2192 u = v := by exact weakHeat_unique",
+          "reverse_rendering": "At-most-one means any two already-given admissible solutions are equal.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "pde-a-weak-uniqueness-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (u v : WeakHeatSolution) : SameData u v \u2192 u = v := by exact weakHeat_unique",
+          "reverse_rendering": "At-most-one means any two already-given admissible solutions are equal.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "pde-a-weak-uniqueness-positive",
+          "description": "Two supplied admissible solutions with the same data coincide.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "pde-a-weak-uniqueness-negative",
+          "description": "An empty class makes at-most-one vacuous and cannot yield existence.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "uniqueness_to_existence",
+          "baseline_fragment": "For every u and v",
+          "mutated_fragment": "For every datum there exists a unique u",
+          "blocker_code": "UNIQUENESS_TO_EXISTENCE",
+          "blocker_reason": "At-most-one uniqueness permits an empty solution class and cannot supply existence.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:090195e5-4669-501e-9e3b-1742e6417150"
+            },
+            "kind": "vacuity",
+            "target_path": "normalized_statement",
+            "expected_failure": "At-most-one uniqueness permits an empty solution class and cannot supply existence.",
+            "mutated_statement_source": "For every datum there exists a unique u; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "pde-a-local-existence",
+      "domain": "pde-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "For sufficiently regular initial data, a semilinear evolution has a solution on [0, T] for a strictly positive T.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:59a1eec2-8283-547c-9932-5c22c42bed8e"
+        },
+        "work_id": "pde-a-local-existence",
+        "title": "AutoLean project-synthetic pre-calibration fixture: pde-a-local-existence",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/pde-a-local-existence",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "8d879c605f65cd2012349f583ed23c920fdd13e5d69e71176056cd2af1d36258"
+        },
+        "snapshot_ref": "project-synthetic-fixture:pde-a-local-existence:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:d0b1d066-9a18-5c68-9b95-1746fb6a763a"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/pde-a-local-existence#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "8d879c605f65cd2012349f583ed23c920fdd13e5d69e71176056cd2af1d36258"
+            },
+            "start_offset": 0,
+            "end_offset": 113,
+            "permitted_excerpt": "For sufficiently regular initial data, a semilinear evolution has a solution on [0, T] for a strictly positive T."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:1cef4bee-d915-5e38-a5d7-35c17a76a606"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:59a1eec2-8283-547c-9932-5c22c42bed8e"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:8d879c605f65cd2012349f583ed23c920fdd13e5d69e71176056cd2af1d36258",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every admissible datum u0, assuming u0 has the stated regularity, there exists T > 0 and a solution u on [0, T] with u(0) = u0.",
+        "quantifiers": [
+          "for every admissible datum u0",
+          "there exists T > 0 and a solution u"
+        ],
+        "assumptions": [
+          "u0 has the stated regularity"
+        ],
+        "conclusion": "u is a solution on [0, T] and u(0) = u0",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:50b55795-40b7-5b03-a2ca-b16e12d42b23"
+          },
+          "description": "The exact regularity class is represented by the named admissibility predicate.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "pde-a-local-existence-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem pde_a_local_existence (u0 : DataSpace) : AdmissibleData u0 \u2192 \u2203 T : \u211d, T > 0 \u2227 LocalSolution u0 T := by exact semilinear_local_exists",
+          "reverse_rendering": "A zero-length interval is not local existence.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "pde-a-local-existence-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (u0 : DataSpace) : AdmissibleData u0 \u2192 \u2203 T, 0 < T \u2227 LocalSolution u0 T := by exact semilinear_local_exists",
+          "reverse_rendering": "A zero-length interval is not local existence.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "pde-a-local-existence-positive",
+          "description": "A regular datum has a nontrivial positive-time solution interval.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "pde-a-local-existence-negative",
+          "description": "T = 0 permits a degenerate interval and weakens the assertion.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "strict_to_nonstrict",
+          "baseline_fragment": "there exists T > 0 and a solution u",
+          "mutated_fragment": "there exists T \u2265 0 and a solution u",
+          "blocker_code": "POSITIVE_LIFESPAN_WEAKENED",
+          "blocker_reason": "Non-strict positivity admits a zero-time interval rather than local existence.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:2a8d58ef-c423-5506-9bc4-5aa5101be7f4"
+            },
+            "kind": "weaken_relation",
+            "target_path": "normalized_statement",
+            "expected_failure": "Non-strict positivity admits a zero-time interval rather than local existence.",
+            "mutated_statement_source": "there exists T \u2265 0 and a solution u; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-infimum-attainment",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "A nonempty real set bounded below has an infimum; the statement does not assert that a member attains it.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:adf11875-68d4-5216-8437-10f5f952cce3"
+        },
+        "work_id": "mg-a-infimum-attainment",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-infimum-attainment",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-infimum-attainment",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "06d295f3bbbd4cea32117783d5ce940fcdf81c3acbb09e95d88c5f1fbfb66594"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-infimum-attainment:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:7b8d5877-22a3-5e85-908d-d7efde5ef90d"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-infimum-attainment#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "06d295f3bbbd4cea32117783d5ce940fcdf81c3acbb09e95d88c5f1fbfb66594"
+            },
+            "start_offset": 0,
+            "end_offset": 105,
+            "permitted_excerpt": "A nonempty real set bounded below has an infimum; the statement does not assert that a member attains it."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:a9dbda7f-6300-55fa-b490-d7595b48bf0e"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:adf11875-68d4-5216-8437-10f5f952cce3"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:06d295f3bbbd4cea32117783d5ce940fcdf81c3acbb09e95d88c5f1fbfb66594",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every nonempty set S of real numbers, assuming S is bounded below, conclude inf S is a lower bound and every lower bound is at most inf S.",
+        "quantifiers": [
+          "for every nonempty set S of real numbers"
+        ],
+        "assumptions": [
+          "S is bounded below"
+        ],
+        "conclusion": "inf S is a lower bound and every lower bound is at most inf S",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:18430d3f-a2e6-5ab0-8f3c-755b20b0b80b"
+          },
+          "description": "This local sample uses real infimum and does not add compactness.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-infimum-attainment-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_infimum_attainment (S : Set \u211d) : S.Nonempty \u2192 BddBelow S \u2192 IsGreatest (lowerBounds S) (sInf S) := by exact real_sInf_spec",
+          "reverse_rendering": "The lower-bound specification of an infimum is distinct from its membership in S.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-infimum-attainment-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (S : Set \u211d) : S.Nonempty \u2192 BddBelow S \u2192 \u2200 a \u2208 lowerBounds S, a \u2264 sInf S := by exact lowerBound_le_sInf",
+          "reverse_rendering": "The lower-bound specification of an infimum is distinct from its membership in S.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-infimum-attainment-positive",
+          "description": "For S = {x | x > 0}, inf S is 0.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-infimum-attainment-negative",
+          "description": "For that same S, 0 is not a member, so the infimum is not attained.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "infimum_to_attainment",
+          "baseline_fragment": "inf S is a lower bound and every lower bound is at most inf S",
+          "mutated_fragment": "there exists s \u2208 S with s = inf S",
+          "blocker_code": "INFIMUM_TO_ATTAINMENT",
+          "blocker_reason": "An infimum need not be attained; the open positive ray is a counterexample.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:f25d7790-ca25-545b-90e2-9b6aa8c9eaa5"
+            },
+            "kind": "totalization_trap",
+            "target_path": "normalized_statement",
+            "expected_failure": "An infimum need not be attained; the open positive ray is a counterexample.",
+            "mutated_statement_source": "there exists s \u2208 S with s = inf S; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-length-geodesic",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "The equality d(x, y) = inf length(\u03b3) in a length space does not itself produce a minimizing geodesic.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:ffd20273-f309-5c0d-a45c-dc71100d0276"
+        },
+        "work_id": "mg-a-length-geodesic",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-length-geodesic",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-length-geodesic",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "78c36cbce232d4d3415965f0d3c31fc6a783b918a28827a0486e878caba46b98"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-length-geodesic:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:ebc38ac5-098e-5dad-9bdc-c939394184a4"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-length-geodesic#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "78c36cbce232d4d3415965f0d3c31fc6a783b918a28827a0486e878caba46b98"
+            },
+            "start_offset": 0,
+            "end_offset": 102,
+            "permitted_excerpt": "The equality d(x, y) = inf length(\u03b3) in a length space does not itself produce a minimizing geodesic."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:79af4b26-6412-518d-aeec-13506dfc840a"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:ffd20273-f309-5c0d-a45c-dc71100d0276"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:78c36cbce232d4d3415965f0d3c31fc6a783b918a28827a0486e878caba46b98",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every x and y in a length space, conclude d(x, y) is the infimum of lengths of admissible curves from x to y.",
+        "quantifiers": [
+          "for every x and y in a length space"
+        ],
+        "assumptions": [
+          "the space is a length space"
+        ],
+        "conclusion": "d(x, y) is the infimum of lengths of admissible curves from x to y",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:69efc413-eb1f-5836-8e1f-2b3c71942dc4"
+          },
+          "description": "Geodesic here means a curve whose length equals the distance.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-length-geodesic-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_length_geodesic (X : Type) [LengthSpace X] (x y : X) : dist x y = sInf (curveLengths x y) := by exact lengthSpace_dist_eq_inf",
+          "reverse_rendering": "A length space provides arbitrarily short curves; a geodesic attains the minimum.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-length-geodesic-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (X : Type) [LengthSpace X] (x y : X) : \u2200 \u03b5 : \u211d, \u03b5 > 0 \u2192 \u2203 \u03b3, CurveFromTo \u03b3 x y \u2227 length \u03b3 < dist x y + \u03b5 := by exact lengthSpace_almost_minimizer",
+          "reverse_rendering": "A length space provides arbitrarily short curves; a geodesic attains the minimum.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-length-geodesic-positive",
+          "description": "For every positive epsilon, a curve may lie within epsilon of the distance.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-length-geodesic-negative",
+          "description": "A nonproper length space can fail to contain a minimizing curve.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "length_to_geodesic",
+          "baseline_fragment": "d(x, y) is the infimum of lengths of admissible curves from x to y",
+          "mutated_fragment": "there exists a geodesic \u03b3 from x to y with length \u03b3 = d(x, y)",
+          "blocker_code": "LENGTH_TO_GEODESIC",
+          "blocker_reason": "The infimum statement lacks compactness or properness hypotheses needed for attainment.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:5d4b1522-c97a-5331-95b7-d4cfac2b2434"
+            },
+            "kind": "remove_side_condition",
+            "target_path": "normalized_statement",
+            "expected_failure": "The infimum statement lacks compactness or properness hypotheses needed for attainment.",
+            "mutated_statement_source": "there exists a geodesic \u03b3 from x to y with length \u03b3 = d(x, y); this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-quantifier-order",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "In a length space, each positive epsilon may use its own curve whose length is within epsilon of the distance.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:65147039-b3a3-5f38-832a-45642cea2fbe"
+        },
+        "work_id": "mg-a-quantifier-order",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-quantifier-order",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-quantifier-order",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "175e4607acfdc59e0169905a4d531f5c9e561e47af6cd58cf8c73f6b844dd7ae"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-quantifier-order:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:e6cde9f0-168c-5050-9fa5-c2884015b4b2"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-quantifier-order#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "175e4607acfdc59e0169905a4d531f5c9e561e47af6cd58cf8c73f6b844dd7ae"
+            },
+            "start_offset": 0,
+            "end_offset": 110,
+            "permitted_excerpt": "In a length space, each positive epsilon may use its own curve whose length is within epsilon of the distance."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:5cfae9e6-6bf0-545d-87b8-92b62bc9a4be"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:65147039-b3a3-5f38-832a-45642cea2fbe"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:175e4607acfdc59e0169905a4d531f5c9e561e47af6cd58cf8c73f6b844dd7ae",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every x, y, and \u03b5 > 0, assuming the space is a length space, there exists an admissible curve \u03b3 from x to y with length \u03b3 < d(x, y) + \u03b5.",
+        "quantifiers": [
+          "for every x, y, and \u03b5 > 0",
+          "there exists an admissible curve \u03b3"
+        ],
+        "assumptions": [
+          "the space is a length space"
+        ],
+        "conclusion": "length \u03b3 < d(x, y) + \u03b5",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:5725a23e-a832-520c-80a9-36312d4fb1c4"
+          },
+          "description": "The curve variable is bound only after epsilon is fixed.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-quantifier-order-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_quantifier_order (x y : X) : \u2200 \u03b5 : \u211d, \u03b5 > 0 \u2192 \u2203 \u03b3, CurveFromTo \u03b3 x y \u2227 length \u03b3 < dist x y + \u03b5 := by exact lengthSpace_almost_minimizer",
+          "reverse_rendering": "The approximating curve is allowed to depend on epsilon.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-quantifier-order-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (x y : X) : \u2200 \u03b5 : \u211d, 0 < \u03b5 \u2192 \u2203 \u03b3, CurveFromTo \u03b3 x y \u2227 length \u03b3 < dist x y + \u03b5 := by exact lengthSpace_almost_minimizer",
+          "reverse_rendering": "The approximating curve is allowed to depend on epsilon.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-quantifier-order-positive",
+          "description": "For any chosen epsilon, an appropriate new curve may be selected.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-quantifier-order-negative",
+          "description": "One curve for every epsilon would typically require a minimizer.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "quantifier_swap",
+          "baseline_fragment": "For every x, y, and \u03b5 > 0, assuming the space is a length space, there exists an admissible curve \u03b3",
+          "mutated_fragment": "For every x and y, there exists an admissible curve \u03b3 such that for every \u03b5 > 0",
+          "blocker_code": "EPSILON_CURVE_QUANTIFIER_SWAP",
+          "blocker_reason": "Swapping epsilon and curve quantifiers upgrades approximation to an attained minimum.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:06b73b6b-04ba-51c0-9cbc-63ec4abd9add"
+            },
+            "kind": "swap_quantifiers",
+            "target_path": "normalized_statement",
+            "expected_failure": "Swapping epsilon and curve quantifiers upgrades approximation to an attained minimum.",
+            "mutated_statement_source": "For every x and y, there exists an admissible curve \u03b3 such that for every \u03b5 > 0; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "difference_kind": "strict_to_nonstrict",
+          "baseline_fragment": "length \u03b3 < d(x, y) + \u03b5",
+          "mutated_fragment": "length \u03b3 \u2264 d(x, y) + \u03b5",
+          "blocker_code": "STRICT_LENGTH_BOUND_WEAKENED",
+          "blocker_reason": "The source snapshot says <; replacing it by \u2264 creates a different contract that requires fidelity review, irrespective of either statement's provability.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:bff78110-f9ca-55e7-ae53-b13c1870229e"
+            },
+            "kind": "weaken_relation",
+            "target_path": "normalized_statement",
+            "expected_failure": "The source snapshot says <; replacing it by \u2264 creates a different contract that requires fidelity review, irrespective of either statement's provability.",
+            "mutated_statement_source": "length \u03b3 \u2264 d(x, y) + \u03b5; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-nonempty-vacuity",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "Every nonempty compact subset of the real line has a member at which the identity function reaches its maximum.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:3e6be064-f169-5243-90c2-ec5346b2851b"
+        },
+        "work_id": "mg-a-nonempty-vacuity",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-nonempty-vacuity",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-nonempty-vacuity",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "80d8bb323abe68fae08d0cad945bf773bbecf313abb8e28de7b29c68031d7cf3"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-nonempty-vacuity:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:c8975aa5-c92f-59b3-9191-b398bd8b7933"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-nonempty-vacuity#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "80d8bb323abe68fae08d0cad945bf773bbecf313abb8e28de7b29c68031d7cf3"
+            },
+            "start_offset": 0,
+            "end_offset": 111,
+            "permitted_excerpt": "Every nonempty compact subset of the real line has a member at which the identity function reaches its maximum."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:c9aabe95-b6a1-56d4-88ab-b85302b1e67b"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:3e6be064-f169-5243-90c2-ec5346b2851b"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:80d8bb323abe68fae08d0cad945bf773bbecf313abb8e28de7b29c68031d7cf3",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every nonempty compact K \u2286 \u211d, there exists x \u2208 K such that for every y \u2208 K, y \u2264 x.",
+        "quantifiers": [
+          "for every nonempty compact K \u2286 \u211d",
+          "there exists x \u2208 K"
+        ],
+        "assumptions": [
+          "K is compact",
+          "K is nonempty"
+        ],
+        "conclusion": "for every y \u2208 K, y \u2264 x",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:6ba1dce7-c9d3-5b72-a595-456ed1d67530"
+          },
+          "description": "Maximum means a member of K, not merely an upper bound.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-nonempty-vacuity-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_nonempty_vacuity (K : Set \u211d) : IsCompact K \u2192 K.Nonempty \u2192 \u2203 x \u2208 K, \u2200 y \u2208 K, y \u2264 x := by exact compact_exists_isGreatest",
+          "reverse_rendering": "The maximum must be a member of K, so a witness requires nonemptiness.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-nonempty-vacuity-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (K : Set \u211d) : IsCompact K \u2192 K.Nonempty \u2192 \u2203 x \u2208 K, \u2200 y \u2208 K, y \u2264 x := by exact compact_exists_isGreatest",
+          "reverse_rendering": "The maximum must be a member of K, so a witness requires nonemptiness.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-nonempty-vacuity-positive",
+          "description": "A nonempty compact interval has a maximum element.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-nonempty-vacuity-negative",
+          "description": "The empty compact set has no member witness even though comparisons are vacuous.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "drop_nonempty",
+          "baseline_fragment": "For every nonempty compact K \u2286 \u211d, there exists x \u2208 K",
+          "mutated_fragment": "For every compact K \u2286 \u211d, there exists x \u2208 K",
+          "blocker_code": "DROP_NONEMPTY_MAXIMIZER",
+          "blocker_reason": "The empty compact set has no witness, so nonemptiness cannot be dropped.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:07e404a0-2fe2-50ed-a9d2-e72ecccdee7a"
+            },
+            "kind": "drop_nonempty",
+            "target_path": "normalized_statement",
+            "expected_failure": "The empty compact set has no witness, so nonemptiness cannot be dropped.",
+            "mutated_statement_source": "For every compact K \u2286 \u211d, there exists x \u2208 K; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "difference_kind": "vacuity",
+          "baseline_fragment": "For every nonempty compact K \u2286 \u211d, there exists x \u2208 K",
+          "mutated_fragment": "For every compact K \u2286 \u211d, for every y \u2208 K, y \u2264 x",
+          "blocker_code": "EMPTY_SET_VACUITY",
+          "blocker_reason": "A vacuous comparison cannot replace the required member witness.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:c1670c77-c31a-5770-989c-0a1281df1b4d"
+            },
+            "kind": "vacuity",
+            "target_path": "normalized_statement",
+            "expected_failure": "A vacuous comparison cannot replace the required member witness.",
+            "mutated_statement_source": "For every compact K \u2286 \u211d, for every y \u2208 K, y \u2264 x; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-endpoint-order",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "A path from x to y has \u03b3(0) = x and \u03b3(1) = y; reversing endpoints changes the directed path specification.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:172d0922-7c75-5c6a-ac7b-0c30252fa505"
+        },
+        "work_id": "mg-a-endpoint-order",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-endpoint-order",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-endpoint-order",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "755b2bfd8293d468c64650fb6a35a74eaacdd474539ff9f2627cfb981f8fb2ef"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-endpoint-order:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:0af882fb-6e2b-57bf-9daa-a65b1500cb09"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-endpoint-order#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "755b2bfd8293d468c64650fb6a35a74eaacdd474539ff9f2627cfb981f8fb2ef"
+            },
+            "start_offset": 0,
+            "end_offset": 108,
+            "permitted_excerpt": "A path from x to y has \u03b3(0) = x and \u03b3(1) = y; reversing endpoints changes the directed path specification."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:1b7b69e3-5c34-556c-8bd0-1fba1b0ac7fc"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:172d0922-7c75-5c6a-ac7b-0c30252fa505"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:755b2bfd8293d468c64650fb6a35a74eaacdd474539ff9f2627cfb981f8fb2ef",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every x, y, and path \u03b3, assuming \u03b3 is continuous with \u03b3(0) = x and \u03b3(1) = y, conclude \u03b3 is an admissible path from x to y.",
+        "quantifiers": [
+          "for every x, y, and path \u03b3"
+        ],
+        "assumptions": [
+          "\u03b3 is continuous",
+          "\u03b3(0) = x",
+          "\u03b3(1) = y"
+        ],
+        "conclusion": "\u03b3 is an admissible path from x to y",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:ac61b595-f5b2-5263-85bf-42295a67e1bb"
+          },
+          "description": "This sample fixes the parameter interval endpoints as 0 and 1.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-endpoint-order-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_endpoint_order (\u03b3 : \u211d \u2192 X) (x y : X) : Continuous \u03b3 \u2192 \u03b3 0 = x \u2192 \u03b3 1 = y \u2192 PathFromTo \u03b3 x y := by exact pathFromTo_intro",
+          "reverse_rendering": "Endpoint order is part of directed path data even when the metric is symmetric.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-endpoint-order-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (\u03b3 : \u211d \u2192 X) (x y : X) : Continuous \u03b3 \u2192 \u03b3 0 = x \u2192 \u03b3 1 = y \u2192 PathFromTo \u03b3 x y := by exact pathFromTo_intro",
+          "reverse_rendering": "Endpoint order is part of directed path data even when the metric is symmetric.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-endpoint-order-positive",
+          "description": "A path with those endpoint values is admitted from x to y.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-endpoint-order-negative",
+          "description": "Reversed endpoints define a path from y to x unless x = y.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "reverse_parameters",
+          "baseline_fragment": "\u03b3(0) = x and \u03b3(1) = y",
+          "mutated_fragment": "\u03b3(0) = y and \u03b3(1) = x",
+          "blocker_code": "PATH_ENDPOINTS_REVERSED",
+          "blocker_reason": "Reversing endpoint equations changes the directed path predicate.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:f990e59c-7df3-559f-a332-83297a0a0eab"
+            },
+            "kind": "reverse_parameters",
+            "target_path": "normalized_statement",
+            "expected_failure": "Reversing endpoint equations changes the directed path predicate.",
+            "mutated_statement_source": "\u03b3(0) = y and \u03b3(1) = x; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    }
+  ]
+}

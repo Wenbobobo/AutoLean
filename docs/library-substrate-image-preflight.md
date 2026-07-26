@@ -1,6 +1,7 @@
 # Library Substrate Image Preflight
 
-Status: operator-local image-owned preflight with a V2-compatible facade; not admitted
+Status: historical operator-local image-owned preflight; current Builder-query receipt-v2 image
+has not been built or admitted
 
 Observed date: 2026-07-26
 
@@ -28,20 +29,25 @@ invent a `repo@sha256:...` reference from an image ID. This is local technical e
 the image has not been pushed to a registry, signed by the production verifier authority,
 admitted into a frozen contract, or exercised through the OCI V2 evidence and signing gateway.
 
+The table records the last retained pre-Builder-query image. The current checkout adds the
+Builder-only Lean helper and wrapper, moves the child receipt to v2, and therefore requires a new
+Docker build and RepoDigest. The old digest must fail verification against the current eight-asset
+build input; it is historical evidence, not a runnable claim about the current working tree.
+
 ## Exact build boundary
 
 [`library_substrate_image.py`](../Library/scripts/library_substrate_image.py) creates a fresh,
 exact build context. It contains:
 
 - the child Dockerfile and one canonical build-input record;
-- six image-owned helper assets; and
+- eight image-owned helper assets; and
 - exactly the `Core`, `SemanticPrelude`, and `RulePrelude` Library sources selected by the
   `independent_reproof` profile.
 
 The build command fixes `--no-cache --pull=false --network=none`; Dockerfile syntax uses only
 the standard builder instructions and does not require a floating Dockerfile frontend. Both stages
 use the exact source-v2 digest. The builder compiles only those three profile modules. The child layer adds
-only their `.olean` files, the build input, inventory/manifest/receipt records, and the two
+only their `.olean` files, the build input, inventory/manifest/receipt records, and the
 image-owned helper programs under `/opt/autolean/library-substrate`.
 
 The three Library runtime module source files and their `.ilean` files are absent from that
@@ -66,7 +72,7 @@ receipt. The host verifier retrieves the image-owned build input and source mani
 fixed Docker RepoDigest, then independently rereads the current three profile sources and
 recomputes all per-file hashes, sizes, manifest bytes, and the tree hash. A source change between
 input capture and context staging is therefore rejected instead of silently changing compilation.
-The same fixed-digest replay hashes the current Dockerfile and all six helper assets and requires
+The same fixed-digest replay hashes the current Dockerfile and all eight helper assets and requires
 the complete sorted map to equal the receipt-bound image build input. Replaying an older image
 after any current-checkout wrapper, helper, query, receipt, or build asset drift is therefore a
 failure rather than an image-self-consistency result attributed to the new checkout.
@@ -168,11 +174,15 @@ uv run --frozen python -m Library.scripts.library_substrate_image build
 uv run --frozen python -m Library.scripts.library_substrate_image verify --image <recorded-repodigest>
 uv run --frozen python -m Library.scripts.library_substrate_image canary --image <recorded-repodigest>
 uv run --frozen python -m Library.scripts.library_substrate_image facade-canary --image <recorded-repodigest>
+uv run --frozen python -m Library.scripts.library_substrate_image builder-query-canary --image <recorded-repodigest>
 uv run --frozen python -m Library.scripts.library_substrate_image all
 ```
 
 Windows delegates the Docker work to WSL `Ubuntu-24.04`; Linux runs it natively. `verify`,
-`canary`, and `facade-canary` require the exact Docker-recorded child RepoDigest.
+`canary`, `facade-canary`, and `builder-query-canary` require the exact Docker-recorded child
+RepoDigest. The Builder canary's stdout summary is operator preflight output, not retained
+content-addressed Builder evidence; persisting the raw validated query record remains the next
+narrow adapter task.
 
 Focused negative tests cover context leakage, missing offline flags, fabricated child references,
 source-to-context TOCTOU, source checksum-manifest drift, synchronized runtime

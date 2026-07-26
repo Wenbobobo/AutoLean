@@ -51,6 +51,19 @@ depth, not a substitute for dependency review and operator approval.
    it through task input, source text, or model output.
 5. No automatic fallback crosses a provider, model, endpoint, or rights boundary. A failed
    capability probe is a failed attempt.
+6. `ModelRequest.timeout_seconds` is optional for legacy callers, finite and positive when set,
+   and capped at 3600 seconds. It is part of the outbound request hash. Chat-compatible HTTP,
+   OpenAI Responses HTTP, and Codex CLI enforce
+   `min(provider_configuration_timeout, request_timeout)` at the transport or subprocess boundary;
+   omitting it retains the provider ceiling. A later elapsed-time comparison is reporting only and
+   cannot substitute for this enforcement.
+7. Every provider exposes an immutable, credential-free `ModelExecutionTimeoutPolicyV1`.
+   `ProviderRegistry.execution_timeout_policy(binding)` and
+   `effective_timeout_seconds(binding, request)` read only registered local state, recheck the
+   exact provider binding and policy, and never run a capability probe or contact an endpoint.
+   Benchmark harnesses must compare this effective deadline with their frozen plan before allowing
+   probe or provider I/O, and must report the effective deadline rather than the request in
+   isolation.
 
 Provider adapter objects are operator-side implementation details. Workers receive only a
 capability and registry gateway; exposing a raw adapter or credential-bearing transport to an
@@ -66,6 +79,58 @@ model-execution signing authority with KMS/HSM or an equivalent operator-owned b
 The endpoint and secret-reference validation functions are
 [validate_secret_reference](../Prover/src/autolean_prover/providers/policy.py#L23) and
 [validate_endpoint_url](../Prover/src/autolean_prover/providers/policy.py#L30).
+
+## Operator profile templates
+
+[DeepSeek V4 Pro's Chat Completions profile](../Prover/operator-profiles/deepseek-v4-pro.chat-completions.v1.json)
+is an operator template, not a credential store or an enabled provider. It fixes
+`https://api.deepseek.com`, `deepseek`, and `deepseek-v4-pro`; it refers only to
+`AUTOLEAN_DEEPSEEK_API_KEY` as an environment-variable name. It fixes a small canary at 2048
+input and 256 output tokens, allows only high or max reasoning effort, and sends the narrowly
+typed Chat Completions extension `{"thinking":{"type":"enabled"}}`.
+
+An operator must capability-probe the exact endpoint before granting production or role-floor
+approval. A compatible endpoint may reject or ignore that extension; this is a failed probe, not
+permission to retry with a different provider, model, or request shape. The one exception is the
+ephemeral DeepSeek bootstrap canary: its process-local authority may authorize one bounded
+connectivity/accounting call with `static_declared_only` capability evidence. That record is not an
+independent probe or production approval, and its report fixes `role_floor_admission: forbidden`.
+If a Chat Completions response names a model, the adapter rejects any value other than the
+requested model. It also records DeepSeek's `prompt_cache_hit_tokens` as cached input usage and
+rejects a value above `prompt_tokens`. The template is intentionally not a benchmark matrix,
+production approval record, or spend limit.
+
+## DeepSeek operator sequence
+
+`llm.txt` is an ignored, operator-local temporary input. It is not a configuration format for the
+repository: do not commit it, migrate its values into `.env`/YAML, copy it into an artifact, or
+teach a runner to read it. The operator may use it only to place
+`AUTOLEAN_DEEPSEEK_API_KEY` and a distinct `AUTOLEAN_ROLE_MANIFEST_HMAC_KEY` into the current
+process environment. The runner reads environment references only; public files retain the fixed
+official profile, never a credential or an alternate endpoint.
+
+Use the existing role-runner in this order, with fresh, checkout-external empty state and private
+roots, a safe run identifier, and an explicit per-trial cost ceiling:
+
+```text
+uv run python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+uv run python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+uv run python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+```
+
+`plan` is credential-free and performs neither filesystem nor provider I/O. `preflight` validates
+the frozen ten-trial suite, effective provider timeout, source/rights and admission bindings,
+budgets, lifetimes, and empty-root boundary before a provider request; it must leave ModelWork
+trial state at zero. Run `run` only when the host network is deliberately available and preflight
+has returned `preflight_ready`. It is one non-promotable observation run, not a retry loop.
+
+The public stdout/report is redacted, role-separated, and marked non-promotable. Raw responses,
+exact usage, reconciliation journals, and the authenticated private manifest live only below the
+operator-owned private root. A provider/network failure produces a stable public failure class; it
+does not authorize automatic retry, model substitution, role-floor admission, or benchmark scoring.
+See [the DeepSeek role operator procedure](deepseek-role-operator.md) for the fixed limits and
+private-output boundary. The bootstrap canary is narrower still: its current observed outcome is a
+redacted network refusal and is not evidence of provider capability.
 
 ## Capability and provenance policy
 
@@ -139,7 +204,8 @@ An accepted experiment report should record, by hashes and identifiers rather th
 - endpoint class, not a credential-bearing URL;
 - provider configuration hash, prompt hash, and tool hashes;
 - requested and observed capabilities;
-- attempt budget, timeout, token counts, and cost accounting; and
+- attempt budget, distinct model-request and verifier timeouts where both exist, token counts, and
+  cost accounting; and
 - frozen contract, environment, toolchain, and benchmark-manifest identity.
 
 ProvenanceTraceV1 already makes model provenance require provider, name, revision, and endpoint

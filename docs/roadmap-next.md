@@ -18,40 +18,129 @@ closures. All near-term milestones must therefore preserve the public protocol b
 
 ## Current phase interpretation
 
-The repository has a substantial Phase 1 skeleton: contracts, control-plane events, FATE adapters,
-role benchmarks, read-only Dashboard projection, source/fidelity harnesses, OCI/Lean worker notes,
-Library substrate experiments, and downstream Mathlib workspace documentation.
+The repository has a substantial Phase 1 skeleton: contracts, control-plane events, ModelWork V2,
+an authorized ten-trial role bridge, a FATE common executor, a read-only Dashboard projection,
+source/fidelity harnesses, typed T7 module receipts, synthetic chaos coverage, and downstream
+Library workspace documentation. A local DeepSeek official-profile canary reached only a redacted
+network refusal; it is not a model result. The current task session cannot invoke WSL
+(`Wsl/Service/E_ACCESSDENIED`), so it cannot create fresh Docker/Lean evidence.
 
 The remaining work is not to invent another runtime. It is to close a narrow vertical path in which
 one admitted Builder statement moves through the exact same interfaces that future textbook and
 Open Problem dependency nodes will use.
 
+## Layered milestone map
+
+The detailed Phase 2 plan remains in [the fractal roadmap](phase-2-fractal-roadmap.md). This
+shorter map fixes the dependency order and acceptance boundary for the next several horizons.
+
+### Phase 1: architecture proof
+
+**M1. Frozen contract path.** Complete one rights-cleared, independently reviewed Builder contract
+without statement mutation; route the immutable bundle through independent Lean verification.
+
+**M2. Real execution path.** Run T6 and T7 on the authority Linux/WSL OCI route with retained
+image, lease, receipt, clean-integration, and failure/restart evidence.
+
+**M3. Measured Prover path.** Run an authorized real provider through the frozen role protocol and
+FATE executor. Report M/H/X separately, preserving unsuccessful and refused attempts. Do not use
+the result as Builder fidelity evidence.
+
+**Phase exit.** A no-RC or RC decision names every unrun gate. An RC additionally needs semantic
+review, independent verification, production admission/signing custody, release scans/SBOM, and
+the remaining controlled-browser/operations evidence.
+
+### Phase 2: chapter-scale Builder--Prover closure
+
+**M1. Discovery and calibration.** For two or three candidate domains, build public-metadata
+dependency maps. For an explicitly rights-cleared lane, start at the textbook opening to calibrate
+notation, retain independent conversion candidates, and use mutation, examples, and reverse
+rendering to reject bad conversions. McKay is currently only a non-freezing opening discovery.
+
+**M2. First chapter slice.** Select one 20--40 node slice with roughly 70--80 percent prerequisites
+already present. Freeze only the reviewed contracts; send the unchanged bundles to Prover and keep
+proof gaps distinct from contract-change requests.
+
+**M3. Feedback loop.** Each cycle must yield one replayable artifact: a verified proof, a rejected
+conversion with its mutation witness, or a bounded gap report. The downstream `Library/` tree is
+the reviewable record; upstream mathlib contribution remains optional and later.
+
+**Phase exit.** A cleanly buildable, source-reviewed chapter slice with contract-to-verifier links,
+examples/counterexamples, and a reproducible gap/proof ledger. A collection of isolated benchmark
+passes is insufficient.
+
+### Phase 3: library scaling
+
+**M1. Reusable substrate.** Promote only reviewed definitions and lemmas from several coherent
+chapter slices into a downstream library namespace, with stable APIs, dependency/axiom profiles,
+and migration notes.
+
+**M2. Throughput with evidence.** Schedule frozen bundles across specialized Prover roles using
+bounded ContextPacks; compare providers by role, fixed inputs, and cost/time budgets rather than a
+single aggregate score.
+
+**M3. Upstream readiness.** Prepare small, independently buildable mathlib-facing change packets
+only after downstream stability and maintainability review. The project remains valuable even when
+the correct outcome is to keep a result downstream.
+
+**Phase exit.** Multiple connected slices build from a pinned environment, have reviewable source
+provenance and receipts, and reduce a documented dependency frontier rather than merely increasing
+the theorem count.
+
+### Phase 4: isolated open-problem portfolio
+
+**M1. Leverage atlas.** Rank conjecture families by the verified dependency closure still missing,
+source clarity, overlap with active work, and expert availability. Keep conjecture nodes separate
+from theorem nodes.
+
+**M2. Quarantined conjecture track.** Allow a conjecture only after the surrounding definitions and
+lemmas have the same Builder/Prover evidence as theorem nodes. No agent may weaken it in response
+to proof failure.
+
+**M3. Research review.** Before describing progress toward an open problem, require independent
+semantic review, strict axiom audit, clean reproduction, and domain-expert assessment of novelty.
+
+**Phase exit.** There is no automatic "solved" label. A result is a research claim only after the
+separate mathematical review process accepts the exact formal statement and proof context.
+
 ## Immediate work packages
 
 | Package | Owner style | Next deliverable | Acceptance signal |
 | --- | --- | --- | --- |
-| Builder statement observation bridge | Core/root plus focused subagent | A Builder-only observation artifact that binds source hash, canonical type, environment, and contract revision without becoming proof evidence | Control plane and Builder tests reject promotion and Prover-submission misuse |
-| Prover frozen-bundle vertical route | Core/root | One route from frozen bundle to verified proof or evidence-backed gap using immutable workspace and independent verification | Same theorem statement, source file, imports, and elaborated type remain unchanged |
-| Role benchmark harness | Subagent | Repeatable dry-run/fake-provider matrix for specialist roles, with later API slots | Matrix is reproducible without secrets and separates roles from model claims |
-| Dashboard grid view | Subagent | Read-only graph-health surface in the “power-grid health map” style | UI renders graph state without mutation endpoints or raw prompt/log exposure |
+| T3 semantic/admission closure | Core/root plus human authority | Resolve the local review packet's pending spans and two locator ambiguities; decide the successor profile | An independently attributable decision remains a gap or admits one exact source/formal boundary; agents cannot self-admit it |
+| T6 real Builder-query replay | Core/root | Run the implemented Builder-only query in the exact OCI/Lean environment and bind its receipt to the signing gateway | Query stays `proof_eligible=false`; real image, environment, and rejection controls replay without changing a theorem. The current session's WSL denial is an execution blocker, not a T6 conclusion. |
+| T7 leased rebuild vertical | Focused subagent with core review | Attach the typed module-receipt path to the image-owned worker and real lease | Exact declaration closure and conservative module rebuild remain distinct; the injected cross-job receipt rejection is local coverage, not an execution receipt. |
+| Role benchmark execution | Subagent | Keep `calibration-pairs-v3` fake-only for harness regression; rerun the ten-trial suite only when a real provider and evaluator are independently authorized | The DeepSeek canary's network refusal proves only a classified failure path. A real run uses frozen prompts, evaluator, source-egress scope, budget, and timeout. |
+| Dashboard grid view | Subagent | Preserve the read-only graph-health surface and add only event-projection evidence links | UI keeps FATE, generic verification, and T7 receipt identities separate; browser visual QA and remote access remain separate gates. |
 | Meeting/landscape research | Subagent | Extract Archon-talk and adjacent assistant lessons into scoped architecture proposals | Suggestions are mapped to existing gates instead of treated as benchmark proof |
 | Library/Builder pilot discovery | Core/root with later reviewers | Pick 2-3 synchronized pilot threads only after source/rights and review constraints are explicit | Each candidate has a node graph, missing-library map, and clear rejection condition |
 
+## Phase 2 planning pointer
+
+Public-metadata `discovery` can run now. `local_calibration` needs explicit source rights and
+remains non-freezing/non-egressing by default; `production_ingestion` remains subject to every
+Phase 1 entry criterion. A Phase 1 no-RC decision records blockers; it does not waive a missing
+admission, freeze, verification, substrate, or release gate.
+
 ## First 1-2 week execution plan
 
-1. Stabilize the Builder observation bridge.
-   - Keep 'builder_statement_observation' internal to Builder/control-plane evidence.
-   - It may help Prover prepare a bundle, but it may not satisfy 'submit_proof' or promotion gates.
-   - Add negative tests for proof-like promotion, detached canonical type, and environment drift.
+1. Close the T3 human boundary before attempting a first frozen Builder statement.
+   - The local check is intentionally fail-closed at `gap/not_selected/not_frozen`.
+   - Resolve the machine-located spans and two locator ambiguities locally, then obtain a
+     separately attributable semantic/admission decision.
+   - T5 remains blocked unless that decision admits one exact boundary with rights readiness.
 
-2. Close a small vertical fixture before broad benchmarks.
-   - Use a synthetic or already-permitted Lean fixture with no source-egress issue.
-   - Exercise 'claim -> submit_proof/report_gap -> verify_submission'.
+2. Move the implemented T6/T7 routes across their real execution boundaries.
+   - Run the Builder-only T6 query in the exact OCI/Lean image, bind it to the gateway, and keep
+     it `proof_eligible=false`.
+   - Bind T7 planning to a control-plane lease and immutable source snapshot worker; retain clean
+     integration and per-node verifier evidence.
    - Preserve exact statement and theorem type checks before accepting any proof.
 
 3. Turn role benchmark work into a stable workflow.
    - Treat Prover, checker, allocator, formalizer, and contract-change reviewer as separate roles.
-   - Run fake-provider/dry-run first; require operator API approval only once egress and budget are ready.
+   - Keep the implemented five-role `calibration-pairs-v3` preset fake-only; require authorization,
+     applicable source egress, production evaluation, and budget before a real model run.
    - Store matrix revisions rather than overwriting old results.
 
 4. Move Dashboard toward graph operations visibility.
@@ -70,8 +159,9 @@ Open Problem dependency nodes will use.
 
 - Do not tune against FATE as the main objective; FATE remains a Prover diagnostic.
 - Do not treat Archon, AutoArchon, or any external assistant as the control plane.
-- Do not request API keys until the role harness can run with fake providers and source-egress
-  permissions are clear.
+- Do not treat possession of an operator-owned API key as execution authority. The local DeepSeek
+  configuration has a bounded canary, but the failed network call does not make the role harness
+  ready for scoring.
 - Do not use Builder observations, canonical-type canaries, or host-mounted Library diagnostics as
   proof authority.
 - Do not add broad publication gates that slow every small bug fix; use focused gates where they
@@ -89,7 +179,7 @@ unless the operator requests otherwise.
 
 ## Operator help to request later
 
-No immediate API key is required for the next dry-run increment. Later requests should be specific:
+No additional API key is needed for local preflight. Later requests should be specific:
 
 - one Codex/OpenAI or compatible custom endpoint reference;
 - total budget and per-attempt timeout;

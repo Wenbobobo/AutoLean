@@ -7,8 +7,10 @@ credential references and endpoint URLs stay in operator-owned provider configur
 
 from __future__ import annotations
 
+import re
 import unicodedata
 from datetime import datetime
+from enum import StrEnum
 from typing import Literal
 
 from pydantic import Field, model_validator
@@ -19,6 +21,14 @@ from .hashing import DigestV1, HashKindV1, StableIdentifierV1, digest_model, req
 from .models import EndpointClassV1, PermissionDecisionV1
 
 _FORBIDDEN_IDENTIFIERS = ("anthropic", "claude")
+_MODEL_WORK_WORKER = re.compile(r"^model-work-worker-[0-9a-f]{64}$")
+
+
+class ModelExecutionSubjectKindV1(StrEnum):
+    """The authority lineage of one model-execution capability."""
+
+    THEOREM = "theorem"
+    MODEL_WORK = "model_work"
 
 
 class ModelExecutionAuthorizationError(ValueError):
@@ -196,6 +206,7 @@ class ModelExecutionAuthorizationV1(ContractModel):
     """A short-lived, signed capability for one frozen bundle and model selection."""
 
     schema_version: Literal["1.0"] = "1.0"
+    subject_kind: ModelExecutionSubjectKindV1
     authorization_id: StableIdentifierV1
     bundle_id: StableIdentifierV1
     bundle_hash: DigestV1
@@ -211,6 +222,8 @@ class ModelExecutionAuthorizationV1(ContractModel):
     budget: ModelExecutionBudgetV1
     issued_at: datetime
     expires_at: datetime
+    parent_admission_hash: DigestV1 | None = None
+    parent_admission_expires_at: datetime | None = None
     attestation: AttestationV1 | None = None
 
     @property
@@ -253,6 +266,42 @@ class ModelExecutionAuthorizationV1(ContractModel):
             raise ValueError("model execution lease binds a different bundle")
         if self.expires_at > self.lease.expires_at:
             raise ValueError("model execution authorization outlives its worker lease")
+        if self.subject_kind is ModelExecutionSubjectKindV1.THEOREM:
+            if (
+                self.parent_admission_hash is not None
+                or self.parent_admission_expires_at is not None
+            ):
+                raise ValueError("theorem authorization cannot claim a ModelWork parent admission")
+        else:
+            if self.parent_admission_hash is None or self.parent_admission_expires_at is None:
+                raise ValueError("model-work authorization requires its exact parent admission")
+            require_digest_kind(
+                self.parent_admission_hash,
+                HashKindV1.ATTESTATION,
+                "parent_admission_hash",
+            )
+            if self.parent_admission_expires_at.tzinfo is None:
+                raise ValueError("parent admission expiry must be timezone-aware")
+            if self.expires_at > self.parent_admission_expires_at:
+                raise ValueError("model-work authorization outlives its parent admission")
+            if self.authorization_id.namespace != "model-work-authorization":
+                raise ValueError("model-work authorization must use the fixed system namespace")
+            if self.bundle_id.namespace != "model-work-bundle":
+                raise ValueError(
+                    "model-work authorization bundle must use the fixed system namespace"
+                )
+            if self.contract_id.namespace != "model-work-contract":
+                raise ValueError(
+                    "model-work authorization contract must use the fixed system namespace"
+                )
+            if self.egress_policy.rights_id.namespace != "model-work-rights":
+                raise ValueError(
+                    "model-work authorization rights must use the fixed system namespace"
+                )
+            if _MODEL_WORK_WORKER.fullmatch(self.lease.worker_id) is None:
+                raise ValueError(
+                    "model-work authorization worker must use an opaque system reference"
+                )
         if not self.approval_snapshot.enabled:
             raise ValueError("model execution authorization requires an enabled provider approval")
         if not self.egress_policy.permits(self.provider.endpoint_class):

@@ -23,6 +23,7 @@ from autolean_prover.providers.authorization import (
 )
 from autolean_prover.providers.base import (
     Capability,
+    ModelExecutionTimeoutPolicyV1,
     ModelProvider,
     ModelRequest,
     ModelResponse,
@@ -66,6 +67,7 @@ class _RegisteredProvider:
     configuration_hash: DigestV1
     binding: ModelExecutionProviderBindingV1
     declared_capabilities: ProviderCapabilities
+    execution_timeout_policy: ModelExecutionTimeoutPolicyV1
 
 
 class ProviderRegistry:
@@ -98,6 +100,7 @@ class ProviderRegistry:
             declared_capabilities,
             provider_endpoint_class,
             configuration_hash,
+            execution_timeout_policy,
         ) = self._read_provider_binding(provider)
         validate_provider_identity(provider_id, model_id)
         if endpoint_class is not provider_endpoint_class:
@@ -124,42 +127,41 @@ class ProviderRegistry:
             configuration_hash=configuration_hash,
             binding=binding,
             declared_capabilities=declared_capabilities,
+            execution_timeout_policy=execution_timeout_policy,
         )
+
+    def execution_timeout_policy(
+        self,
+        binding: ModelExecutionProviderBindingV1,
+    ) -> ModelExecutionTimeoutPolicyV1:
+        """Return the frozen local timeout policy without a capability or network probe."""
+
+        return self._registered_for_binding(binding).execution_timeout_policy
+
+    def effective_timeout_seconds(
+        self,
+        binding: ModelExecutionProviderBindingV1,
+        request: ModelRequest,
+    ) -> float:
+        """Compute the actual local provider deadline without performing provider I/O."""
+
+        if not isinstance(request, ModelRequest):
+            raise PolicyViolation("effective timeout requires a ModelRequest")
+        return self.execution_timeout_policy(binding).effective_timeout_seconds(request)
 
     def generate(
         self,
         authorization: ModelExecutionAuthorizationV1,
         request: ModelRequest,
     ) -> ModelResponse:
-        if not isinstance(authorization, ModelExecutionAuthorizationV1):
-            raise PolicyViolation(
-                "model generation requires a control-plane-issued ModelExecutionAuthorizationV1"
-            )
-        if self._authorization_gate is None:
+        registered, requested = self._preflight_generate(authorization, request)
+        authorization_gate = self._authorization_gate
+        if authorization_gate is None:  # Kept local for type narrowing after the shared preflight.
             raise PolicyViolation("model generation requires an injected authorization gate")
         registry_key = authorization.provider.registry_name
-        registered = self._providers.get(registry_key)
-        if registered is None:
-            raise ConfigurationError(f"unknown model provider: {registry_key}")
-        self._assert_provider_binding(registered, name=registry_key)
         outbound_request_hash = request.outbound_request_hash()
         try:
-            self._authorization_gate.preflight(
-                authorization,
-                provider=registered.binding,
-                requested_input_tokens=request.max_input_tokens,
-                requested_output_tokens=request.max_output_tokens,
-                context_pack_hash=request.context_pack_hash,
-                outbound_request_hash=outbound_request_hash,
-            )
-        except Exception:
-            raise PolicyViolation("model execution authorization was denied") from None
-        # Token and cost budgets are meaningful only when the provider reports non-optional usage.
-        # A missing usage record must fail before it can be treated as zero spend.
-        requested = request.inferred_capabilities() | {Capability.USAGE_ACCOUNTING}
-        registered.declared_capabilities.require(requested, provider_id=registered.provider_id)
-        try:
-            reservation = self._authorization_gate.reserve(
+            reservation = authorization_gate.reserve(
                 authorization,
                 provider=registered.binding,
                 requested_input_tokens=request.max_input_tokens,
@@ -226,7 +228,7 @@ class ProviderRegistry:
             self._assert_provider_binding(registered, name=registry_key)
             failure_code = ProviderFailureCodeV1.SETTLEMENT_REJECTED
             try:
-                self._authorization_gate.settle(
+                authorization_gate.settle(
                     reservation,
                     input_tokens=response.usage.input_tokens,
                     cached_input_tokens=response.usage.cached_input_tokens,
@@ -241,7 +243,7 @@ class ProviderRegistry:
         finally:
             if not settled:
                 try:
-                    self._authorization_gate.abandon(
+                    authorization_gate.abandon(
                         reservation,
                         failure_code=failure_code.value,
                     )
@@ -250,16 +252,69 @@ class ProviderRegistry:
                         "model execution failure accounting was unavailable"
                     ) from None
 
+    def preflight_generate(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+        request: ModelRequest,
+    ) -> None:
+        """Validate a route and signed request without probing or calling the provider."""
+
+        self._preflight_generate(authorization, request)
+
+    def _preflight_generate(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+        request: ModelRequest,
+    ) -> tuple[_RegisteredProvider, frozenset[Capability]]:
+        if not isinstance(authorization, ModelExecutionAuthorizationV1):
+            raise PolicyViolation(
+                "model generation requires a control-plane-issued ModelExecutionAuthorizationV1"
+            )
+        if not isinstance(request, ModelRequest):
+            raise PolicyViolation("model generation requires a ModelRequest")
+        if self._authorization_gate is None:
+            raise PolicyViolation("model generation requires an injected authorization gate")
+        registry_key = authorization.provider.registry_name
+        registered = self._providers.get(registry_key)
+        if registered is None:
+            raise ConfigurationError(f"unknown model provider: {registry_key}")
+        self._assert_provider_binding(registered, name=registry_key)
+        outbound_request_hash = request.outbound_request_hash()
+        try:
+            self._authorization_gate.preflight(
+                authorization,
+                provider=registered.binding,
+                requested_input_tokens=request.max_input_tokens,
+                requested_output_tokens=request.max_output_tokens,
+                context_pack_hash=request.context_pack_hash,
+                outbound_request_hash=outbound_request_hash,
+            )
+        except Exception:
+            raise PolicyViolation("model execution authorization was denied") from None
+        # Token and cost budgets are meaningful only when the provider reports non-optional usage.
+        # A missing usage record must fail before it can be treated as zero spend.
+        requested = request.inferred_capabilities() | {Capability.USAGE_ACCOUNTING}
+        registered.declared_capabilities.require(requested, provider_id=registered.provider_id)
+        return registered, requested
+
     @staticmethod
     def _read_provider_binding(
         provider: ModelProvider,
-    ) -> tuple[str, str, ProviderCapabilities, EndpointClassV1, DigestV1]:
+    ) -> tuple[
+        str,
+        str,
+        ProviderCapabilities,
+        EndpointClassV1,
+        DigestV1,
+        ModelExecutionTimeoutPolicyV1,
+    ]:
         try:
             provider_id = provider.provider_id
             model_id = provider.model_id
             endpoint_class = provider.endpoint_class
             configuration_hash = provider.configuration_hash
             capabilities = provider.capabilities
+            execution_timeout_policy = provider.execution_timeout_policy
         except Exception as exc:
             raise ConfigurationError(
                 "provider properties could not be read during registration"
@@ -272,13 +327,29 @@ class ProviderRegistry:
             raise ConfigurationError("provider endpoint_class must be EndpointClassV1")
         if not isinstance(configuration_hash, DigestV1):
             raise ConfigurationError("provider configuration_hash must be DigestV1")
-        return provider_id, model_id, capabilities, endpoint_class, configuration_hash
+        if not isinstance(execution_timeout_policy, ModelExecutionTimeoutPolicyV1):
+            raise ConfigurationError(
+                "provider execution_timeout_policy must be ModelExecutionTimeoutPolicyV1"
+            )
+        return (
+            provider_id,
+            model_id,
+            capabilities,
+            endpoint_class,
+            configuration_hash,
+            execution_timeout_policy,
+        )
 
     @classmethod
     def _assert_provider_binding(cls, registered: _RegisteredProvider, *, name: str) -> None:
-        provider_id, model_id, capabilities, endpoint_class, configuration_hash = (
-            cls._read_provider_binding(registered.provider)
-        )
+        (
+            provider_id,
+            model_id,
+            capabilities,
+            endpoint_class,
+            configuration_hash,
+            execution_timeout_policy,
+        ) = cls._read_provider_binding(registered.provider)
         validate_provider_identity(provider_id, model_id)
         if (
             provider_id != registered.provider_id
@@ -286,9 +357,26 @@ class ProviderRegistry:
             or endpoint_class is not registered.endpoint_class
             or configuration_hash != registered.configuration_hash
             or capabilities != registered.declared_capabilities
+            or execution_timeout_policy != registered.execution_timeout_policy
         ):
             raise PolicyViolation(
                 f"provider {name!r} changed identity, model, endpoint, configuration, or "
                 "declared capabilities "
                 "after registration"
             )
+
+    def _registered_for_binding(
+        self,
+        binding: ModelExecutionProviderBindingV1,
+    ) -> _RegisteredProvider:
+        if not isinstance(binding, ModelExecutionProviderBindingV1):
+            raise PolicyViolation(
+                "provider execution policy requires a ModelExecutionProviderBindingV1"
+            )
+        registered = self._providers.get(binding.registry_name)
+        if registered is None:
+            raise ConfigurationError(f"unknown model provider: {binding.registry_name}")
+        self._assert_provider_binding(registered, name=binding.registry_name)
+        if registered.binding != binding:
+            raise PolicyViolation("provider execution policy binding differs from registration")
+        return registered

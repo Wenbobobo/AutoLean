@@ -13,6 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+_COMPARE_SUITE_PRESETS: dict[str, tuple[tuple[str, str], ...]] = {
+    "calibration-pairs-v3": (
+        ("fake.oracle.prover", "fake.mutant.prover"),
+        ("fake.oracle.statement-formalizer", "fake.mutant.statement-formalizer"),
+        ("fake.oracle.fidelity-reviewer", "fake.mutant.fidelity-reviewer"),
+        ("fake.oracle.cheating-supervisor", "fake.mutant.cheating-supervisor"),
+        ("fake.oracle.task-allocator", "fake.mutant.task-allocator"),
+    ),
+}
+
 
 def _absolute(path: str, *, label: str) -> Path:
     resolved = Path(path).resolve()
@@ -123,11 +133,15 @@ def main() -> None:
     compare_suite_parser.add_argument("--baseline-run", required=True)
     compare_suite_parser.add_argument("--candidate-run", required=True)
     compare_suite_parser.add_argument(
+        "--preset",
+        choices=tuple(_COMPARE_SUITE_PRESETS),
+        help="named suite expanded before any explicit --cell-pair values",
+    )
+    compare_suite_parser.add_argument(
         "--cell-pair",
         action="append",
-        required=True,
         metavar="BASELINE_CELL=CANDIDATE_CELL",
-        help="repeatable paired cells; each pair must stay within one role",
+        help="repeatable paired cells appended after --preset; each pair must stay within one role",
     )
     compare_suite_parser.add_argument("--output")
 
@@ -218,12 +232,14 @@ def main() -> None:
             )
             _write_or_print(comparison_json(comparison), args.output)
         else:
-            pairs: list[tuple[str, str]] = []
-            for raw_pair in args.cell_pair:
+            pairs = list(_COMPARE_SUITE_PRESETS.get(args.preset, ()))
+            for raw_pair in args.cell_pair or ():
                 left, separator, right = str(raw_pair).partition("=")
                 if not separator or not left or not right:
                     raise ValueError("--cell-pair must be BASELINE_CELL=CANDIDATE_CELL")
                 pairs.append((left, right))
+            if not pairs:
+                raise ValueError("compare-suite requires --preset or at least one --cell-pair")
             baseline = store.report(str(args.baseline_run))
             candidate = store.report(str(args.candidate_run))
             suite = compare_report_suite(

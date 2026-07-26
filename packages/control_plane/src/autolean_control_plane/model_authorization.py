@@ -20,10 +20,16 @@ from autolean_contracts import (
     AttestationError,
     AttestationPurposeV1,
     AttestationSignerV1,
+    AttestationV1,
     AttestationVerifierV1,
     DigestV1,
     FormalizationTaskBundleV1,
+    HashKindV1,
+    ModelWorkBundleV2,
     StableIdentifierV1,
+    digest_model,
+    model_work_admission_evidence_identity,
+    model_work_admission_payload,
     stable_identifier,
 )
 from autolean_contracts.authorization import (
@@ -35,6 +41,7 @@ from autolean_contracts.authorization import (
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
     ModelExecutionReservationV1,
+    ModelExecutionSubjectKindV1,
     model_execution_authorization_payload,
 )
 
@@ -44,6 +51,7 @@ from .leases import Lease
 from .service import ControlPlane, TaskBinding
 
 _REVOCATION_CODE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_MODEL_WORK_NONCE = re.compile(r"^[0-9a-f]{48}$")
 _PROVIDER_FAILURE_CODES = frozenset(
     {
         "probe_failed_v1",
@@ -89,6 +97,29 @@ class _UsageTotals:
     cost_microusd: int
 
 
+@dataclass(frozen=True, slots=True)
+class _StoredModelWorkRegistration:
+    bundle: ModelWorkBundleV2
+    admission: AttestationV1
+    admission_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class _AuthorizationSubject:
+    """The fields carried unchanged by the existing authorization wire schema."""
+
+    subject_kind: ModelExecutionSubjectKindV1
+    bundle_id: StableIdentifierV1
+    bundle_hash: DigestV1
+    contract_id: StableIdentifierV1
+    revision: int
+    contract_hash: DigestV1
+    environment_hash: DigestV1
+    egress_policy: ModelEgressPolicyV1
+    parent_admission_hash: DigestV1 | None = None
+    parent_admission_expires_at: datetime | None = None
+
+
 class ModelExecutionAuthorizationService:
     """Issue, revoke, reserve, and settle model authority against one ControlPlane database.
 
@@ -113,6 +144,7 @@ class ModelExecutionAuthorizationService:
         control_plane: ControlPlane,
         signer: AttestationSignerV1,
         verifier: AttestationVerifierV1,
+        admission_verifier: AttestationVerifierV1 | None = None,
         clock: Callable[[], datetime] | None = None,
         max_ttl_seconds: float = _DEFAULT_MAX_TTL_SECONDS,
         provider_failure_threshold: int = _DEFAULT_PROVIDER_FAILURE_THRESHOLD,
@@ -122,6 +154,7 @@ class ModelExecutionAuthorizationService:
         self._events = control_plane.events
         self._signer = signer
         self._verifier = verifier
+        self._admission_verifier = admission_verifier
         self._clock = clock or (lambda: datetime.now(UTC))
         self._max_ttl_seconds = self._validate_max_ttl_seconds(max_ttl_seconds)
         self._provider_failure_threshold = self._validate_provider_failure_threshold(
@@ -215,6 +248,189 @@ class ModelExecutionAuthorizationService:
             )
         return approval
 
+    def preflight_operator_approval(
+        self,
+        approval: ModelExecutionProviderApprovalV1,
+    ) -> None:
+        """Read-only exact-snapshot check for orchestration-wide dry runs."""
+
+        if not approval.enabled:
+            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
+        with self._events.connection() as connection:
+            stored = self._stored_provider_approval(connection, approval.approval_id.value)
+        if canonical_json(stored.model_dump(mode="json")) != canonical_json(
+            approval.model_dump(mode="json")
+        ):
+            raise ModelExecutionAuthorizationError(
+                "provider approval differs from its immutable registered snapshot"
+            )
+
+    def preflight_model_work_registration(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        admission: AttestationV1,
+        required_validity_seconds: float | None = None,
+    ) -> None:
+        """Validate a ModelWork registration with no database or lease mutation."""
+
+        validated = self._validated_model_work(bundle)
+        self._verify_model_work_admission(validated, admission)
+        if required_validity_seconds is not None:
+            if (
+                isinstance(required_validity_seconds, bool)
+                or not isinstance(required_validity_seconds, int | float)
+                or not math.isfinite(required_validity_seconds)
+                or required_validity_seconds <= 0
+            ):
+                raise ModelExecutionAuthorizationError(
+                    "required parent-admission validity must be finite and positive"
+                )
+            remaining = (admission.expires_at - self._now()).total_seconds()
+            if remaining < required_validity_seconds:
+                raise ModelExecutionAuthorizationError(
+                    "model work admission does not cover the required execution window"
+                )
+        admission_hash = self._model_work_admission_hash(admission)
+        with self._events.connection() as connection:
+            existing = connection.execute(
+                """
+                SELECT 1
+                FROM model_execution_work_bundles
+                WHERE bundle_id = ?
+                """,
+                (validated.bundle_id.value,),
+            ).fetchone()
+            if existing is not None:
+                stored = self._stored_model_work(connection, validated.bundle_id.value)
+                self._assert_exact_model_work_registration(
+                    stored,
+                    bundle=validated,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(stored.bundle, stored.admission)
+
+    def preflight_authorization_ttl(self, ttl_seconds: float) -> None:
+        """Apply the configured authorization TTL policy without mutating state."""
+
+        self._validate_ttl(ttl_seconds)
+
+    def register_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        admission: AttestationV1,
+    ) -> ModelWorkBundleV2:
+        """Register independently admitted non-theorem work before it can obtain a lease."""
+
+        bundle = self._validated_model_work(bundle)
+        self._verify_model_work_admission(bundle, admission)
+        bundle_hash = bundle.handoff_hash().value
+        admission_hash = self._model_work_admission_hash(admission)
+        registration_request = self._model_work_registration_request(
+            bundle=bundle,
+            admission_hash=admission_hash,
+        )
+        request_digest = request_hash(registration_request)
+        serialized = canonical_json(bundle.model_dump(mode="json"))
+        serialized_admission = canonical_json(admission.model_dump(mode="json"))
+        with self._events.write_transaction() as connection:
+            # The lock-time verification closes the expiry/revocation race between validation
+            # and durable insertion. Exact replay is allowed only while this parent remains valid.
+            self._verify_model_work_admission(bundle, admission)
+            replay = self._idempotent_model_work(
+                connection,
+                key=request_digest,
+                request_digest=request_digest,
+            )
+            if replay is not None:
+                self._assert_exact_model_work_registration(
+                    replay,
+                    bundle=bundle,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(replay.bundle, replay.admission)
+                return replay.bundle
+            existing = connection.execute(
+                """
+                SELECT bundle_hash, admission_attestation_hash
+                FROM model_execution_work_bundles
+                WHERE bundle_id = ?
+                """,
+                (bundle.bundle_id.value,),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    str(existing["bundle_hash"]) != bundle_hash
+                    or str(existing["admission_attestation_hash"]) != admission_hash
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "model work bundle ID is already bound to different immutable work "
+                        "or admission"
+                    )
+                stored = self._stored_model_work(connection, bundle.bundle_id.value)
+                self._assert_exact_model_work_registration(
+                    stored,
+                    bundle=bundle,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(stored.bundle, stored.admission)
+                self._record_model_work_idempotency(
+                    connection,
+                    key=request_digest,
+                    request_digest=request_digest,
+                    bundle_id=stored.bundle.bundle_id.value,
+                )
+                return stored.bundle
+            connection.execute(
+                """
+                INSERT INTO model_execution_work_bundles (
+                    bundle_id, bundle_hash, bundle_json,
+                    admission_attestation_hash, admission_attestation_json,
+                    registration_request_hash, registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    bundle.bundle_id.value,
+                    bundle_hash,
+                    serialized,
+                    admission_hash,
+                    serialized_admission,
+                    request_digest,
+                    self._timestamp(self._now()),
+                ),
+            )
+            self._record_model_work_idempotency(
+                connection,
+                key=request_digest,
+                request_digest=request_digest,
+                bundle_id=bundle.bundle_id.value,
+            )
+        return bundle
+
+    def claim_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        ttl_seconds: float,
+    ) -> Lease:
+        """Claim the existing fenced lease primitive for registered non-theorem work."""
+
+        validated = self._validated_model_work(bundle)
+        self._assert_model_work_binding(validated)
+        worker_id = self._model_work_worker_id(validated)
+        try:
+            return self._control_plane.leases.claim(
+                validated.bundle_id.value,
+                worker_id,
+                ttl_seconds=ttl_seconds,
+            )
+        except ValueError as error:
+            raise ModelExecutionAuthorizationError("model work lease claim is invalid") from error
+
     def issue(
         self,
         bundle: FormalizationTaskBundleV1,
@@ -241,55 +457,194 @@ class ModelExecutionAuthorizationService:
             context_pack_hash=context_pack_hash,
             outbound_request_hash=outbound_request_hash,
         )
-        with self._events.connection() as connection:
-            approval = self._stored_provider_approval(connection, approval_id.value)
-        if not approval.enabled:
-            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
         egress_policy = ModelEgressPolicyV1(
             rights_id=bundle.contract.rights.rights_id,
             overall_decision=bundle.contract.rights.overall_decision,
             model_egress=bundle.contract.rights.model_egress,
             allowed_endpoint_classes=bundle.contract.rights.allowed_endpoint_classes,
         )
-        if not egress_policy.permits(approval.binding.endpoint_class):
+        return self._issue_bound(
+            subject=_AuthorizationSubject(
+                subject_kind=ModelExecutionSubjectKindV1.THEOREM,
+                bundle_id=bundle.bundle_id,
+                bundle_hash=bundle.handoff_hash(),
+                contract_id=bundle.contract.contract_id,
+                revision=bundle.contract.revision,
+                contract_hash=bundle.contract.semantic_hash(),
+                environment_hash=bundle.contract.formal.environment.environment_hash,
+                egress_policy=egress_policy,
+            ),
+            registered_bundle_hash=binding.bundle_hash,
+            authorization_id=authorization_id,
+            approval_id=approval_id,
+            budget=budget,
+            lease=lease,
+            context_pack_hash=context_pack_hash,
+            outbound_request_hash=outbound_request_hash,
+            ttl_seconds=ttl_seconds,
+            idempotency_key=idempotency_key,
+        )
+
+    def issue_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        approval_id: StableIdentifierV1,
+        budget: ModelExecutionBudgetV1,
+        lease: Lease,
+        ttl_seconds: float,
+    ) -> ModelExecutionAuthorizationV1:
+        """Issue the normal wire capability for one registered, rights-bound role trial."""
+
+        self._validate_ttl(ttl_seconds)
+        bundle = self._validated_model_work(bundle)
+        registration = self._assert_model_work_binding(bundle)
+        self._assert_current_model_work_lease(bundle, lease)
+        self._validate_request_hashes(
+            context_pack_hash=bundle.context_pack_hash,
+            outbound_request_hash=bundle.request_hash,
+        )
+        egress_policy = ModelEgressPolicyV1(
+            rights_id=stable_identifier(
+                "model-work-rights",
+                bundle.rights.rights_record_hash.value,
+            ),
+            overall_decision=bundle.rights.overall_decision,
+            model_egress=bundle.rights.model_egress,
+            allowed_endpoint_classes=bundle.rights.allowed_endpoint_classes,
+        )
+        return self._issue_bound(
+            subject=_AuthorizationSubject(
+                subject_kind=ModelExecutionSubjectKindV1.MODEL_WORK,
+                bundle_id=bundle.bundle_id,
+                bundle_hash=bundle.handoff_hash(),
+                contract_id=bundle.work_contract_id,
+                revision=bundle.revision,
+                contract_hash=bundle.semantic_hash(),
+                environment_hash=bundle.role_environment_hash,
+                egress_policy=egress_policy,
+                parent_admission_hash=DigestV1(
+                    kind=HashKindV1.ATTESTATION,
+                    value=registration.admission_hash,
+                ),
+                parent_admission_expires_at=registration.admission.expires_at,
+            ),
+            registered_bundle_hash=registration.bundle.handoff_hash().value,
+            authorization_id=None,
+            approval_id=approval_id,
+            budget=budget,
+            lease=lease,
+            context_pack_hash=bundle.context_pack_hash,
+            outbound_request_hash=bundle.request_hash,
+            ttl_seconds=ttl_seconds,
+            idempotency_key=None,
+        )
+
+    def _issue_bound(
+        self,
+        *,
+        subject: _AuthorizationSubject,
+        registered_bundle_hash: str,
+        authorization_id: StableIdentifierV1 | None,
+        approval_id: StableIdentifierV1,
+        budget: ModelExecutionBudgetV1,
+        lease: Lease,
+        context_pack_hash: DigestV1,
+        outbound_request_hash: DigestV1,
+        ttl_seconds: float,
+        idempotency_key: str | None,
+    ) -> ModelExecutionAuthorizationV1:
+        """Shared signed-capability path for theorem and non-theorem model work."""
+
+        with self._events.connection() as connection:
+            approval = self._stored_provider_approval(connection, approval_id.value)
+        if not approval.enabled:
+            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
+        if not subject.egress_policy.permits(approval.binding.endpoint_class):
             raise ModelExecutionAuthorizationError(
                 "frozen source rights do not permit the selected model endpoint"
             )
         now = self._now()
         expires_at = now + timedelta(seconds=ttl_seconds)
+        if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK:
+            if subject.parent_admission_hash is None or subject.parent_admission_expires_at is None:
+                raise ModelExecutionAuthorizationError(
+                    "model work authorization requires an exact parent admission"
+                )
+            if subject.parent_admission_expires_at <= now:
+                raise ModelExecutionAuthorizationError("model work parent admission has expired")
+            if expires_at > subject.parent_admission_expires_at:
+                raise ModelExecutionAuthorizationError(
+                    "requested model-work authorization TTL exceeds its parent admission"
+                )
+            if authorization_id is not None or idempotency_key is not None:
+                raise ModelExecutionAuthorizationError(
+                    "model work authorization identities are system-derived"
+                )
+            authorization_id = stable_identifier(
+                "model-work-authorization",
+                request_hash(
+                    {
+                        "schema_version": "autolean.model-work-authorization-identity.v1",
+                        "bundle_hash": subject.bundle_hash.model_dump(mode="json"),
+                        "parent_admission_hash": subject.parent_admission_hash.model_dump(
+                            mode="json"
+                        ),
+                        "approval_hash": approval.approval_hash().model_dump(mode="json"),
+                        "budget": budget.model_dump(mode="json"),
+                        "lease": {
+                            "worker_id": lease.holder_id,
+                            "fencing_token": lease.fencing_token,
+                            "expires_at": self._timestamp(lease.expires_at),
+                        },
+                        "context_pack_hash": context_pack_hash.model_dump(mode="json"),
+                        "request_hash": outbound_request_hash.model_dump(mode="json"),
+                        "ttl_seconds": ttl_seconds,
+                    }
+                ),
+            )
+        elif authorization_id is None or idempotency_key is None:
+            raise ModelExecutionAuthorizationError(
+                "theorem authorization requires caller-owned operation identities"
+            )
         if expires_at > lease.expires_at:
             raise ModelExecutionAuthorizationError(
                 "model execution authorization must expire no later than its current worker lease"
             )
         unsigned = ModelExecutionAuthorizationV1(
+            subject_kind=subject.subject_kind,
             authorization_id=authorization_id,
-            bundle_id=bundle.bundle_id,
-            bundle_hash=bundle.handoff_hash(),
-            contract_id=bundle.contract.contract_id,
-            revision=bundle.contract.revision,
-            contract_hash=bundle.contract.semantic_hash(),
-            environment_hash=bundle.contract.formal.environment.environment_hash,
+            bundle_id=subject.bundle_id,
+            bundle_hash=subject.bundle_hash,
+            contract_id=subject.contract_id,
+            revision=subject.revision,
+            contract_hash=subject.contract_hash,
+            environment_hash=subject.environment_hash,
             lease=ModelExecutionLeaseBindingV1(
-                bundle_id=bundle.bundle_id,
+                bundle_id=subject.bundle_id,
                 worker_id=lease.holder_id,
                 fencing_token=lease.fencing_token,
                 expires_at=lease.expires_at,
             ),
             context_pack_hash=context_pack_hash,
             request_hash=outbound_request_hash,
-            egress_policy=egress_policy,
+            egress_policy=subject.egress_policy,
             approval_snapshot=approval,
             budget=budget,
             issued_at=now,
             expires_at=expires_at,
+            parent_admission_hash=subject.parent_admission_hash,
+            parent_admission_expires_at=subject.parent_admission_expires_at,
         )
         payload = model_execution_authorization_payload(unsigned)
         try:
             attestation = self._signer.issue(
                 purpose=AttestationPurposeV1.MODEL_EXECUTION,
                 payload=payload,
-                evidence_identity=("model-execution-authorization:" + authorization_id.value),
-                ttl_seconds=ttl_seconds,
+                evidence_identity=(
+                    "model-execution-authorization:" + unsigned.authorization_hash().value
+                ),
+                ttl_seconds=(expires_at - now).total_seconds(),
             )
         except AttestationError as error:
             raise ModelExecutionAuthorizationError(
@@ -298,9 +653,10 @@ class ModelExecutionAuthorizationService:
         authorization = unsigned.model_copy(update={"attestation": attestation})
         self._verify_capability(authorization)
         issue_request = {
-            "schema_version": "autolean.model-execution-issue-request.v1",
+            "schema_version": "autolean.model-execution-issue-request.v2",
+            "subject_kind": subject.subject_kind.value,
             "authorization_id": authorization_id.value,
-            "bundle_hash": binding.bundle_hash,
+            "bundle_hash": registered_bundle_hash,
             "approval_id": approval.approval_id.value,
             "approval_hash": approval.approval_hash().value,
             "budget": budget.model_dump(mode="json"),
@@ -308,14 +664,33 @@ class ModelExecutionAuthorizationService:
             "context_pack_hash": context_pack_hash.model_dump(mode="json"),
             "request_hash": outbound_request_hash.model_dump(mode="json"),
             "ttl_seconds": ttl_seconds,
+            "parent_admission_hash": (
+                None
+                if subject.parent_admission_hash is None
+                else subject.parent_admission_hash.model_dump(mode="json")
+            ),
+            "parent_admission_expires_at": (
+                None
+                if subject.parent_admission_expires_at is None
+                else self._timestamp(subject.parent_admission_expires_at)
+            ),
         }
         request_digest = request_hash(issue_request)
+        effective_idempotency_key = (
+            request_digest
+            if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK
+            else idempotency_key
+        )
+        if effective_idempotency_key is None:
+            raise ModelExecutionAuthorizationError("authorization idempotency identity is missing")
         serialized = canonical_json(authorization.model_dump(mode="json"))
         with self._events.write_transaction() as connection:
+            if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK:
+                self._assert_parent_admission(connection, authorization)
             replay = self._idempotent_authorization(
                 connection,
                 scope=self._ISSUE_SCOPE,
-                key=idempotency_key,
+                key=effective_idempotency_key,
                 request_digest=request_digest,
             )
             if replay is not None:
@@ -337,7 +712,7 @@ class ModelExecutionAuthorizationService:
                 self._record_idempotency(
                     connection,
                     scope=self._ISSUE_SCOPE,
-                    key=idempotency_key,
+                    key=effective_idempotency_key,
                     request_digest=request_digest,
                     authorization_id=stored.authorization_id.value,
                 )
@@ -363,7 +738,7 @@ class ModelExecutionAuthorizationService:
             self._record_idempotency(
                 connection,
                 scope=self._ISSUE_SCOPE,
-                key=idempotency_key,
+                key=effective_idempotency_key,
                 request_digest=request_digest,
                 authorization_id=authorization.authorization_id.value,
             )
@@ -444,6 +819,7 @@ class ModelExecutionAuthorizationService:
             stored = self._stored_authorization(connection, authorization.authorization_id.value)
             self._assert_same_capability(stored, authorization)
             self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
             self._assert_provider_circuit_closed(connection, provider)
 
     def reserve(
@@ -471,6 +847,7 @@ class ModelExecutionAuthorizationService:
             stored = self._stored_authorization(connection, authorization.authorization_id.value)
             self._assert_same_capability(stored, authorization)
             self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
             self._assert_provider_circuit_closed(connection, provider)
             states = self._reservation_states(connection, authorization.authorization_id.value)
             totals = self._usage_totals(states)
@@ -663,6 +1040,22 @@ class ModelExecutionAuthorizationService:
                     approval_id TEXT NOT NULL
                 ) WITHOUT ROWID;
 
+                CREATE TABLE IF NOT EXISTS model_execution_work_bundles (
+                    bundle_id TEXT PRIMARY KEY,
+                    bundle_hash TEXT NOT NULL,
+                    bundle_json TEXT NOT NULL,
+                    admission_attestation_hash TEXT NOT NULL,
+                    admission_attestation_json TEXT NOT NULL,
+                    registration_request_hash TEXT NOT NULL,
+                    registered_at TEXT NOT NULL
+                ) WITHOUT ROWID;
+
+                CREATE TABLE IF NOT EXISTS model_execution_work_idempotency (
+                    key TEXT PRIMARY KEY,
+                    request_hash TEXT NOT NULL,
+                    bundle_id TEXT NOT NULL
+                ) WITHOUT ROWID;
+
                 CREATE TABLE IF NOT EXISTS model_execution_authorization_idempotency (
                     scope TEXT NOT NULL,
                     key TEXT NOT NULL,
@@ -753,6 +1146,30 @@ class ModelExecutionAuthorizationService:
                     SELECT RAISE(ABORT, 'provider approval idempotency is immutable');
                 END;
 
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_bundles_forbid_update
+                BEFORE UPDATE ON model_execution_work_bundles
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work bundles are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_bundles_forbid_delete
+                BEFORE DELETE ON model_execution_work_bundles
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work bundles are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_idempotency_forbid_update
+                BEFORE UPDATE ON model_execution_work_idempotency
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work idempotency is immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_idempotency_forbid_delete
+                BEFORE DELETE ON model_execution_work_idempotency
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work idempotency is immutable');
+                END;
+
                 CREATE TRIGGER IF NOT EXISTS model_execution_authorization_idempotency_forbid_update
                 BEFORE UPDATE ON model_execution_authorization_idempotency
                 BEGIN
@@ -789,6 +1206,28 @@ class ModelExecutionAuthorizationService:
                     SELECT RAISE(ABORT, 'model execution provider health ledger is append-only');
                 END;
                 """
+            )
+            self._ensure_model_work_admission_columns(connection)
+
+    @staticmethod
+    def _ensure_model_work_admission_columns(connection: sqlite3.Connection) -> None:
+        """Migrate an older ledger without treating its unsigned rows as admitted work."""
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute(
+                "PRAGMA table_info(model_execution_work_bundles)"
+            ).fetchall()
+        }
+        if "admission_attestation_hash" not in columns:
+            connection.execute(
+                "ALTER TABLE model_execution_work_bundles "
+                "ADD COLUMN admission_attestation_hash TEXT"
+            )
+        if "admission_attestation_json" not in columns:
+            connection.execute(
+                "ALTER TABLE model_execution_work_bundles "
+                "ADD COLUMN admission_attestation_json TEXT"
             )
 
     def _assert_provider_circuit_closed(
@@ -934,6 +1373,108 @@ class ModelExecutionAuthorizationService:
             )
         return binding
 
+    @staticmethod
+    def _validated_model_work(bundle: ModelWorkBundleV2) -> ModelWorkBundleV2:
+        """Revalidate serialized fields so ``model_copy(update=...)`` cannot bypass V2."""
+
+        try:
+            return ModelWorkBundleV2.model_validate(bundle.model_dump(mode="json"))
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "model work bundle is not a valid V2 public projection"
+            ) from error
+
+    @staticmethod
+    def _model_work_worker_id(bundle: ModelWorkBundleV2) -> str:
+        return "model-work-worker-" + request_hash(
+            {
+                "schema_version": "autolean.model-work-worker-reference.v1",
+                "bundle_hash": bundle.handoff_hash().value,
+            }
+        )
+
+    def _assert_model_work_binding(
+        self,
+        bundle: ModelWorkBundleV2,
+    ) -> _StoredModelWorkRegistration:
+        with self._events.connection() as connection:
+            registration = self._stored_model_work(connection, bundle.bundle_id.value)
+        self._verify_model_work_admission(
+            registration.bundle,
+            registration.admission,
+        )
+        if canonical_json(registration.bundle.model_dump(mode="json")) != canonical_json(
+            bundle.model_dump(mode="json")
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work does not match its registered immutable bundle"
+            )
+        return registration
+
+    def _verify_model_work_admission(
+        self,
+        bundle: ModelWorkBundleV2,
+        admission: AttestationV1,
+    ) -> None:
+        if self._admission_verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "model work registration requires a trusted admission verifier"
+            )
+        if _MODEL_WORK_NONCE.fullmatch(admission.nonce) is None:
+            raise ModelExecutionAuthorizationError(
+                "model work admission nonce must be a signer-generated 48-digit hex value"
+            )
+        if admission.evidence_identity != model_work_admission_evidence_identity(bundle):
+            raise ModelExecutionAuthorizationError(
+                "model work admission evidence identity does not bind the exact payload"
+            )
+        try:
+            self._admission_verifier.verify(
+                admission,
+                expected_purpose=AttestationPurposeV1.MODEL_WORK_ADMISSION,
+                payload=model_work_admission_payload(bundle),
+            )
+        except AttestationError as error:
+            raise ModelExecutionAuthorizationError(
+                "model work admission attestation was rejected"
+            ) from error
+
+    @staticmethod
+    def _model_work_admission_hash(admission: AttestationV1) -> str:
+        return digest_model(HashKindV1.ATTESTATION, admission).value
+
+    @staticmethod
+    def _model_work_registration_request(
+        *,
+        bundle: ModelWorkBundleV2,
+        admission_hash: str,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": "autolean.model-work-registration-request.v3",
+            "bundle_id": bundle.bundle_id.value,
+            "bundle_hash": bundle.handoff_hash().value,
+            "admission_attestation_hash": admission_hash,
+        }
+
+    @staticmethod
+    def _assert_exact_model_work_registration(
+        registration: _StoredModelWorkRegistration,
+        *,
+        bundle: ModelWorkBundleV2,
+        admission: AttestationV1,
+        admission_hash: str,
+    ) -> None:
+        if (
+            registration.admission_hash != admission_hash
+            or canonical_json(registration.bundle.model_dump(mode="json"))
+            != canonical_json(bundle.model_dump(mode="json"))
+            or canonical_json(registration.admission.model_dump(mode="json"))
+            != canonical_json(admission.model_dump(mode="json"))
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work registration differs from its immutable bundle or admission"
+            )
+
     def _assert_current_issue_lease(
         self,
         bundle: FormalizationTaskBundleV1,
@@ -949,6 +1490,51 @@ class ModelExecutionAuthorizationService:
             raise ModelExecutionAuthorizationError(
                 "model execution lease is stale or expired"
             ) from error
+
+    def _assert_current_model_work_lease(
+        self,
+        bundle: ModelWorkBundleV2,
+        lease: Lease,
+    ) -> None:
+        if lease.job_id != bundle.bundle_id.value:
+            raise ModelExecutionAuthorizationError(
+                "model execution lease belongs to different registered model work"
+            )
+        if lease.holder_id != self._model_work_worker_id(bundle):
+            raise ModelExecutionAuthorizationError(
+                "model work lease holder is not its opaque system reference"
+            )
+        try:
+            self._control_plane.leases.assert_current(lease)
+        except StaleFence as error:
+            raise ModelExecutionAuthorizationError(
+                "model execution lease is stale or expired"
+            ) from error
+
+    def _assert_parent_admission(
+        self,
+        connection: sqlite3.Connection,
+        authorization: ModelExecutionAuthorizationV1,
+    ) -> None:
+        if authorization.subject_kind is ModelExecutionSubjectKindV1.THEOREM:
+            return
+        registration = self._stored_model_work(connection, authorization.bundle_id.value)
+        expected_hash = authorization.parent_admission_hash
+        expected_expiry = authorization.parent_admission_expires_at
+        if expected_hash is None or expected_expiry is None:
+            raise ModelExecutionAuthorizationError(
+                "model work authorization has no parent admission binding"
+            )
+        if (
+            registration.admission_hash != expected_hash.value
+            or registration.admission.expires_at != expected_expiry
+            or registration.bundle.handoff_hash() != authorization.bundle_hash
+            or registration.bundle.semantic_hash() != authorization.contract_hash
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work authorization parent admission binding differs from storage"
+            )
+        self._verify_model_work_admission(registration.bundle, registration.admission)
 
     @staticmethod
     def _validate_request_hashes(
@@ -1166,6 +1752,55 @@ class ModelExecutionAuthorizationService:
                 "stored model execution provider approval hash is corrupt"
             )
         return approval
+
+    def _stored_model_work(
+        self,
+        connection: sqlite3.Connection,
+        bundle_id: str,
+    ) -> _StoredModelWorkRegistration:
+        row = connection.execute(
+            """
+            SELECT bundle_hash, bundle_json,
+                   admission_attestation_hash, admission_attestation_json,
+                   registration_request_hash
+            FROM model_execution_work_bundles
+            WHERE bundle_id = ?
+            """,
+            (bundle_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model work bundle is not registered")
+        try:
+            bundle = ModelWorkBundleV2.model_validate_json(str(row["bundle_json"]))
+            admission = AttestationV1.model_validate_json(str(row["admission_attestation_json"]))
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model work bundle or admission is corrupt"
+            ) from error
+        admission_hash = self._model_work_admission_hash(admission)
+        if (
+            bundle.bundle_id.value != bundle_id
+            or str(row["bundle_hash"]) != bundle.handoff_hash().value
+            or str(row["admission_attestation_hash"]) != admission_hash
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model work bundle or admission hash is corrupt"
+            )
+        expected_registration_hash = request_hash(
+            self._model_work_registration_request(
+                bundle=bundle,
+                admission_hash=admission_hash,
+            )
+        )
+        if str(row["registration_request_hash"]) != expected_registration_hash:
+            raise ModelExecutionAuthorizationError(
+                "stored model work registration request hash is corrupt"
+            )
+        return _StoredModelWorkRegistration(
+            bundle=bundle,
+            admission=admission,
+            admission_hash=admission_hash,
+        )
 
     @staticmethod
     def _parse_authorization(serialized: str) -> ModelExecutionAuthorizationV1:
@@ -1461,6 +2096,29 @@ class ModelExecutionAuthorizationService:
             )
         return self._stored_provider_approval(connection, str(row["approval_id"]))
 
+    def _idempotent_model_work(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        key: str,
+        request_digest: str,
+    ) -> _StoredModelWorkRegistration | None:
+        row = connection.execute(
+            """
+            SELECT request_hash, bundle_id
+            FROM model_execution_work_idempotency
+            WHERE key = ?
+            """,
+            (key,),
+        ).fetchone()
+        if row is None:
+            return None
+        if str(row["request_hash"]) != request_digest:
+            raise ModelExecutionAuthorizationError(
+                "model work idempotency key was reused for a different request"
+            )
+        return self._stored_model_work(connection, str(row["bundle_id"]))
+
     @staticmethod
     def _record_idempotency(
         connection: sqlite3.Connection,
@@ -1494,6 +2152,23 @@ class ModelExecutionAuthorizationService:
             ) VALUES (?, ?, ?)
             """,
             (key, request_digest, approval_id),
+        )
+
+    @staticmethod
+    def _record_model_work_idempotency(
+        connection: sqlite3.Connection,
+        *,
+        key: str,
+        request_digest: str,
+        bundle_id: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO model_execution_work_idempotency (
+                key, request_hash, bundle_id
+            ) VALUES (?, ?, ?)
+            """,
+            (key, request_digest, bundle_id),
         )
 
     def _now(self) -> datetime:

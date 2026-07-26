@@ -10,11 +10,13 @@ from autolean_contracts import DigestV1, EndpointClassV1, HashKindV1, digest_mod
 
 from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.providers.base import (
+    ModelExecutionTimeoutPolicyV1,
     ModelRequest,
     ModelResponse,
     ProviderCapabilities,
     TokenUsage,
     ToolCall,
+    effective_model_timeout_seconds,
     require_request_capabilities,
 )
 from autolean_prover.providers.policy import (
@@ -138,6 +140,10 @@ class ResponsesProvider:
     def capabilities(self) -> ProviderCapabilities:
         return self._settings.capabilities
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1:
+        return ModelExecutionTimeoutPolicyV1(self._settings.timeout_seconds)
+
     def generate(self, request: ModelRequest) -> ModelResponse:
         require_request_capabilities(self, request)
         payload = self._request_payload(request)
@@ -145,12 +151,20 @@ class ResponsesProvider:
         api_key = resolve_secret_reference(self._settings.api_key_env, self._environment)
         if api_key is not None:
             headers["Authorization"] = f"Bearer {api_key}"
-        raw = self._transport.post_json(
-            url=f"{self._settings.base_url.rstrip('/')}/responses",
-            headers=headers,
-            payload=payload,
-            timeout_seconds=self._settings.timeout_seconds,
-        )
+        try:
+            raw = self._transport.post_json(
+                url=f"{self._settings.base_url.rstrip('/')}/responses",
+                headers=headers,
+                payload=payload,
+                timeout_seconds=effective_model_timeout_seconds(
+                    request,
+                    provider_timeout_seconds=self._settings.timeout_seconds,
+                ),
+            )
+        except ProviderResponseError:
+            raise
+        except Exception:
+            raise ProviderResponseError("Responses request failed") from None
         return self._parse_response(raw)
 
     def _request_payload(self, request: ModelRequest) -> dict[str, object]:

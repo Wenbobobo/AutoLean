@@ -35,6 +35,8 @@ export function classifyWorkRecord(event: EventView): WorkRecord {
   if (event.event_type === "gap.reported") category = "gap";
   else if (event.event_type === "contract_change.requested") category = "contract_change";
   else if (event.event_type.startsWith("verification.")) category = "verification";
+  else if (event.event_type.startsWith("t7_synthetic_node_v2.")) category = "synthetic_execution";
+  else if (event.event_type.startsWith("fate.attempt.")) category = "benchmark";
   else if (event.event_type === "proof.submitted") category = "attempt";
   else if (event.event_type.startsWith("task.")) category = "task";
   return { sequence: event.sequence, category, event };
@@ -62,11 +64,18 @@ export function buildNodeInspection(
   if (!node) return null;
 
   const byId = new Map(nodes.map((candidate) => [candidate.id, candidate]));
-  const relatedRuns = runs
-    .filter((run) => run.task_id === node.task_id)
-    .sort((left, right) => (right.started_at ?? "").localeCompare(left.started_at ?? ""));
+  const syntheticExecution = node.kind === "synthetic_execution";
+  const relatedRuns = syntheticExecution
+    ? []
+    : runs
+        .filter((run) => run.task_id === node.task_id)
+        .sort((left, right) => (right.started_at ?? "").localeCompare(left.started_at ?? ""));
   const workRecords = events
-    .filter((event) => event.task_id === node.task_id)
+    .filter(
+      (event) =>
+        event.task_id === node.task_id &&
+        (!syntheticExecution || event.event_type.startsWith("t7_synthetic_node_v2."))
+    )
     .map(classifyWorkRecord)
     .sort((left, right) => right.sequence - left.sequence);
 

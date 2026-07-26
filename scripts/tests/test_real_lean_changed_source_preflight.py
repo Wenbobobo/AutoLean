@@ -42,6 +42,22 @@ def test_changed_snapshots_apply_only_the_manifest_bound_phase(tmp_path: Path) -
             assert successor_hash == baseline_hash
 
 
+def test_upstream_change_case_exposes_a_leaseless_immutable_rebuild_bundle() -> None:
+    case = load_default_real_lean_change_case()
+
+    bundle = real_lean_changed_source_preflight.changed_source_rebuild_bundle(case)
+
+    assert bundle.changed_modules == (case.changed_module,)
+    assert bundle.changed_declaration_ids == case.changed_declaration_ids
+    assert bundle.declaration_invalidation_plan == case.expected_declaration_reverse_closure
+    assert bundle.module_rebuild_plan == case.expected_module_reverse_import_closure
+    assert bundle.module_reuse_plan == ("AutoLean.ProjectDagPreflight.Foundations",)
+    assert bundle.execution_status == "refused_pending_control_plane_lease"
+    rendered = bundle.to_dict()
+    assert rendered["content_sha256"] == bundle.content_sha256
+    assert rendered["execution_precondition"] == "control_plane_lease_and_fencing_token_required"
+
+
 def test_compile_command_uses_pinned_offline_read_only_snapshots(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch
 ) -> None:

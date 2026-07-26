@@ -136,6 +136,7 @@ export default function App() {
 
   const verified = nodes.filter((node) => node.status === "verified").length;
   const frozen = nodes.filter((node) => node.status === "frozen").length;
+  const synthetic = nodes.filter((node) => node.kind === "synthetic_execution").length;
   const cost = runs.reduce((total, run) => total + run.cost_usd, 0);
   const tokenTotal = runs.reduce((total, run) => total + run.input_tokens + run.output_tokens, 0);
   const gridSummary = useMemo(() => summarizeGrid(nodes), [nodes]);
@@ -204,6 +205,7 @@ export default function App() {
               </div>
               <div><span>Frozen</span><strong>{formatNumber(frozen)}</strong></div>
               <div><span>Verified</span><strong>{formatNumber(verified)}</strong></div>
+              <div><span>T7 synthetic</span><strong>{formatNumber(synthetic)}</strong></div>
               <div><span>Active</span><strong>{formatNumber(overview.active_runs)}</strong></div>
               <div><span>Blocked</span><strong>{formatNumber(overview.blocked_nodes)}</strong></div>
               <div><span>Tokens</span><strong>{formatNumber(tokenTotal)}</strong></div>

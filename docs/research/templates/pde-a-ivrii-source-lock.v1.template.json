@@ -1,0 +1,63 @@
+{
+  "schema_version": "autolean.pde-a-source-acquisition-lock-template.v1",
+  "reference_id": "ivrii-partial-differential-equations-official-pdf",
+  "state": "metadata_verified_download_pending",
+  "bibliography": {
+    "authors": [
+      "Victor Ivrii"
+    ],
+    "title": "Partial Differential Equations",
+    "host_institution": "University of Toronto Department of Mathematics",
+    "version_observation": {
+      "pdf_title_page_copyright_year": 2026,
+      "preface_snapshot_date": "2021-06-07",
+      "resolved_release_identifier": null,
+      "resolution_status": "requires_observed_bytes_and_operator_review"
+    }
+  },
+  "official_sources": {
+    "record_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/",
+    "pdf_download_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/PDE-textbook.pdf",
+    "transport_section_html_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/Chapter2/S2.1.html",
+    "markdown_source_url_pattern": "https://www.math.toronto.edu/ivrii/PDE-textbook/Chapter{chapter}/S{section}.md",
+    "markdown_access_status": "author_declared_not_downloaded"
+  },
+  "rights": {
+    "license_expression": "CC-BY-SA-4.0",
+    "license_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+    "license_evidence_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/PDE-textbook.pdf",
+    "rights_review_status": "pending",
+    "model_egress_policy": "pending_explicit_rights_review"
+  },
+  "acquisition": {
+    "operator_only": true,
+    "cache_root": ".cache/references/ivrii-pde-official-pdf/",
+    "cache_gitignored": true,
+    "retrieved_at": null,
+    "final_url": null,
+    "media_type": null,
+    "page_count": 415,
+    "size_bytes": null,
+    "sha256": null,
+    "download_verified": false
+  },
+  "scope": {
+    "source_graph_start": [
+      "Preface",
+      "0.1 What one needs to know?",
+      "Chapter 1 Introduction",
+      "Chapter 2 Section 2.1 First order PDEs"
+    ],
+    "first_candidate_family": "constant-coefficient first-order transport on the full plane",
+    "semantic_authority_status": "independent_rigorous_theorem_source_required",
+    "borthwick_status": "copyrighted_non_ingestible_cross_reference"
+  },
+  "non_claims": [
+    "not_a_reference_manifest_entry",
+    "not_a_cached_artifact",
+    "not_a_source_record",
+    "not_a_rights_record",
+    "not_a_statement_contract",
+    "not_a_builder_freeze_or_prover_handoff"
+  ]
+}

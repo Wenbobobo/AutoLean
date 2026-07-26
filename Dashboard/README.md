@@ -27,6 +27,22 @@ worker fencing tokens, or heartbeat timestamps. Consequently, the UI neither dra
 mathematical-to-formal-to-execution links nor claims lease freshness. Adding those signals
 requires an explicitly reviewed projection-schema revision, not a UI-side heuristic.
 
+The projection recognizes two additional public execution families through fixed allowlists.
+`autolean.t7-synthetic-node-result.v2` becomes an execution node whose status is explicitly
+synthetic and non-promotable; a completed fixture never appears as a verified proof. Its private
+node ID is replaced by a domain-separated SHA-256 public reference before entering any snapshot
+field. FATE's
+`autolean.fate-execution.v1` and `autolean.fate-execution.v2` started/terminal events become a
+redacted benchmark run with coarse usage and verifier state only. A terminal event is visible only
+after deterministic replay finds exactly one prior started event with the same schema, entity,
+run, problem, attempt number, and attempt seed. V2 requires an explicit deterministic seed in both
+events; V1 remains readable as historical evidence. Neither path exports lease holders, fencing tokens,
+source modules, approval snapshots, raw model output, candidate source, private CAS handles,
+or private digests. Builder pre-calibration records and ModelWork/authorized-role sidecars are
+not Dashboard inputs yet: they are not registered control-plane public event schemas, so the
+Dashboard deliberately leaves them out rather than inferring a state from files or private
+stores.
+
 `GET /api/phase-feedback` exposes replay-derived milestone and evidence feedback for current
 frozen bundles. It keeps Builder fidelity, proof-candidate verification, unresolved
 human-review inputs, and within-bundle mathematical dependent reachability separate. The
@@ -89,6 +105,10 @@ that keeps the bearer token outside browser assets.
 - Verification acceptance must be a JSON boolean whose value agrees with
   `verification.accepted` or `verification.rejected`. A malformed flag or conflicting
   event type aborts projection/export instead of displaying a false success.
+- Unknown event types retain the existing minimal event-view compatibility surface, including
+  their producer-supplied entity ID. Payload and metadata are never copied, but event producers
+  must still treat entity IDs as public. A family with private entity identities needs a reviewed
+  projection adapter before its events can enter the Dashboard source.
 
 ## Verification
 

@@ -99,6 +99,12 @@ remain ignored operator-local diagnostics; their bound digests are not public bu
 production attestations. The attachment does not make the exact image publicly retrievable,
 independently rerun the build, or recompute the complete Library input tree.
 
+`uv run python scripts/model_theory_review.py check --cache-root .cache/references` is the
+deterministic local preflight for this directory. It composes the existing review-plan, material,
+and span replay paths, then confirms that automated evidence still binds the V2 gap decision and
+that the advisory response remains unfilled. Success reports the two unresolved ambiguity IDs;
+the command rejects authority drift, non-pending verdicts, or any admission receipt.
+
 ## Conditions To Close The Gap
 
 T3 remains blocked until all of the following are recorded through the Builder authority path:

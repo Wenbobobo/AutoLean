@@ -7,6 +7,8 @@ const eventStateLabel: Record<Exclude<DagEventState, null>, string> = {
   gap: "Gap",
   contract_change: "Contract change",
   verification: "Verification",
+  synthetic_execution: "T7 synthetic",
+  benchmark: "FATE benchmark",
   other: "Other"
 };
 
@@ -93,7 +95,7 @@ export function DagHealthMap({
         {(["nominal", "active", "attention", "critical", "unknown"] as HealthTone[]).map((tone) => (
           <span key={tone}><i className={"health-signal tone-" + tone} />{toneLabel[tone]}</span>
         ))}
-        {(["attempt", "gap", "contract_change", "verification"] as Exclude<DagEventState, null>[]).map((state) => (
+        {(["attempt", "gap", "contract_change", "verification", "synthetic_execution", "benchmark"] as Exclude<DagEventState, null>[]).map((state) => (
           <span className={"event-key event-" + state} key={state}><i />{eventStateLabel[state]}</span>
         ))}
         {map.unresolvedDependencies > 0 && (

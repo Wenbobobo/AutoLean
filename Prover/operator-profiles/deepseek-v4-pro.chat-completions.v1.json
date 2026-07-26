@@ -1,0 +1,19 @@
+{
+  "schema_version": "autolean.operator-profile.chat-completions.v1",
+  "profile_id": "deepseek-v4-pro-canary",
+  "provider_id": "deepseek",
+  "model_id": "deepseek-v4-pro",
+  "base_url": "https://api.deepseek.com",
+  "api_key_env": "AUTOLEAN_DEEPSEEK_API_KEY",
+  "endpoint_class": "approved_external",
+  "capabilities": [
+    "text_generation",
+    "usage_accounting",
+    "reasoning_effort"
+  ],
+  "timeout_seconds": 120,
+  "thinking_enabled": true,
+  "default_reasoning_effort": "high",
+  "canary_max_input_tokens": 2048,
+  "canary_max_output_tokens": 256
+}

@@ -300,9 +300,11 @@ class IndependentExecutionTrustPolicyV1:
             if (
                 self.execution_class is IndependentExecutionClassV1.PRODUCTION
                 and getattr(identity.authenticator, "execution_class", None)
-                is IndependentExecutionClassV1.TEST_ONLY
+                is not IndependentExecutionClassV1.PRODUCTION
             ):
-                raise ValueError("production authority cannot trust a test-only receipt key")
+                raise ValueError(
+                    "production authority requires an explicitly production-class receipt key"
+                )
         object.__setattr__(self, "trusted_verifiers", trusted)
 
     def authenticate(self, receipt: IndependentExecutionReceiptV1) -> None:

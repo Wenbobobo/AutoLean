@@ -1,0 +1,184 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-library-substrate-builder-query: $1" >&2
+  exit 2
+}
+
+fail_with_diagnostic() {
+  phase=$1
+  diagnostic=$2
+  printf '%s\n' \
+    "autolean-library-substrate-builder-query: phase=$phase failed" >&2
+  head -c 4096 "$diagnostic" >&2
+  printf '\n' >&2
+  exit 2
+}
+
+export LC_ALL=C
+[ "$#" -eq 4 ] || [ "$#" -eq 6 ] ||
+  fail "expected target, image, and optional replay type hash"
+[ "$1" = "--target" ] || fail "missing target argument"
+target=$2
+[ "$3" = "--image" ] || fail "missing image argument"
+image=$4
+expected_type_sha256=-
+if [ "$#" -eq 6 ]; then
+  [ "$5" = "--expected-type-sha256" ] || fail "invalid replay argument"
+  expected_type_sha256=$6
+  case "$expected_type_sha256" in
+    *[!0-9a-f]*|"") fail "replay type hash is not a lowercase SHA-256" ;;
+  esac
+  [ "${#expected_type_sha256}" -eq 64 ] ||
+    fail "replay type hash has invalid SHA-256 length"
+fi
+
+case "$target" in
+  Candidate.*) ;;
+  *) fail "target declaration is outside the Candidate namespace" ;;
+esac
+[ "${#target}" -le 256 ] || fail "target declaration exceeds the policy limit"
+case "$target" in
+  *[!A-Za-z0-9_.]*|*..*|*.) fail "target declaration is not canonical ASCII" ;;
+esac
+case "$image" in
+  autolean/library-substrate@sha256:*) ;;
+  *) fail "image is not a pinned library-substrate digest" ;;
+esac
+image_digest=${image#autolean/library-substrate@sha256:}
+case "$image_digest" in
+  *[!0-9a-f]*|"") fail "image digest is not a lowercase SHA-256" ;;
+esac
+[ "${#image_digest}" -eq 64 ] || fail "image digest has invalid SHA-256 length"
+
+root=/opt/autolean/library-substrate
+receipt=$root/attestations/library-substrate-image-receipt.v2.json
+manifest=$root/attestations/runtime-manifest.v1.json
+build_input=$root/attestations/build-input.v1.json
+helper=/opt/autolean/lib/AutoleanLibrarySubstrateBuilderQuery.lean
+wrapper=$root/bin/autolean-library-substrate-builder-query
+receipt_tool=$root/bin/autolean-library-substrate-build-receipt
+source=/input/Candidate.lean
+
+for path in "$receipt" "$manifest" "$build_input" "$helper" "$wrapper" "$receipt_tool" "$source"; do
+  test -f "$path" && test ! -L "$path" || fail "required regular input or image asset is unavailable"
+done
+source_size=$(wc -c <"$source" | tr -d ' ')
+case "$source_size" in
+  *[!0-9]*|"") fail "Candidate source size is invalid" ;;
+esac
+[ "$source_size" -gt 0 ] && [ "$source_size" -le 1048576 ] ||
+  fail "Candidate source is outside the size limit"
+"$receipt_tool" >/dev/null || fail "image receipt preflight failed"
+
+json_string() {
+  field=$1
+  file=$2
+  LC_ALL=C sed -n \
+    "s/^.*\"$field\":\"\([^\"]*\)\".*$/\1/p" \
+    "$file"
+}
+json_hash() {
+  field=$1
+  file=$2
+  value=$(json_string "$field" "$file")
+  case "$value" in *[!0-9a-f]*|"") fail "$field is not a lowercase SHA-256" ;; esac
+  [ "${#value}" -eq 64 ] || fail "$field has invalid SHA-256 length"
+  printf '%s\n' "$value"
+}
+
+image_receipt_sha256=$(sha256sum "$receipt" | awk '{print $1}')
+build_input_sha256=$(sha256sum "$build_input" | awk '{print $1}')
+runtime_manifest_sha256=$(sha256sum "$manifest" | awk '{print $1}')
+helper_sha256=$(sha256sum "$helper" | awk '{print $1}')
+wrapper_sha256=$(sha256sum "$wrapper" | awk '{print $1}')
+test "$build_input_sha256" = "$(json_hash build_input_sha256 "$receipt")" ||
+  fail "build input differs from the image receipt"
+test "$runtime_manifest_sha256" = "$(json_hash runtime_manifest_sha256 "$receipt")" ||
+  fail "runtime manifest differs from the image receipt"
+test "$helper_sha256" = "$(json_hash builder_query_helper_sha256 "$receipt")" ||
+  fail "Builder query helper differs from the image receipt"
+test "$wrapper_sha256" = "$(json_hash builder_query_wrapper_sha256 "$receipt")" ||
+  fail "Builder query wrapper differs from the image receipt"
+test "$helper_sha256" = "$(json_hash BUILDER_QUERY_HELPER_SHA256 "$build_input")" ||
+  fail "Builder query helper differs from the build input"
+test "$wrapper_sha256" = "$(json_hash BUILDER_QUERY_WRAPPER_SHA256 "$build_input")" ||
+  fail "Builder query wrapper differs from the build input"
+
+profile_id=$(json_string profile_id "$receipt")
+profile_sha256=$(json_hash profile_sha256 "$receipt")
+parent_image=$(json_string parent_image "$receipt")
+mathlib_revision=$(json_string mathlib_revision "$manifest")
+[ -n "$profile_id" ] && [ -n "$parent_image" ] && [ -n "$mathlib_revision" ] ||
+  fail "image-owned profile identity is unavailable"
+
+parent_lean_path=$(cat /opt/autolean/environment/lean-path)
+[ -n "$parent_lean_path" ] || fail "parent Lean path is unavailable"
+runtime=$root/lib/lean
+lean_path="$runtime:$parent_lean_path"
+scratch=/tmp/autolean-library-substrate-builder-query
+test ! -e "$scratch" || fail "Builder query scratch path already exists"
+mkdir -m 0700 "$scratch"
+trap 'rm -rf "$scratch"' EXIT HUP INT TERM
+cp "$source" "$scratch/Candidate.lean"
+chmod 0444 "$scratch/Candidate.lean"
+source_sha256=$(sha256sum "$scratch/Candidate.lean" | awk '{print $1}')
+test "$source_sha256" = "$(sha256sum "$source" | awk '{print $1}')" ||
+  fail "Candidate source changed while being snapshotted"
+if grep -Eq \
+  '(^|[^A-Za-z0-9_])(theorem|lemma|example|def|opaque|instance|by|sorry|admit|exact|run_cmd|run_tac|elab|macro|syntax|initialize)([^A-Za-z0-9_]|$)|#' \
+  "$scratch/Candidate.lean"
+then
+  fail "Candidate source contains proof-bearing or executable declaration syntax"
+fi
+
+if ! LEAN_PATH="$lean_path" lean -R "$scratch" \
+  -o "$scratch/Candidate.olean" "$scratch/Candidate.lean" \
+  >"$scratch/compile.stdout" 2>"$scratch/compile.stderr"
+then
+  fail_with_diagnostic compile "$scratch/compile.stderr"
+fi
+test ! -s "$scratch/compile.stdout" && test ! -s "$scratch/compile.stderr" ||
+  fail "candidate statement compiler emitted unexpected diagnostics"
+test "$source_sha256" = "$(sha256sum "$scratch/Candidate.lean" | awk '{print $1}')" &&
+  test "$source_sha256" = "$(sha256sum "$source" | awk '{print $1}')" ||
+  fail "Candidate source changed during compilation"
+test -f "$scratch/Candidate.olean" && test ! -L "$scratch/Candidate.olean" ||
+  fail "candidate statement compiler did not emit Candidate.olean"
+candidate_olean_size=$(wc -c <"$scratch/Candidate.olean" | tr -d ' ')
+case "$candidate_olean_size" in
+  *[!0-9]*|"") fail "candidate statement compiler emitted an invalid OLean size" ;;
+esac
+[ "$candidate_olean_size" -gt 0 ] && [ "$candidate_olean_size" -le 67108864 ] ||
+  fail "candidate statement compiler emitted an OLean outside the size limit"
+
+if ! LEAN_PATH="$scratch:$lean_path" lean --run "$helper" \
+  "$target" \
+  "$source_sha256" \
+  "$image" \
+  "$expected_type_sha256" \
+  "$image_receipt_sha256" \
+  "$build_input_sha256" \
+  "$runtime_manifest_sha256" \
+  "$helper_sha256" \
+  "$wrapper_sha256" \
+  "$profile_id" \
+  "$profile_sha256" \
+  "$parent_image" \
+  "$mathlib_revision" \
+  >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+then
+  fail_with_diagnostic query "$scratch/query.stderr"
+fi
+test ! -s "$scratch/query.stderr" ||
+  fail "Builder query emitted stderr on success"
+test "$(wc -l <"$scratch/query.stdout" | tr -d ' ')" -eq 1 ||
+  fail "Builder query did not emit exactly one JSON line"
+query_size=$(wc -c <"$scratch/query.stdout" | tr -d ' ')
+case "$query_size" in
+  *[!0-9]*|"") fail "Builder query output size is invalid" ;;
+esac
+[ "$query_size" -gt 1 ] && [ "$query_size" -le 2097152 ] ||
+  fail "Builder query output is outside the size limit"
+cat "$scratch/query.stdout"

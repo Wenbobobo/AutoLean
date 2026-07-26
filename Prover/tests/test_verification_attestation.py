@@ -909,7 +909,7 @@ def test_gateway_rejects_shared_key_and_every_local_production_composition(tmp_p
             },
         )
 
-    with pytest.raises(ValueError, match="test-only receipt key"):
+    with pytest.raises(ValueError, match="production-class receipt key"):
         IndependentExecutionTrustPolicyV1(
             gateway_signing_key_id="production-gateway-key",
             execution_class=IndependentExecutionClassV1.PRODUCTION,
@@ -924,8 +924,35 @@ def test_gateway_rejects_shared_key_and_every_local_production_composition(tmp_p
         )
 
     class ProductionAuthenticator:
+        execution_class = IndependentExecutionClassV1.PRODUCTION
+
         def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
             del receipt
+
+    class UnmarkedAuthenticator:
+        def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
+            del receipt
+
+    class UnknownClassAuthenticator:
+        execution_class = "production"
+
+        def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
+            del receipt
+
+    for authenticator in (UnmarkedAuthenticator(), UnknownClassAuthenticator()):
+        with pytest.raises(ValueError, match="production-class receipt key"):
+            IndependentExecutionTrustPolicyV1(
+                gateway_signing_key_id="production-gateway-key",
+                execution_class=IndependentExecutionClassV1.PRODUCTION,
+                trusted_verifiers={
+                    "production-independent-verifier": TrustedIndependentExecutionVerifierV1(
+                        verifier_id="production-independent-verifier",
+                        authentication_key_id="production-independent-key",
+                        execution_class=IndependentExecutionClassV1.PRODUCTION,
+                        authenticator=authenticator,
+                    )
+                },
+            )
 
     class ForgedProductionVerifier:
         def verify(

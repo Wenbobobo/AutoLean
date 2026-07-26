@@ -15,10 +15,15 @@ from autolean_contracts import (
 from autolean_contracts.hashing import require_digest_kind
 
 from autolean_prover.errors import CapabilityError, ConfigurationError
-from autolean_prover.providers.policy import validate_reasoning_effort
+from autolean_prover.providers.policy import (
+    validate_positive_timeout,
+    validate_reasoning_effort,
+)
 
 if TYPE_CHECKING:
     from autolean_prover.context import ContextPack
+
+MAX_MODEL_REQUEST_TIMEOUT_SECONDS = 3600.0
 
 
 class Capability(StrEnum):
@@ -95,6 +100,7 @@ class ModelRequest:
     system_prompt: str | None = None
     max_input_tokens: int = 4096
     max_output_tokens: int = 4096
+    timeout_seconds: float | None = None
     reasoning_effort: str | None = None
     tools: tuple[ToolSpec, ...] = ()
     required_capabilities: frozenset[Capability] = field(default_factory=frozenset)
@@ -112,6 +118,15 @@ class ModelRequest:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ConfigurationError(f"{label} must be positive")
+        if self.timeout_seconds is not None:
+            validate_positive_timeout(
+                self.timeout_seconds,
+                label="model request timeout_seconds",
+            )
+            if self.timeout_seconds > MAX_MODEL_REQUEST_TIMEOUT_SECONDS:
+                raise ConfigurationError(
+                    "model request timeout_seconds exceeds the supported upper bound"
+                )
         validate_reasoning_effort(self.reasoning_effort, label="reasoning_effort")
         if not isinstance(self.required_capabilities, frozenset) or not all(
             isinstance(value, Capability) for value in self.required_capabilities
@@ -145,6 +160,7 @@ class ModelRequest:
         system_prompt: str | None = None,
         max_input_tokens: int = 4096,
         max_output_tokens: int = 4096,
+        timeout_seconds: float | None = None,
         reasoning_effort: str | None = None,
         tools: tuple[ToolSpec, ...] = (),
         required_capabilities: frozenset[Capability] = frozenset(),
@@ -161,6 +177,7 @@ class ModelRequest:
             system_prompt=system_prompt,
             max_input_tokens=max_input_tokens,
             max_output_tokens=max_output_tokens,
+            timeout_seconds=timeout_seconds,
             reasoning_effort=reasoning_effort,
             tools=tools,
             required_capabilities=required_capabilities,
@@ -175,11 +192,12 @@ class ModelRequest:
             return digest_model(
                 HashKindV1.PROMPT,
                 {
-                    "schema_version": "autolean.model-request.v1",
+                    "schema_version": "autolean.model-request.v2",
                     "prompt": self.prompt,
                     "system_prompt": self.system_prompt,
                     "max_input_tokens": self.max_input_tokens,
                     "max_output_tokens": self.max_output_tokens,
+                    "timeout_seconds": self.timeout_seconds,
                     "reasoning_effort": self.reasoning_effort,
                     "tools": [
                         {
@@ -219,6 +237,32 @@ class ModelRequest:
 
 
 @dataclass(frozen=True, slots=True)
+class ModelExecutionTimeoutPolicyV1:
+    """Local, immutable execution deadline policy for one registered provider."""
+
+    configured_ceiling_seconds: float
+
+    def __post_init__(self) -> None:
+        validate_positive_timeout(
+            self.configured_ceiling_seconds,
+            label="provider configured timeout ceiling",
+        )
+        object.__setattr__(
+            self,
+            "configured_ceiling_seconds",
+            float(self.configured_ceiling_seconds),
+        )
+
+    def effective_timeout_seconds(self, request: ModelRequest) -> float:
+        """Return the actual provider deadline without probing or performing I/O."""
+
+        return effective_model_timeout_seconds(
+            request,
+            provider_timeout_seconds=self.configured_ceiling_seconds,
+        )
+
+
+@dataclass(frozen=True, slots=True)
 class ModelResponse:
     provider_id: str
     model_id: str
@@ -245,8 +289,27 @@ class ModelProvider(Protocol):
     @property
     def capabilities(self) -> ProviderCapabilities: ...
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1: ...
+
     def generate(self, request: ModelRequest) -> ModelResponse: ...
 
 
 def require_request_capabilities(provider: ModelProvider, request: ModelRequest) -> None:
     provider.capabilities.require(request.inferred_capabilities(), provider_id=provider.provider_id)
+
+
+def effective_model_timeout_seconds(
+    request: ModelRequest,
+    *,
+    provider_timeout_seconds: float,
+) -> float:
+    """Return the enforced deadline; a request may only lower the provider ceiling."""
+
+    validate_positive_timeout(
+        provider_timeout_seconds,
+        label="provider timeout_seconds",
+    )
+    if request.timeout_seconds is None:
+        return float(provider_timeout_seconds)
+    return min(float(provider_timeout_seconds), float(request.timeout_seconds))

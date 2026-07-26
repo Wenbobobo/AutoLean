@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import copy
 import hashlib
+import json
 import os
 import subprocess
 from pathlib import Path
@@ -9,7 +10,10 @@ from types import SimpleNamespace
 from typing import Any, cast
 
 import pytest
-from autolean_builder.fine_span_attachment import FineSourceSpanV2
+from autolean_builder.fine_span_attachment import (
+    FineSourceSpanV2,
+    FineSpanAttachmentError,
+)
 
 from scripts import model_theory_review as review
 
@@ -60,6 +64,367 @@ def test_tracked_plan_replays_cross_page_claims() -> None:
             "187",
         ),
     ]
+
+
+def test_local_review_gate_replays_sources_and_keeps_gap_unresolved() -> None:
+    cache_root = review.ROOT / ".cache" / "references"
+    source = (
+        cache_root
+        / "openlogic-sets-logic-computation-2026-07-12-text-pypdf-6.14.2"
+        / "6184495568a4487848e747f25385cb4081be1cd87f77488c9de0046d600cfa6d.txt"
+    )
+    if not source.exists():
+        pytest.skip("official local pypdf 6.14.2 source cache is intentionally absent")
+
+    assert review.verify_local_review_gate(cache_root) == (
+        "section-7-5-page-pair-unreconciled",
+        "universal-right-page-pair-unreconciled",
+    )
+
+
+def test_local_review_gate_always_replays_tracked_review_bindings(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: dict[str, object] = {}
+    monkeypatch.setattr(review, "verify_materials", lambda *_: (b"%PDF", b"bound text"))
+
+    def record_spans(
+        text: bytes,
+        spans: tuple[FineSourceSpanV2, ...],
+    ) -> tuple[review.SpanPageMap, ...]:
+        observed["text"] = text
+        observed["spans"] = spans
+        return ()
+
+    monkeypatch.setattr(review, "map_spans_to_pages", record_spans)
+
+    assert review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed") == (
+        "section-7-5-page-pair-unreconciled",
+        "universal-right-page-pair-unreconciled",
+    )
+    assert observed["text"] == b"bound text"
+    assert observed["spans"] == review.load_review_plan().fine_spans.spans
+
+
+def test_local_review_gate_rejects_a_verdict_without_authority(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original_load = review._load_object
+
+    def changed_response(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        payload, raw = original_load(path, label)
+        if path != review.ROOT / review.RESPONSE_RELATIVE_PATH:
+            return payload, raw
+        changed = copy.deepcopy(payload)
+        rows = changed["page_ambiguity_reviews"]
+        assert isinstance(rows, list)
+        first = rows[0]
+        assert isinstance(first, dict)
+        first["page_ambiguity_verdict"] = "unresolved"
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_response)
+
+    with pytest.raises(review.ReviewBuildError, match="non-authoritative T3 evidence"):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+
+
+def test_local_review_gate_normalizes_rule_matrix_mutation_probe(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    observed: list[Path] = []
+    fine_span_type = type(review.load_review_plan().fine_spans)
+
+    def reject_mutated_matrix(_attachment: object, path: Path) -> None:
+        observed.append(path)
+        raise FineSpanAttachmentError("independent mutation probe")
+
+    monkeypatch.setattr(fine_span_type, "assert_binds_rule_matrix", reject_mutated_matrix)
+
+    with pytest.raises(review.ReviewBuildError, match="fixed source-rule matrix"):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+    assert observed == [review.ROOT / review.RULE_MATRIX_RELATIVE_PATH]
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "stale",
+        "minimal",
+        "schema_keys",
+        "schema_version",
+        "authority_keys",
+        "authority_value",
+        "artifact_kind",
+        "matrix_path",
+        "context_policy",
+        "source_excerpt",
+        "local_cache_path",
+        "prompt_or_log",
+    ),
+)
+def test_local_review_gate_rejects_review_evidence_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    original_load = review._load_object
+
+    def changed_evidence(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        payload, raw = original_load(path, label)
+        if path != review.ROOT / review.REVIEW_EVIDENCE_RELATIVE_PATH:
+            return payload, raw
+        changed = copy.deepcopy(payload)
+        reports = changed["reports"]
+        assert isinstance(reports, list)
+        if mutation == "minimal":
+            changed["reports"] = []
+        elif mutation == "schema_keys":
+            changed["unexpected_field"] = "drift"
+        elif mutation == "schema_version":
+            changed["schema_version"] = "stale"
+        elif mutation in {"authority_keys", "authority_value"}:
+            authority = changed["authority_boundary"]
+            assert isinstance(authority, dict)
+            if mutation == "authority_keys":
+                del authority["may_issue_admission_receipt"]
+            else:
+                authority["may_issue_admission_receipt"] = True
+        elif mutation == "artifact_kind":
+            changed["artifact_kind"] = "stale"
+        elif mutation == "matrix_path":
+            changed["public_source_rule_matrix_path"] = "stale.json"
+        elif mutation == "context_policy":
+            changed["report_context_policy"] = "stale"
+        elif mutation == "source_excerpt":
+            changed["contains_source_excerpt"] = True
+        elif mutation == "local_cache_path":
+            changed["contains_local_cache_path"] = True
+        elif mutation == "prompt_or_log":
+            changed["contains_prompt_or_raw_log"] = True
+        else:
+            first = reports[0]
+            assert isinstance(first, dict)
+            first["reviewer_id"] = "stale-reviewer"
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_evidence)
+
+    with pytest.raises(review.ReviewBuildError, match="non-authoritative T3 evidence"):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+
+
+@pytest.mark.parametrize(
+    "extra_field",
+    ("admission_receipt", "credentials", "raw_source_excerpt"),
+)
+def test_local_review_gate_rejects_extra_review_report_fields(
+    monkeypatch: pytest.MonkeyPatch,
+    extra_field: str,
+) -> None:
+    original_load = review._load_object
+
+    def changed_evidence(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        payload, raw = original_load(path, label)
+        if path != review.ROOT / review.REVIEW_EVIDENCE_RELATIVE_PATH:
+            return payload, raw
+        changed = copy.deepcopy(payload)
+        reports = changed["reports"]
+        assert isinstance(reports, list)
+        first = reports[0]
+        assert isinstance(first, dict)
+        first[extra_field] = "forbidden"
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_evidence)
+
+    with pytest.raises(review.ReviewBuildError, match="report schema drifted"):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+
+
+@pytest.mark.parametrize(
+    "mutation",
+    (
+        "packet_path",
+        "authority_keys",
+        "authority_value",
+        "schema_keys",
+        "schema_version",
+        "span_pending",
+        "ambiguity_pending",
+        "reviewer_identity",
+        "reviewer_credential",
+        "reviewer_auth",
+        "fragment_review",
+        "fin_review",
+        "init_axiom_review",
+        "overall_review",
+        "public_safety",
+        "span_notes",
+        "span_correction",
+        "ambiguity_notes",
+        "page_evidence",
+        "nested_keys",
+    ),
+)
+def test_local_review_gate_rejects_response_binding_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    original_load = review._load_object
+
+    def changed_response(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        payload, raw = original_load(path, label)
+        if path != review.ROOT / review.RESPONSE_RELATIVE_PATH:
+            return payload, raw
+        changed = copy.deepcopy(payload)
+        if mutation == "packet_path":
+            binding = changed["packet_binding"]
+            assert isinstance(binding, dict)
+            binding["packet_path"] = "Builder/pilots/model-theory-admission/stale.json"
+        elif mutation == "authority_keys":
+            authority = changed["authority_boundary"]
+            assert isinstance(authority, dict)
+            del authority["may_promote"]
+        elif mutation == "authority_value":
+            authority = changed["authority_boundary"]
+            assert isinstance(authority, dict)
+            authority["may_promote"] = True
+        elif mutation == "schema_keys":
+            changed["unexpected_field"] = "drift"
+        elif mutation == "schema_version":
+            changed["schema_version"] = "stale"
+        elif mutation == "span_pending":
+            rows = changed["span_reviews"]
+            assert isinstance(rows, list)
+            first = rows[0]
+            assert isinstance(first, dict)
+            first["visual_locator_verdict"] = "accepted"
+        elif mutation == "ambiguity_pending":
+            rows = changed["page_ambiguity_reviews"]
+            assert isinstance(rows, list)
+            first = rows[0]
+            assert isinstance(first, dict)
+            first["page_ambiguity_verdict"] = "resolved"
+        elif mutation in {"reviewer_identity", "reviewer_credential", "reviewer_auth"}:
+            reviewer = changed["reviewer_record"]
+            assert isinstance(reviewer, dict)
+            if mutation == "reviewer_identity":
+                reviewer["reviewer_id"] = "human:unverified"
+            elif mutation == "reviewer_credential":
+                reviewer["qualification_note"] = "unverified"
+            else:
+                reviewer["identity_authenticated"] = True
+        elif mutation == "fragment_review":
+            fragment = changed["fragment_naming_review"]
+            assert isinstance(fragment, dict)
+            fragment["proposed_exact_name"] = "unreviewed-name"
+        elif mutation == "fin_review":
+            fin_review = changed["fin_n_freshness_review"]
+            assert isinstance(fin_review, dict)
+            fin_review["freshness_encoding_verdict"] = "accepted"
+        elif mutation == "init_axiom_review":
+            axiom_review = changed["init_axiom_policy_review"]
+            assert isinstance(axiom_review, dict)
+            axiom_review["accepted_axioms"] = ["Classical.choice"]
+        elif mutation == "overall_review":
+            overall = changed["overall_review"]
+            assert isinstance(overall, dict)
+            overall["rationale"] = "unreviewed"
+        elif mutation == "public_safety":
+            safety = changed["public_safety_confirmation"]
+            assert isinstance(safety, dict)
+            safety["contains_credentials"] = True
+        elif mutation in {"span_notes", "span_correction"}:
+            rows = changed["span_reviews"]
+            assert isinstance(rows, list)
+            first = rows[0]
+            assert isinstance(first, dict)
+            if mutation == "span_notes":
+                first["notes"] = "unreviewed"
+            else:
+                correction = first["locator_correction"]
+                assert isinstance(correction, dict)
+                correction["corrected_start_offset"] = 1
+        elif mutation in {"ambiguity_notes", "page_evidence"}:
+            rows = changed["page_ambiguity_reviews"]
+            assert isinstance(rows, list)
+            first = rows[0]
+            assert isinstance(first, dict)
+            if mutation == "ambiguity_notes":
+                first["notes"] = "unreviewed"
+            else:
+                pages = first["page_evidence"]
+                assert isinstance(pages, list)
+                page = pages[0]
+                assert isinstance(page, dict)
+                page["pdf_page_1_based"] = 1
+        else:
+            fragment = changed["fragment_naming_review"]
+            assert isinstance(fragment, dict)
+            fragment["unexpected_field"] = "drift"
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_response)
+
+    with pytest.raises(
+        review.ReviewBuildError,
+        match=r"authority|non-authoritative T3 evidence",
+    ):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+
+
+@pytest.mark.parametrize("mutation", ("disposition", "authority_keys", "authority_value"))
+def test_local_review_gate_rejects_packet_boundary_drift(
+    monkeypatch: pytest.MonkeyPatch,
+    mutation: str,
+) -> None:
+    original_load = review._load_object
+
+    def changed_packet(path: Path, label: str) -> tuple[dict[str, object], bytes]:
+        payload, raw = original_load(path, label)
+        if path != review.ROOT / review.PACKET_RELATIVE_PATH:
+            return payload, raw
+        changed = copy.deepcopy(payload)
+        if mutation == "disposition":
+            binding = changed["decision_binding"]
+            assert isinstance(binding, dict)
+            binding["disposition"] = "admit"
+        else:
+            authority = changed["authority_boundary"]
+            assert isinstance(authority, dict)
+            if mutation == "authority_keys":
+                del authority["may_promote"]
+            else:
+                authority["may_promote"] = True
+        return changed, raw
+
+    monkeypatch.setattr(review, "_load_object", changed_packet)
+
+    with pytest.raises(
+        review.ReviewBuildError,
+        match=r"authority|non-authoritative T3 evidence",
+    ):
+        review.verify_local_review_gate(review.ROOT / ".cache" / "not-needed")
+
+
+def test_check_cli_reports_explicit_non_admission(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(
+        review,
+        "verify_local_review_gate",
+        lambda _: ("ambiguity-one", "ambiguity-two"),
+    )
+
+    review.main(["check", "--cache-root", "unused"])
+
+    assert json.loads(capsys.readouterr().out) == {
+        "admission": "forbidden",
+        "disposition": "gap",
+        "status": "ok",
+        "unresolved_ambiguity_ids": ["ambiguity-one", "ambiguity-two"],
+    }
 
 
 def test_cross_page_mapping_binds_claimed_page_render() -> None:

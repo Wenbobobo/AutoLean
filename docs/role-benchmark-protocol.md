@@ -102,13 +102,13 @@ frozen required capabilities. Identity or configuration drift stops before the p
 exceptions are reduced to a credential-free blocker code, observed capability gaps fail closed,
 and there is no fallback.
 
-The canonical readiness report always states `authority_granted: false` and reports provider
-targets separately from execution backends. The current `authorized_external` backend is
-machine-readably blocked because the role harness has no authorization bridge or production role
-evaluators. Its canonical content hash is frozen into the run manifest. A green scripted-fake
-preflight is therefore not API readiness. Library execution accepts the complete canonical
-readiness report, normalizes it, and reruns the fail-closed readiness check itself; callers cannot
-substitute an unverified readiness hash.
+The canonical V3 readiness report always states `authority_granted: false` and reports provider
+targets separately from execution backends. The V3 `authorized_external` backend remains
+machine-readably blocked because V3 has no production role evaluators and admits only the
+scripted-fake execution receipt. Its canonical content hash is frozen into the run manifest. A
+green scripted-fake preflight is therefore not API readiness. Library execution accepts the
+complete canonical readiness report, normalizes it, and reruns the fail-closed readiness check
+itself; callers cannot substitute an unverified readiness hash.
 
 ## Repetition and comparison
 
@@ -156,35 +156,180 @@ uv run python scripts/role_benchmark.py compare `
   --candidate-cell fake.prover
 ```
 
-To compare a whole role-calibration suite, use repeated `--cell-pair` arguments rather than
-manually merging per-role outputs:
+To compare the checked-in V3 role-calibration suite, use its named preset rather than manually
+merging per-role outputs:
 
 ```powershell
 uv run python scripts/role_benchmark.py compare-suite `
   --database .tmp-role-benchmark/roles.sqlite3 `
   --baseline-run calibration-v1 `
   --candidate-run calibration-v1 `
-  --cell-pair fake.oracle.prover=fake.mutant.prover `
-  --cell-pair fake.oracle.statement-formalizer=fake.mutant.statement-formalizer `
-  --cell-pair fake.oracle.fidelity-reviewer=fake.mutant.fidelity-reviewer `
-  --cell-pair fake.oracle.cheating-supervisor=fake.mutant.cheating-supervisor `
-  --cell-pair fake.oracle.task-allocator=fake.mutant.task-allocator
+  --preset calibration-pairs-v3
 ```
 
-The suite output is only a deterministic bundle of pairwise comparisons. It rejects cross-role
-pairs and duplicate roles, and it does not compute a global score across Prover, formalizer,
-reviewer, supervisor, and allocator roles.
+`calibration-pairs-v3` expands, in this fixed order, to the five oracle/mutant pairs for Prover,
+statement formalizer, fidelity reviewer, cheating supervisor, and task allocator. A preset and
+explicit `--cell-pair` values may be supplied together: the preset pairs are expanded first and
+the explicit pairs are appended. They are never overridden or deduplicated. Every resulting pair
+must stay within one role, and the suite rejects any second comparison for an already represented
+role. Since `calibration-pairs-v3` already represents all five initial roles, an additional valid
+pair necessarily fails as a duplicate role; an additional cross-role pair fails as a cross-role
+comparison.
+
+The suite output is only a deterministic bundle of pairwise comparisons. It does not compute a
+global score across Prover, formalizer, reviewer, supervisor, and allocator roles.
 
 Use a script or short command file for repeated production runs rather than expanding this into a
 long shell command.
 
 ## External-provider bridge
 
-An online executor is future work and must be operator-owned. It must build a role-scoped
-`ContextPack`, obtain a current lease-bound `ModelExecutionAuthorizationV1`, and call
-`ProviderRegistry.generate`. It may not call a raw provider adapter or endpoint from this harness.
-The resulting trial must retain provider usage and authorization/evidence identities without
-persisting credentials or raw restricted context.
+`benchmarks.authorized_role_bridge` is a separate, non-promotable execution substrate; it does not
+change or extend the V3 fake report. Its deterministic suite builder accepts a provider/model
+target but derives all five role cells and ten cases from the checked-in
+`calibration-pairs.v3.json` bytes. The loader pins SHA-256
+`367b6cad7ca259798b20fd1710f29b06c64f2fbdbea58687588e450ab88761d8`, verifies the repository
+Apache-2.0 license bytes at SHA-256
+`5c9817c129b98e7bb966bca028c43c19107102ef8e03fe799bffb4354f4ef015`, and records each
+answer-free outbound prompt as an explicit source span in private in-process planner state.
+Before shared handoff it projects the complete local `SourceRecordV1` and `RightsRecordV1` into
+prompt-free bindings containing only domain-separated typed digests, decisions, endpoint classes,
+and optional offsets. Titles, locators, metadata, excerpts, attribution, restrictions, license
+text, and reviewer text never enter `ModelWorkBundleV2` or the control-plane database. The builder
+emits local trusted-work evidence binding the fixture and license hashes, exact matrix and suite
+definition, source, rights, derived span set, provider target, and frozen generation policy. This
+is explicitly non-cryptographic, non-promotable software-root evidence; it is not presented as a
+production signer or KMS attestation. Every trial recomputes it before registration, lease
+acquisition, capability issue, or provider I/O. Caller-supplied matrices, sources, rights, or
+prepared work cannot replace the locked suite.
+
+For every trial the bridge creates one rights-bound `ModelWorkBundleV2`, rather than fabricating a
+theorem statement contract. The bundle binds the run, cell, case, repetition, role, work item,
+role environment, exact egress span hash, answer-free context hash, request hash, and prompt-free
+source and rights projections. Planner coordinates and upstream contract hashes are converted to
+domain-separated typed digests; deterministic bundle and work-contract IDs use fixed namespaces.
+V2 rejects prompt/source-excerpt bytes, free-text provenance, tools, and retrieval.
+
+`AuthorizedRoleGenerationPolicyV1` is the complete supported per-request generation surface:
+`reasoning_effort` and a positive timeout of at most 3600 seconds. Its canonical hash must equal
+every target's `generation_parameters_hash`. The same policy determines each cell's `timeout_ms`,
+the exact `ModelRequest.reasoning_effort` and `ModelRequest.timeout_seconds`, required capabilities,
+request hash, and trusted-work evidence. A non-null reasoning effort requires the provider's
+declared and probed `REASONING_EFFORT` capability. The request timeout is enforced inside the HTTP
+or CLI adapter as `min(provider ceiling, request timeout)`; elapsed time remains reporting evidence,
+not post-hoc timeout enforcement.
+
+An independent caller must first supply a `MODEL_WORK_ADMISSION` attestation for every exact bundle
+ID. The control plane verifies and persists that attestation before it registers the immutable
+work, grants a fenced lease, and issues the existing
+`ModelExecutionAuthorizationV1` wire capability. The bridge then invokes only
+`ProviderRegistry.generate`, so provider approval, endpoint class, token/cost budget, circuit
+breaker, settlement, and failure accounting remain on the same path used by Prover model calls.
+For the fixed floor suite, all ten prepared bundles, caller-supplied admissions, exact one-attempt
+budgets, approval snapshots, provider bindings, and effective provider timeouts are validated
+without a database write, capability probe, or provider call. A bad sixth admission therefore
+causes zero model calls and zero model-work registration state, and the corrected suite can start
+cleanly. Only after that full gate passes does each trial register, claim, issue, preflight, and
+generate in sequence. No later trial receives a capability before the preceding trial settles.
+Authorization lifetime must cover the frozen request timeout plus a positive settlement margin
+and remains subject to the configured and one-hour authorization caps. The lease must outlive that
+authorization by a separate positive claim-to-issue margin; the margin is not counted against the
+authorization cap.
+Because the floor executes serially, admission `i` in stable trial order must retain at least
+`sum(resolved_lease_ttl[0:i+1])` seconds at suite preflight. This cumulative bound prevents
+a parent admission that is valid for one trial from expiring before its just-in-time authorization
+can be minted and conservatively covers preceding provider/persistence slots plus the current
+claim-to-issue and authorization windows. Runtime admission, lease, and fencing checks still run
+again immediately before each provider call.
+The complete normalized `ModelResponse` available at the registry boundary (text, response ID,
+tool calls, and usage) is written first to an operator-private content-addressed store outside
+the repository. The bridge does not claim to retain the transport's original HTTP response body.
+A private manifest is stored only after all ten responses exist; only then can the public sidecar
+be returned. Its true content digest and exact per-trial token/elapsed accounting remain private;
+the V2 public suite sidecar exposes only a random opaque private handle, aggregate usage buckets,
+and one coarse usage bucket set per trial. The V1 sidecar contracts remain unchanged and are not
+accepted by the private evaluator. The evaluator recomputes all V2 trial buckets and the suite
+aggregate from authenticated private manifest entries, then rechecks the same values against the
+response artifact and reconciliation state. Missing or drifted buckets fail closed.
+The private handle mapping is authenticated by a mandatory, non-serializable operator-private
+authenticator over the handle, manifest hash, run ID, ten coordinates, and ten authorization
+hashes. The key is neither persisted nor returned. Restart reconciliation therefore requires key
+reinjection; substitution, truncation, or a wrong key fails closed. The repository HMAC
+implementation is explicitly test-only; production operators must replace it with a KMS/HSM
+implementation of the same boundary.
+It omits each private response hash as well as the response, so low-entropy model output cannot be
+tested against a public content digest. Local evaluation exposes only a keyed, domain-separated
+commitment produced through the injected manifest authenticator. It is stable for the same
+authenticated coordinate/entry/bundle but differs from both the private CAS digest and the former
+enumerable unsalted construction. The private store also requires the reconciliation `bundle_id`
+to equal the exact prepared work bundle on every response and commitment read. Before each
+provider call the private store writes a conservative dispatch journal. If the process stops after
+a provider response but before private CAS persistence, the state remains
+`provider_outcome_ambiguous` and automatic replay is forbidden until an operator reconciles it.
+The sidecar hard-codes
+`production_evaluator: false`, `floor_claim_eligible: false`, and
+`cross_role_aggregation_permitted: false`; it contains neither the evaluator oracle, a verdict,
+score, prompt, nor raw model output.
+
+The checked-in ten-case calibration fixture now has an offline authorization-bridge test across
+all five roles. This proves the execution boundary and answer separation, not model quality.
+Operator-authorized API runs may use the substrate, but their sidecars cannot enter the V3 report
+or support a capability-floor claim until role-specific production evaluators exist.
+
+The fixed-suite API is deliberately two-step:
+
+Every bridge/evaluator `run_id` is one portable ASCII slug: it starts and ends
+with an alphanumeric character, contains only alphanumerics plus `._-`, and
+rejects `..`, path separators, colons, drive paths, and UNC paths. Invalid input
+is replaced by a generic failure and is never reflected into an error or report.
+
+```python
+suite = build_locked_calibration_floor_suite(
+    target,
+    generation_policy=AuthorizedRoleGenerationPolicyV1(
+        reasoning_effort="high",
+        timeout_seconds=120,
+    ),
+    repetitions=1,
+    max_cost_microusd_per_trial=bounded_cost,
+)
+trials = prepare_locked_floor_trials(suite, run_id=run_id)  # dry-run; no provider I/O
+admissions_by_bundle_id = admission_authority.admit(trials)
+
+sidecar = run_authorized_role_floor_suite(
+    suite,
+    run_id=run_id,
+    authorization_service=authorization_service,
+    admissions_by_bundle_id=admissions_by_bundle_id,
+    registry=registry,
+    approval=operator_registered_approval,
+    budgets_by_cell=exact_one_attempt_budgets,
+    raw_output_store=AuthorizedRoleRawOutputStore(
+        operator_private_root,
+        private_authenticator=operator_private_authenticator,
+    ),
+)
+```
+
+The caller constructs `target` from the already loaded operator profile and provider binding.
+Its `generation_parameters_hash` must be the exact canonical policy hash shown above; the caller
+must choose a timeout no greater than the provider profile when it intends that request bound to
+be effective.
+`authorization_service`, `registry`, and `approval` must be the same operator-controlled objects;
+each budget must exactly equal its locked cell token and cost limits. `operator_private_root` must
+be outside the repository and any Git checkout. The dry-run returns ten fully bound work bundles
+and recomputes the locked work evidence without contacting the endpoint.
+
+Bridge-local evidence lets the independent admission authority decide whether a trial really
+comes from the locked fixture; it does not replace that authority. The generic service now rejects
+unsigned work and revalidates the exact persisted admission at claim and issue. The checked-in
+tests use a purpose-dedicated process-local HMAC outside the bridge, so they are architecture
+evidence only. The optional
+[`authorized_role_evaluation`](deepseek-role-operator.md#optional-local-exact-json-evaluation)
+path now performs authenticated private exact-JSON scoring for the ten synthetic calibration
+cases, but its authority is fixed to `local_exact_json_nonproduction` and role-floor admission is
+forbidden. A DeepSeek role-floor CLI remains non-production until the signer is a separately
+authenticated mTLS/KMS service and the role-specific evaluators below exist.
 
 Before model ranking, each role needs a role-specific evaluator:
 
@@ -195,8 +340,9 @@ Before model ranking, each role needs a role-specific evaluator:
 - task allocator: deterministic DAG simulations followed by project-level throughput and
   correctness measurements.
 
-The current `exact_json_v1` scorer is sufficient only for protocol and fake-fixture tests. It
-cannot establish semantic fidelity, proof validity, or production scheduling quality.
+The current local exact-JSON scorer is sufficient only for protocol and locked synthetic-fixture
+calibration. It cannot establish semantic fidelity, proof validity, cheating-detector quality, or
+production scheduling quality.
 
 FATE must enter only through its pinned source manifest and strict proof-slot adapter. A future
 FATE Prover role run must join every accepted output to OCI/kernel verification and preserve the

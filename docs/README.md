@@ -29,7 +29,10 @@ runner reports success.
 9. [Model provider policy](model-provider-policy.md) defines Codex, OpenAI Responses,
    and custom-compatible endpoint policy. Anthropic and Claude are intentionally excluded.
 10. [Role benchmark protocol](role-benchmark-protocol.md) freezes repeatable specialist-role
-   comparisons before any paid or external model execution.
+    comparisons before any paid or external model execution. The
+    [DeepSeek five-role operator run](deepseek-role-operator.md) provides a non-promotable
+    ten-call path with whole-suite preflight, private reconciliation, and an optional local
+    exact-JSON evaluation API that is forbidden from role-floor admission.
 11. [FATE compile canary](fate-compile-canary.md), the non-promotable
     [agent-smoke-8 vertical bridge](fate-agent-smoke.md), and the
     [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain,
@@ -40,9 +43,14 @@ runner reports success.
     [the current route](phase-1-plan.md) resolves active sequencing,
     [the parallel execution plan](phase-1-parallel-execution.md) assigns work packages, and
     [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
+    [The Phase 1 assurance case](phase-1-assurance-case.md) maps each current safety claim to
+    its replayable evidence, non-claim, and remaining acceptance gate.
     [The next operating plan](roadmap-next.md) is the current root-agent control plan for
     coordinating the immediate Builder bridge, vertical fixture, role benchmark, Dashboard, and
     research work packages without promoting them into release evidence prematurely.
+    [The Phase 2 fractal roadmap](phase-2-fractal-roadmap.md) is the longer-horizon planning
+    record for Open Problem portfolio work, Builder discovery, Prover scaling, and downstream
+    Library staging.
 14. [Builder domain pilot](domain-pilot-selection.md) records the conditional model-theory
     primary, curvature's reference-only boundary, backups, and selection gates. The
     [T3 human-review packet](../Builder/pilots/model-theory-admission/human-review/README.md)
@@ -84,13 +92,19 @@ runner reports success.
 25. [Domain pilot discovery gates](research/domain-pilot-discovery-2026-07-26.md) distinguish
     prerequisite-definition coverage from exact theorem reuse and record the SDE, PDE,
     Riemannian, and metric-algebraic-geometry source decisions without selecting a pilot.
-26. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
+26. [Phase 2 discovery lane cards](research/phase2-discovery-lane-cards-2026-07-26.md) propose
+    transport-PDE and intrinsic-metric discovery routes with explicit rights, overlap, conversion,
+    and stop gates; neither card authorizes source ingestion or a frozen contract.
+27. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.
-27. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
+28. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
     `Arithmetic.score` API change to separate declaration-invalidation and module-rebuild plans,
     then records the non-acceptance failure/rebuild/reuse boundary.
-27. [Pre-T6 Builder query route](pre-t6-builder-query-route.md) chooses a Builder-only
+29. [T7 OCI module receipt and declaration fanout](t7-oci-module-build-receipt.md) defines one
+    lease-fenced process receipt per module, atomic locked-query fanout, same-source receipt reuse,
+    and the explicit non-promotion/non-kernel-acceptance boundary.
+30. [Pre-T6 Builder query route](pre-t6-builder-query-route.md) chooses a Builder-only
     statement/type observation endpoint over fake proof-carriers, keeping the Prover V2 facade
     and public protocol unchanged.
 

@@ -10,10 +10,12 @@ from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.execution import ExecutionHarness, ProcessRequest
 from autolean_prover.providers.base import (
     Capability,
+    ModelExecutionTimeoutPolicyV1,
     ModelRequest,
     ModelResponse,
     ProviderCapabilities,
     TokenUsage,
+    effective_model_timeout_seconds,
     require_request_capabilities,
 )
 from autolean_prover.providers.policy import (
@@ -96,6 +98,10 @@ class CodexCliProvider:
     def capabilities(self) -> ProviderCapabilities:
         return self._CAPABILITIES
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1:
+        return ModelExecutionTimeoutPolicyV1(self._settings.timeout_seconds)
+
     def generate(self, request: ModelRequest) -> ModelResponse:
         require_request_capabilities(self, request)
         if request.working_directory is None:
@@ -106,7 +112,10 @@ class CodexCliProvider:
                 argv=argv,
                 cwd=request.working_directory,
                 stdin=self._stdin_prompt(request),
-                timeout_seconds=self._settings.timeout_seconds,
+                timeout_seconds=effective_model_timeout_seconds(
+                    request,
+                    provider_timeout_seconds=self._settings.timeout_seconds,
+                ),
                 max_output_bytes=self._settings.max_output_bytes,
             )
         )

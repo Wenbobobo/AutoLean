@@ -145,6 +145,8 @@ export type WorkRecordCategory =
   | "gap"
   | "contract_change"
   | "verification"
+  | "synthetic_execution"
+  | "benchmark"
   | "other";
 
 export interface WorkRecord {

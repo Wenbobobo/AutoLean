@@ -18,6 +18,8 @@ from autolean_builder.pilot_harness import (
 )
 from autolean_contracts import canonical_json_bytes
 
+from scripts import oci_mathlib_worker
+
 _ROOT = Path(__file__).parents[2]
 _ADMISSION_ROOT = _ROOT / "Builder" / "pilots" / "model-theory-admission"
 _DECISION_PATH = _ADMISSION_ROOT / "decision.v2.json"
@@ -54,6 +56,68 @@ def _load_json_object(path: Path) -> dict[str, object]:
     value = json.loads(path.read_bytes(), object_pairs_hook=reject_duplicates)
     assert isinstance(value, dict)
     return value
+
+
+def _mathlib_local_evidence_matches_attachment(
+    document: dict[str, object],
+    *,
+    kind: str,
+    worker_image: str,
+    build_receipt_canonical_sha256: str,
+) -> bool:
+    if document.get("image") != worker_image:
+        return False
+    if kind == "build":
+        receipt = document.get("build_receipt")
+        return (
+            isinstance(receipt, dict)
+            and hashlib.sha256(oci_mathlib_worker._canonical_json_bytes(receipt)).hexdigest()
+            == build_receipt_canonical_sha256
+        )
+    if kind == "canary":
+        return document.get("build_receipt_canonical_sha256") == build_receipt_canonical_sha256
+    raise ValueError(f"unsupported mathlib evidence kind: {kind}")
+
+
+def _assert_matching_local_mathlib_evidence_if_present(
+    *,
+    kind: str,
+    worker_image: str,
+    build_receipt_canonical_sha256: str,
+    evidence_sha256: str,
+) -> None:
+    """Check only a local record that proves it belongs to this attachment.
+
+    The first location is the current immutable namespace.  The legacy fixed-name
+    location remains read-only compatible: a later image there is unrelated local
+    state, not a failed verification of this historical attachment.
+    """
+
+    content_addressed = _ROOT / oci_mathlib_worker.mathlib_run_evidence_relative_path(
+        kind=kind,
+        image=worker_image,
+        evidence_sha256=evidence_sha256,
+    )
+    if content_addressed.exists():
+        document = _load_json_object(content_addressed)
+        assert _mathlib_local_evidence_matches_attachment(
+            document,
+            kind=kind,
+            worker_image=worker_image,
+            build_receipt_canonical_sha256=build_receipt_canonical_sha256,
+        )
+        assert hashlib.sha256(content_addressed.read_bytes()).hexdigest() == evidence_sha256
+
+    legacy = _ROOT / "release-evidence" / "oci-worker" / f"mathlib-{kind}.v1.json"
+    if legacy.exists():
+        document = _load_json_object(legacy)
+        if _mathlib_local_evidence_matches_attachment(
+            document,
+            kind=kind,
+            worker_image=worker_image,
+            build_receipt_canonical_sha256=build_receipt_canonical_sha256,
+        ):
+            assert hashlib.sha256(legacy.read_bytes()).hexdigest() == evidence_sha256
 
 
 def test_committed_gap_decision_replays_manifest_and_workspace() -> None:
@@ -197,17 +261,16 @@ def test_t4_exact_image_attachment_replays_query_and_keeps_gap_open() -> None:
         assert len(digest) == 64
         int(digest, 16)
 
-    local_evidence = {
-        "operator_local_build_evidence_sha256": (
-            _ROOT / "release-evidence" / "oci-worker" / "mathlib-build.v1.json"
-        ),
-        "operator_local_canary_evidence_sha256": (
-            _ROOT / "release-evidence" / "oci-worker" / "mathlib-canary.v1.json"
-        ),
-    }
-    for field, path in local_evidence.items():
-        if path.exists():
-            assert hashlib.sha256(path.read_bytes()).hexdigest() == execution_binding[field]
+    for kind, field in (
+        ("build", "operator_local_build_evidence_sha256"),
+        ("canary", "operator_local_canary_evidence_sha256"),
+    ):
+        _assert_matching_local_mathlib_evidence_if_present(
+            kind=kind,
+            worker_image=str(execution_binding["worker_image"]),
+            build_receipt_canonical_sha256=str(execution_binding["build_receipt_canonical_sha256"]),
+            evidence_sha256=str(execution_binding[field]),
+        )
 
     assert set(observation) == {
         "candidate_direct_imports",
@@ -338,6 +401,22 @@ def test_t4_exact_image_attachment_replays_query_and_keeps_gap_open() -> None:
     assert authority and all(value is False for value in authority.values())
     assert decision.disposition is PilotBoundaryDispositionV2.GAP
     assert not (_ADMISSION_ROOT / "admission-receipt.v2.json").exists()
+
+
+def test_t4_local_legacy_evidence_with_a_different_image_is_not_attachment_evidence() -> None:
+    attachment = _load_json_object(_T4_ATTACHMENT_PATH)
+    execution_binding = attachment["execution_binding"]
+    assert isinstance(execution_binding, dict)
+
+    assert not _mathlib_local_evidence_matches_attachment(
+        {
+            "image": "autolean/mathlib-worker@sha256:" + "f" * 64,
+            "build_receipt": {"schema_version": "unrelated"},
+        },
+        kind="build",
+        worker_image=str(execution_binding["worker_image"]),
+        build_receipt_canonical_sha256=str(execution_binding["build_receipt_canonical_sha256"]),
+    )
 
 
 def test_t3_human_review_packet_and_unfilled_response_replay_without_authority() -> None:

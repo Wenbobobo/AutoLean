@@ -99,8 +99,11 @@ boundary.
 The cache is lexically confined beneath the repository root. The cache root, intermediate
 directories, per-reference child directory, target, and temporary artifact reject symbolic links,
 junctions, and other reparse points. Acquisition uses a unique temporary file, flushes and
-`fsync`s it, verifies size and SHA-256, atomically replaces the target, cleans failed temporaries,
-and serializes same-process acquisition for one content-addressed target.
+`fsync`s it, verifies size and SHA-256, then installs the content-addressed target with a
+no-clobber same-volume hard link. A target that appears concurrently is accepted only when its
+regular-file type, size, and SHA-256 exactly match the manifest; different bytes are a conflict,
+including under `--refresh`, and are never overwritten. Acquisition cleans failed temporaries and
+serializes same-process work for one content-addressed target.
 
 These checks materially reduce path substitution risk. They do not replace an OS sandbox or prove
 cross-process exclusion against a hostile local administrator.

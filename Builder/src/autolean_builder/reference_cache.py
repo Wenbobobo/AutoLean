@@ -416,12 +416,7 @@ class ReferenceCache:
             self._validate_download_observation(entry, observation)
             inspection = _inspect_regular_file(temporary_path)
             self._validate_inspection(entry, inspection, cached=False)
-            self._require_existing_directory_tree(target.parent)
-            existing_target = _lstat_optional(target)
-            if existing_target is not None:
-                _require_regular_stat(target, existing_target)
-            os.replace(temporary_path, target)
-            temporary_path = None
+            self._install_verified_temporary(entry, temporary_path, target)
             _fsync_directory_if_supported(target.parent)
             return ReferenceFetchResult(
                 verified=self.verify(entry.reference_id),
@@ -502,12 +497,7 @@ class ReferenceCache:
                 os.fsync(destination.fileno())
             inspection = _inspect_regular_file(temporary_path)
             self._validate_inspection(entry, inspection, cached=False)
-            self._require_existing_directory_tree(target.parent)
-            existing_target = _lstat_optional(target)
-            if existing_target is not None:
-                _require_regular_stat(target, existing_target)
-            os.replace(temporary_path, target)
-            temporary_path = None
+            self._install_verified_temporary(entry, temporary_path, target)
             _fsync_directory_if_supported(target.parent)
             return ReferenceFetchResult(
                 verified=self.verify(entry.reference_id),
@@ -541,6 +531,31 @@ class ReferenceCache:
         for part in relative:
             current = current / part
             _require_directory(current)
+
+    def _install_verified_temporary(
+        self,
+        entry: ReferenceEntryV1,
+        temporary_path: Path,
+        target: Path,
+    ) -> None:
+        """Install one verified CAS object without replacing an existing target."""
+
+        self._require_existing_directory_tree(target.parent)
+        try:
+            os.link(temporary_path, target)
+        except FileExistsError:
+            try:
+                inspection = _inspect_regular_file(target)
+                self._validate_inspection(entry, inspection, cached=True)
+            except ReferenceCacheError as error:
+                raise ReferenceCacheError(
+                    f"content-addressed reference target conflicts with verified acquisition: "
+                    f"{entry.reference_id}"
+                ) from error
+        except OSError as error:
+            raise ReferenceCacheError(
+                f"cannot install content-addressed reference: {entry.reference_id}"
+            ) from error
 
     @staticmethod
     def _validate_download_observation(

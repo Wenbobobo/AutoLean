@@ -178,7 +178,7 @@ def test_calibration_pair_comparison_suite_keeps_roles_separate(
         )
 
 
-def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
+def test_compare_suite_cli_preset_emits_all_role_pairs(tmp_path: Path) -> None:
     fixture = load_fake_fixture(FIXTURE_PATH)
     database = tmp_path / "roles.sqlite3"
     raw_root = tmp_path / "operator-private-raw"
@@ -208,12 +208,11 @@ def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
         report.run.run_id,
         "--candidate-run",
         report.run.run_id,
+        "--preset",
+        "calibration-pairs-v3",
         "--output",
         str(output),
     ]
-    for role in BenchmarkRoleV1:
-        slug = role.value.replace("_", "-")
-        command.extend(["--cell-pair", f"fake.oracle.{slug}=fake.mutant.{slug}"])
 
     subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=environment)
     payload = json.loads(output.read_text(encoding="ascii"))
@@ -224,3 +223,95 @@ def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
     ]
     assert {item["comparison_kind"] for item in payload["comparisons"]} == {"controlled_ablation"}
     assert {item["pass_rate_delta_ppm"] for item in payload["comparisons"]} == {-500000}
+
+
+def test_compare_suite_cli_preset_appends_explicit_pairs_and_rejects_duplicate_role(
+    tmp_path: Path,
+) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    database = tmp_path / "roles.sqlite3"
+    environment = {
+        **os.environ,
+        "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
+    }
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=ScriptedFakeRoleExecutor(fixture),
+            store=store,
+            raw_output_store=RoleBenchmarkRawOutputStore(tmp_path / "operator-private-raw"),
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id="suite-cli-preset-duplicate-run",
+        )
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "role_benchmark.py"),
+        "compare-suite",
+        "--database",
+        str(database),
+        "--baseline-run",
+        report.run.run_id,
+        "--candidate-run",
+        report.run.run_id,
+        "--preset",
+        "calibration-pairs-v3",
+        "--cell-pair",
+        "fake.mutant.prover=fake.oracle.prover",
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "RoleBenchmarkComparisonSuiteV1" in result.stderr
+
+
+def test_compare_suite_cli_rejects_cross_role_pair(tmp_path: Path) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    database = tmp_path / "roles.sqlite3"
+    environment = {
+        **os.environ,
+        "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
+    }
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=ScriptedFakeRoleExecutor(fixture),
+            store=store,
+            raw_output_store=RoleBenchmarkRawOutputStore(tmp_path / "operator-private-raw"),
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id="suite-cli-cross-role-run",
+        )
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "role_benchmark.py"),
+        "compare-suite",
+        "--database",
+        str(database),
+        "--baseline-run",
+        report.run.run_id,
+        "--candidate-run",
+        report.run.run_id,
+        "--cell-pair",
+        "fake.oracle.prover=fake.mutant.task-allocator",
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "cross-role comparisons are not meaningful" in result.stderr
