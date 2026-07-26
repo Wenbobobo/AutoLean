@@ -16,7 +16,6 @@ import autolean_builder
 import autolean_builder.source_harness as source_harness_module
 import pytest
 from autolean_builder import (
-    CandidateFormalization,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
@@ -45,16 +44,23 @@ from autolean_builder import (
     load_pilot_manifest,
 )
 from autolean_contracts import (
+    AttestationPurposeV1,
     AttestationSignerV1,
     AxiomProfileV1,
     DecisionV1,
     EndpointClassV1,
+    ExecutionGraphV1,
     FidelityEvidenceArtifactRefV1,
     FidelityRiskV1,
+    FormalGraphV1,
     FormalSpecificationV1,
     GraphBundleV1,
     HashKindV1,
+    HmacAttestationKeyV1,
+    HmacAttestationSignerV1,
+    HmacAttestationVerifierV1,
     LeanEnvironmentV1,
+    MathematicalGraphV1,
     MathematicalSpecificationV1,
     MutationKindV1,
     MutationProbeV1,
@@ -66,6 +72,8 @@ from autolean_contracts import (
     StatementStatusV1,
     TaskKindV1,
     TaskPolicyV1,
+    builder_attestation_payload,
+    digest_bytes,
     digest_text,
     stable_identifier,
 )
@@ -240,7 +248,7 @@ def _timestamp_only_evaluation(
 
 
 def _formal() -> FormalSpecificationV1:
-    statement = "theorem curvature_skew (u v : Nat) : u + v = v + u := by"
+    statement = "theorem curvature_skew (u v : Nat) : u + v = v + u"
     elaborated = "forall (u v : Nat), u + v = v + u"
     return FormalSpecificationV1(
         declaration_name="curvature_skew",
@@ -326,6 +334,248 @@ def _request(
             axiom_profile=AxiomProfileV1.MATHLIB,
         ),
         alignment_reviewer_id="mathlib-mapping-reviewer",
+    )
+
+
+def _source_obligations(packet) -> tuple[SemanticObligation, ...]:
+    source_span_id = packet.contract.source.spans[0].span_id
+    obligation_specs = (
+        (
+            "quantifier-order",
+            SemanticObligationKind.QUANTIFIER_ORDER,
+            "The universal variables retain their declared order.",
+            "For every connection",
+            "(u v : Nat)",
+        ),
+        (
+            "assumption",
+            SemanticObligationKind.ASSUMPTION,
+            "The fixed connection assumption remains explicit.",
+            "connection",
+            "Nat",
+        ),
+        (
+            "conclusion",
+            SemanticObligationKind.CONCLUSION,
+            "The antisymmetry conclusion is preserved.",
+            "R(u, v) = -R(v, u)",
+            "u + v = v + u",
+        ),
+        (
+            "definition",
+            SemanticObligationKind.DEFINITION,
+            "The curvature symbol remains the selected operation.",
+            "R",
+            "curvature_skew",
+        ),
+        (
+            "edge-case",
+            SemanticObligationKind.EDGE_CASE,
+            "The repeated-vector edge case remains reviewable.",
+            "u and v",
+            "u v",
+        ),
+        (
+            "non-vacuity",
+            SemanticObligationKind.NON_VACUITY,
+            "The quantified inputs have an inhabited witness type.",
+            "tangent vectors",
+            ": Nat",
+        ),
+    )
+    return tuple(
+        SemanticObligation(
+            obligation_id=identifier,
+            kind=kind,
+            description=description,
+            source_span_ids=(source_span_id,),
+            normalized_fragment=normalized_fragment,
+            lean_fragment=lean_fragment,
+        )
+        for identifier, kind, description, normalized_fragment, lean_fragment in obligation_specs
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFixtureTranslator:
+    actor_id: str
+    independence_group: str
+    oracle_lean_statement: str
+
+    def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+        return CandidateProposal(
+            candidate_id=f"{self.actor_id}-candidate",
+            lean_statement_source=self.oracle_lean_statement,
+            reverse_rendering=task.mathematics.normalized_statement,
+            covered_obligation_ids=tuple(
+                obligation.obligation_id for obligation in task.obligations
+            ),
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFixtureMutationAgent:
+    actor_id: str = "source-mutation-agent"
+
+    def generate(
+        self,
+        task: TranslationTask,
+        selected_candidate: CandidateFormalization,
+    ) -> tuple[MutationProbeV1, ...]:
+        assert selected_candidate.statement_hash == task.selected_statement_hash
+        return tuple(
+            MutationProbeV1(
+                probe_id=stable_identifier("source-mutation", kind.value),
+                kind=kind,
+                target_path=f"formal.{kind.value}",
+                expected_failure="independent reviewer detects the changed statement",
+                mutated_statement_source=f"{task.selected_lean_statement}\n-- mutation: {kind.value}",
+            )
+            for kind in MutationKindV1
+        )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFixtureReviewer:
+    reviewer_id: str = "source-semantic-reviewer"
+    omitted_obligation_id: str | None = None
+    undetected_probe_id: str | None = None
+
+    def review(self, review_packet: SemanticReviewPacket) -> SemanticReviewVerdict:
+        return SemanticReviewVerdict(
+            review_id="source-semantic-review-v1",
+            reviewer_id=self.reviewer_id,
+            independent=True,
+            decision=DecisionV1.ACCEPT,
+            source_to_normalized_equivalent=True,
+            source_to_normalized_evidence="each cited condition remains explicit",
+            candidate_verdicts=tuple(
+                CandidateReviewVerdict(
+                    candidate_id=candidate.candidate_id,
+                    candidate_hash=candidate.evidence_hash,
+                    decision=DecisionV1.ACCEPT,
+                    reverse_render_equivalent=True,
+                    obligation_verdicts=tuple(
+                        ObligationReviewVerdict(
+                            obligation_id=obligation.obligation_id,
+                            decision=DecisionV1.ACCEPT,
+                            rationale="the source, normalized, and Lean fragments agree",
+                        )
+                        for obligation in review_packet.task.obligations
+                        if obligation.obligation_id != self.omitted_obligation_id
+                    ),
+                    rationale="the candidate preserves the reviewed statement",
+                )
+                for candidate in review_packet.candidates
+            ),
+            mutation_verdicts=tuple(
+                MutationReviewVerdict(
+                    probe_id=probe.probe_id,
+                    detected=probe.probe_id != self.undetected_probe_id,
+                    rationale="the mutation changes a reviewed semantic obligation",
+                )
+                for probe in review_packet.mutation_probes
+            ),
+            positive_example_valid=True,
+            positive_example_evidence="zero and one instantiate the declared Nat inputs",
+            negative_example_valid=True,
+            negative_example_evidence="a noncommutative replacement changes the claim",
+            non_vacuous=True,
+            non_vacuity_evidence="Nat supplies witnesses for both quantified inputs",
+            rationale="the complete source-backed translation is accepted",
+        )
+
+
+def _source_library_signoff() -> ReviewerSignoffV1:
+    return ReviewerSignoffV1(
+        signoff_id=stable_identifier("source-signoff", "library-review"),
+        reviewer_id="source-library-reviewer",
+        role=ReviewerRoleV1.LIBRARY_REVIEWER,
+        decision=DecisionV1.ACCEPT,
+        independent=True,
+        rationale="the declaration is suitable as a reusable library boundary",
+    )
+
+
+@dataclass(frozen=True, slots=True)
+class SourceFixtureIncompleteCoverageTranslator:
+    actor_id: str
+    independence_group: str
+    oracle_lean_statement: str
+
+    def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
+        return CandidateProposal(
+            candidate_id=f"{self.actor_id}-candidate",
+            lean_statement_source=self.oracle_lean_statement,
+            reverse_rendering=task.mathematics.normalized_statement,
+            covered_obligation_ids=tuple(
+                obligation.obligation_id for obligation in task.obligations[:-1]
+            ),
+        )
+
+
+def _run_source_fixture_evaluation(
+    harness: SourceToStatementHarness,
+    packet,
+) -> FidelityEvaluation:
+    return harness.run_fidelity(
+        packet,
+        obligations=_source_obligations(packet),
+        translators=(
+            SourceFixtureTranslator(
+                "source-translator-a",
+                "source-team-a",
+                packet.contract.formal.lean_statement_source,
+            ),
+            SourceFixtureTranslator(
+                "source-translator-b",
+                "source-team-b",
+                packet.contract.formal.lean_statement_source,
+            ),
+        ),
+        mutation_agent=SourceFixtureMutationAgent(),
+        reviewer=SourceFixtureReviewer(),
+        additional_signoffs=(_source_library_signoff(),),
+    )
+
+
+def _source_fixture_translators(packet) -> tuple[SourceFixtureTranslator, SourceFixtureTranslator]:
+    return (
+        SourceFixtureTranslator(
+            "source-translator-a",
+            "source-team-a",
+            packet.contract.formal.lean_statement_source,
+        ),
+        SourceFixtureTranslator(
+            "source-translator-b",
+            "source-team-b",
+            packet.contract.formal.lean_statement_source,
+        ),
+    )
+
+
+def _source_graphs() -> GraphBundleV1:
+    return GraphBundleV1(
+        mathematical=MathematicalGraphV1(
+            graph_id=stable_identifier("source-graph", "mathematical"),
+            revision=1,
+        ),
+        formal=FormalGraphV1(
+            graph_id=stable_identifier("source-graph", "formal"),
+            revision=1,
+        ),
+        execution=ExecutionGraphV1(
+            graph_id=stable_identifier("source-graph", "execution"),
+            revision=1,
+        ),
+    )
+
+
+def _builder_attestation_key() -> HmacAttestationKeyV1:
+    return HmacAttestationKeyV1(
+        key_id="source-builder-test-v1",
+        secret=b"source-builder-test-secret-material-0123456789",
+        allowed_purposes=frozenset({AttestationPurposeV1.BUILDER_FREEZE}),
     )
 
 
@@ -464,176 +714,7 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
     cache = _cache(tmp_path)
     harness = _harness(tmp_path, cache)
     packet = harness.prepare_draft(_TEXT_ID, _request())
-    source_span_id = packet.contract.source.spans[0].span_id
-    obligation_specs = (
-        (
-            "quantifier-order",
-            SemanticObligationKind.QUANTIFIER_ORDER,
-            "The universal variables retain their declared order.",
-            "For every connection",
-            "(u v : Nat)",
-        ),
-        (
-            "assumption",
-            SemanticObligationKind.ASSUMPTION,
-            "The fixed connection assumption remains explicit.",
-            "connection",
-            "Nat",
-        ),
-        (
-            "conclusion",
-            SemanticObligationKind.CONCLUSION,
-            "The antisymmetry conclusion is preserved.",
-            "R(u, v) = -R(v, u)",
-            "u + v = v + u",
-        ),
-        (
-            "definition",
-            SemanticObligationKind.DEFINITION,
-            "The curvature symbol remains the selected operation.",
-            "R",
-            "curvature_skew",
-        ),
-        (
-            "edge-case",
-            SemanticObligationKind.EDGE_CASE,
-            "The repeated-vector edge case remains reviewable.",
-            "u and v",
-            "u v",
-        ),
-        (
-            "non-vacuity",
-            SemanticObligationKind.NON_VACUITY,
-            "The quantified inputs have an inhabited witness type.",
-            "tangent vectors",
-            ": Nat",
-        ),
-    )
-    obligations = tuple(
-        SemanticObligation(
-            obligation_id=identifier,
-            kind=kind,
-            description=description,
-            source_span_ids=(source_span_id,),
-            normalized_fragment=normalized_fragment,
-            lean_fragment=lean_fragment,
-        )
-        for identifier, kind, description, normalized_fragment, lean_fragment in obligation_specs
-    )
-
-    @dataclass(frozen=True, slots=True)
-    class Translator:
-        actor_id: str
-        independence_group: str
-        oracle_lean_statement: str
-
-        def translate(self, task: CandidateGenerationTask) -> CandidateProposal:
-            return CandidateProposal(
-                candidate_id=f"{self.actor_id}-candidate",
-                lean_statement_source=self.oracle_lean_statement,
-                reverse_rendering=task.mathematics.normalized_statement,
-                covered_obligation_ids=tuple(
-                    obligation.obligation_id for obligation in task.obligations
-                ),
-            )
-
-    @dataclass(frozen=True, slots=True)
-    class MutationAgent:
-        actor_id: str = "source-mutation-agent"
-
-        def generate(
-            self,
-            task: TranslationTask,
-            selected_candidate: CandidateFormalization,
-        ) -> tuple[MutationProbeV1, ...]:
-            assert selected_candidate.statement_hash == task.selected_statement_hash
-            return tuple(
-                MutationProbeV1(
-                    probe_id=stable_identifier("source-mutation", kind.value),
-                    kind=kind,
-                    target_path=f"formal.{kind.value}",
-                    expected_failure="independent reviewer detects the changed statement",
-                    mutated_statement_source=(
-                        f"{task.selected_lean_statement}\n-- mutation: {kind.value}"
-                    ),
-                )
-                for kind in MutationKindV1
-            )
-
-    @dataclass(frozen=True, slots=True)
-    class Reviewer:
-        reviewer_id: str = "source-semantic-reviewer"
-
-        def review(self, review_packet: SemanticReviewPacket) -> SemanticReviewVerdict:
-            return SemanticReviewVerdict(
-                review_id="source-semantic-review-v1",
-                reviewer_id=self.reviewer_id,
-                independent=True,
-                decision=DecisionV1.ACCEPT,
-                source_to_normalized_equivalent=True,
-                source_to_normalized_evidence="each cited condition remains explicit",
-                candidate_verdicts=tuple(
-                    CandidateReviewVerdict(
-                        candidate_id=candidate.candidate_id,
-                        candidate_hash=candidate.evidence_hash,
-                        decision=DecisionV1.ACCEPT,
-                        reverse_render_equivalent=True,
-                        obligation_verdicts=tuple(
-                            ObligationReviewVerdict(
-                                obligation_id=obligation.obligation_id,
-                                decision=DecisionV1.ACCEPT,
-                                rationale="the source, normalized, and Lean fragments agree",
-                            )
-                            for obligation in review_packet.task.obligations
-                        ),
-                        rationale="the candidate preserves the reviewed statement",
-                    )
-                    for candidate in review_packet.candidates
-                ),
-                mutation_verdicts=tuple(
-                    MutationReviewVerdict(
-                        probe_id=probe.probe_id,
-                        detected=True,
-                        rationale="the mutation changes a reviewed semantic obligation",
-                    )
-                    for probe in review_packet.mutation_probes
-                ),
-                positive_example_valid=True,
-                positive_example_evidence="zero and one instantiate the declared Nat inputs",
-                negative_example_valid=True,
-                negative_example_evidence="a noncommutative replacement changes the claim",
-                non_vacuous=True,
-                non_vacuity_evidence="Nat supplies witnesses for both quantified inputs",
-                rationale="the complete source-backed translation is accepted",
-            )
-
-    library_signoff = ReviewerSignoffV1(
-        signoff_id=stable_identifier("source-signoff", "library-review"),
-        reviewer_id="source-library-reviewer",
-        role=ReviewerRoleV1.LIBRARY_REVIEWER,
-        decision=DecisionV1.ACCEPT,
-        independent=True,
-        rationale="the declaration is suitable as a reusable library boundary",
-    )
-    evaluation = harness.run_fidelity(
-        packet,
-        obligations=obligations,
-        translators=(
-            Translator(
-                "source-translator-a",
-                "source-team-a",
-                packet.contract.formal.lean_statement_source,
-            ),
-            Translator(
-                "source-translator-b",
-                "source-team-b",
-                packet.contract.formal.lean_statement_source,
-            ),
-        ),
-        mutation_agent=MutationAgent(),
-        reviewer=Reviewer(),
-        additional_signoffs=(library_signoff,),
-    )
+    evaluation = _run_source_fixture_evaluation(harness, packet)
     frozen = harness.revalidate_and_freeze(
         packet,
         evaluation=evaluation,
@@ -647,6 +728,155 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
     assert frozen.fidelity == evaluation.report
     assert _EXCERPT not in frozen.model_dump_json()
     assert _EXCERPT in evaluation.render_artifact().decode("utf-8")
+
+
+def test_source_harness_revalidates_freezes_and_bridges_to_prover_bundle(
+    tmp_path: Path,
+) -> None:
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+    evaluation = _run_source_fixture_evaluation(harness, packet)
+    key = _builder_attestation_key()
+
+    bundle = harness.revalidate_freeze_and_bridge(
+        packet,
+        evaluation=evaluation,
+        frozen_by="source-harness-freezer",
+        graphs=_source_graphs(),
+        bundle_key="source-harness-prover-bridge",
+        fidelity_evidence=FidelityEvidenceArtifactRefV1(
+            digest=evaluation.evidence_hash,
+            size=len(evaluation.render_artifact()),
+        ),
+        attestor=HmacAttestationSignerV1(key),
+        evidence_identity="source-harness-prover-bridge",
+    )
+
+    assert bundle.contract.status is StatementStatusV1.FROZEN
+    assert bundle.contract.freeze is not None
+    assert bundle.contract.freeze.source_preparation_id == packet.preparation_id
+    assert (
+        bundle.contract.freeze.source_preparation_hash
+        == packet.preparation_record().artifact_digest()
+    )
+    assert bundle.contract.fidelity == evaluation.report
+    assert bundle.fidelity_evidence is not None
+    assert bundle.fidelity_evidence.digest == digest_bytes(
+        HashKindV1.FREEZE_EVIDENCE,
+        evaluation.render_artifact(),
+    )
+    assert bundle.proof_boundary.trusted_statement_source.startswith("import Mathlib")
+    assert "namespace AutoLean.Geometry" in bundle.proof_boundary.trusted_statement_source
+    assert "theorem curvature_skew" in bundle.proof_boundary.trusted_statement_source
+    assert bundle.proof_boundary.expected_elaborated_type_hash == (
+        packet.contract.formal.elaborated_type_hash
+    )
+    assert bundle.proof_boundary.allowed_write_paths == ("Proof.lean",)
+    assert bundle.builder_attestation is not None
+    HmacAttestationVerifierV1({key.key_id: key}).verify(
+        bundle.builder_attestation,
+        expected_purpose=AttestationPurposeV1.BUILDER_FREEZE,
+        payload=builder_attestation_payload(bundle),
+    )
+
+
+def test_true_statement_candidate_cannot_reproduce_name_preserving_exploit(
+    tmp_path: Path,
+) -> None:
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+
+    with pytest.raises(FidelityHarnessError, match="exactly match the selected Lean statement"):
+        harness.run_fidelity(
+            packet,
+            obligations=_source_obligations(packet),
+            translators=(
+                SourceFixtureTranslator(
+                    "source-translator-a",
+                    "source-team-a",
+                    "theorem curvature_skew (u v : Nat) : True",
+                ),
+                SourceFixtureTranslator(
+                    "source-translator-b",
+                    "source-team-b",
+                    packet.contract.formal.lean_statement_source,
+                ),
+            ),
+            mutation_agent=SourceFixtureMutationAgent(),
+            reviewer=SourceFixtureReviewer(),
+        )
+
+
+def test_candidate_cannot_omit_declared_semantic_obligations(tmp_path: Path) -> None:
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+
+    with pytest.raises(FidelityHarnessError, match="obligation coverage is incomplete"):
+        harness.run_fidelity(
+            packet,
+            obligations=_source_obligations(packet),
+            translators=(
+                SourceFixtureIncompleteCoverageTranslator(
+                    "source-translator-a",
+                    "source-team-a",
+                    packet.contract.formal.lean_statement_source,
+                ),
+                SourceFixtureTranslator(
+                    "source-translator-b",
+                    "source-team-b",
+                    packet.contract.formal.lean_statement_source,
+                ),
+            ),
+            mutation_agent=SourceFixtureMutationAgent(),
+            reviewer=SourceFixtureReviewer(),
+        )
+
+
+def test_reviewer_must_cover_every_semantic_obligation_before_freeze(
+    tmp_path: Path,
+) -> None:
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+
+    with pytest.raises(FidelityHarnessError, match="cover every semantic obligation"):
+        harness.run_fidelity(
+            packet,
+            obligations=_source_obligations(packet),
+            translators=_source_fixture_translators(packet),
+            mutation_agent=SourceFixtureMutationAgent(),
+            reviewer=SourceFixtureReviewer(omitted_obligation_id="non-vacuity"),
+        )
+
+
+def test_undetected_mutation_cannot_freeze_even_with_complete_evidence(
+    tmp_path: Path,
+) -> None:
+    cache = _cache(tmp_path)
+    harness = _harness(tmp_path, cache)
+    packet = harness.prepare_draft(_TEXT_ID, _request())
+    undetected_probe_id = stable_identifier(
+        "source-mutation",
+        MutationKindV1.DROP_ASSUMPTION.value,
+    )
+    evaluation = harness.run_fidelity(
+        packet,
+        obligations=_source_obligations(packet),
+        translators=_source_fixture_translators(packet),
+        mutation_agent=SourceFixtureMutationAgent(),
+        reviewer=SourceFixtureReviewer(undetected_probe_id=undetected_probe_id),
+        additional_signoffs=(_source_library_signoff(),),
+    )
+
+    with pytest.raises(Exception, match="mutation probe was not detected"):
+        harness.revalidate_and_freeze(
+            packet,
+            evaluation=evaluation,
+            frozen_by="source-harness-freezer",
+        )
 
 
 def test_raw_freeze_and_bridge_primitives_are_not_public_package_api() -> None:

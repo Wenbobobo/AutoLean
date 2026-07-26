@@ -82,6 +82,9 @@ runner reports success.
 26. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one
     `Arithmetic.score` API change to separate declaration-invalidation and module-rebuild plans,
     then records the non-acceptance failure/rebuild/reuse boundary.
+27. [Pre-T6 Builder query route](pre-t6-builder-query-route.md) chooses a Builder-only
+    statement/type observation endpoint over fake proof-carriers, keeping the Prover V2 facade
+    and public protocol unchanged.
 
 The source audits that informed these decisions live in [audits/](audits/):
 [Archon](audits/archon-audit.md), [AutoArchon](audits/autoarchon-audit.md), and
