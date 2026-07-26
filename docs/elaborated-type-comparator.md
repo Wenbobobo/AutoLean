@@ -13,6 +13,16 @@ This is deliberately narrower than the upstream
 frozen declaration boundary. It does not replace the external comparator's environment replay,
 dependency equivalence, or sandboxing model.
 
+Builder uses the same canonical printer-text identity rule at an earlier and strictly separate
+boundary. After selected-formal-field-blind candidates are returned, but before mutation or
+semantic review, `StatementFidelityHarness` freshly queries the contract-selected reference and
+each candidate through `scripts.oci_mathlib_worker.query_declarations`. Exact canonical text and
+hash equality is required. This pre-freeze observation does not claim definitional equivalence,
+mathematical fidelity, a valid proof, allowed axioms, or Prover verification; the Prover comparator
+below still runs independently against the frozen proof boundary. Both currently implemented
+Builder query assurances are non-authoritative, so this observation is accepted only by explicit
+test-only freeze and registration modes.
+
 ## Evidence Contract
 
 `LeanRunEvidence.elaborated_type_evidence` has this logical record:

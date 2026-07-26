@@ -30,6 +30,7 @@ from autolean_builder import (
     ReferenceEntryV1,
     ReferenceManifestV1,
     RightsReview,
+    SelectedStatementBaseline,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
@@ -43,6 +44,7 @@ from autolean_builder import (
     TranslationTask,
     load_pilot_manifest,
 )
+from autolean_builder.testing import ScriptedCanonicalTypeQuery
 from autolean_contracts import (
     AttestationPurposeV1,
     AttestationSignerV1,
@@ -220,14 +222,31 @@ def _harness(
     clock: Callable[[], datetime] | None = None,
 ) -> SourceToStatementHarness:
     active_clock = clock or (lambda: datetime.now(UTC))
+    formal = _formal()
+    assert formal.elaborated_type is not None
     return SourceToStatementHarness(
         cache or _cache(tmp_path),
         preparation_ledger=SourcePreparationLedger(
             tmp_path / "source-preparations.db",
             confinement_root=tmp_path,
         ),
+        canonical_type_query=ScriptedCanonicalTypeQuery(
+            canonical_types_by_statement_sha256=(
+                (formal.statement_source_hash.value, formal.elaborated_type),
+            ),
+            worker_image_digest=(formal.environment.verifier_execution_policy.worker_image_digest),
+            lean_version=formal.environment.lean_version,
+            mathlib_revision=formal.environment.mathlib_revision,
+            lake_manifest_sha256=(
+                None
+                if formal.environment.lake_manifest_hash is None
+                else formal.environment.lake_manifest_hash.value
+            ),
+            fixture_id="source-harness-tests",
+        ),
         pilot_manifest=pilot_manifest,
         clock=active_clock,
+        allow_test_only_non_authoritative_canonical_type_freeze=True,
     )
 
 
@@ -420,16 +439,18 @@ class SourceFixtureMutationAgent:
     def generate(
         self,
         task: TranslationTask,
-        selected_candidate: CandidateFormalization,
+        selected_candidate: SelectedStatementBaseline,
     ) -> tuple[MutationProbeV1, ...]:
-        assert selected_candidate.statement_hash == task.selected_statement_hash
+        assert selected_candidate.statement_source_hash == task.selected_statement_hash
         return tuple(
             MutationProbeV1(
                 probe_id=stable_identifier("source-mutation", kind.value),
                 kind=kind,
                 target_path=f"formal.{kind.value}",
                 expected_failure="independent reviewer detects the changed statement",
-                mutated_statement_source=f"{task.selected_lean_statement}\n-- mutation: {kind.value}",
+                mutated_statement_source=(
+                    f"{task.selected_lean_statement}\n-- mutation: {kind.value}"
+                ),
             )
             for kind in MutationKindV1
         )
@@ -715,6 +736,18 @@ def test_real_source_harness_prepare_fidelity_and_freeze_path(tmp_path: Path) ->
     harness = _harness(tmp_path, cache)
     packet = harness.prepare_draft(_TEXT_ID, _request())
     evaluation = _run_source_fixture_evaluation(harness, packet)
+    strict_harness = SourceToStatementHarness(
+        harness.cache,
+        preparation_ledger=harness.preparation_ledger,
+        fidelity_harness=harness.fidelity_harness,
+        pilot_manifest=harness.pilot_manifest,
+    )
+    with pytest.raises(SourceHarnessError, match="non-authoritative canonical type evidence"):
+        strict_harness.revalidate_and_freeze(
+            packet,
+            evaluation=evaluation,
+            frozen_by="source-harness-freezer",
+        )
     frozen = harness.revalidate_and_freeze(
         packet,
         evaluation=evaluation,
@@ -788,7 +821,7 @@ def test_true_statement_candidate_cannot_reproduce_name_preserving_exploit(
     harness = _harness(tmp_path, cache)
     packet = harness.prepare_draft(_TEXT_ID, _request())
 
-    with pytest.raises(FidelityHarnessError, match="exactly match the selected Lean statement"):
+    with pytest.raises(FidelityHarnessError, match="canonical type query failed"):
         harness.run_fidelity(
             packet,
             obligations=_source_obligations(packet),

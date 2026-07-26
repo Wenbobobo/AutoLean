@@ -37,6 +37,7 @@ from autolean_contracts import (
     utc_now,
 )
 
+from .canonical_type_gate import CanonicalTypeQuery
 from .fidelity_harness import (
     FidelityEvaluation,
     MutationSuiteAgent,
@@ -369,13 +370,31 @@ class SourceToStatementHarness:
         *,
         preparation_ledger: SourcePreparationLedger,
         fidelity_harness: StatementFidelityHarness | None = None,
+        canonical_type_query: CanonicalTypeQuery | None = None,
         pilot_manifest: PilotManifestV1 | None = None,
         clock: Callable[[], datetime] = utc_now,
+        allow_test_only_non_authoritative_canonical_type_freeze: bool = False,
     ) -> None:
         self.cache = cache
         self.preparation_ledger = preparation_ledger
         self._clock = clock
-        self.fidelity_harness = fidelity_harness or StatementFidelityHarness(clock=clock)
+        self._allow_test_only_non_authoritative_canonical_type_freeze = (
+            allow_test_only_non_authoritative_canonical_type_freeze
+        )
+        if fidelity_harness is not None and canonical_type_query is not None:
+            raise SourceHarnessError(
+                "configure either a fidelity harness or a canonical type query, not both"
+            )
+        if fidelity_harness is None:
+            if canonical_type_query is None:
+                raise SourceHarnessError(
+                    "source-to-statement harness requires a canonical type query"
+                )
+            fidelity_harness = StatementFidelityHarness(
+                canonical_type_query=canonical_type_query,
+                clock=clock,
+            )
+        self.fidelity_harness = fidelity_harness
         default_manifest = (
             Path(__file__).resolve().parents[2]
             / "pilots"
@@ -564,6 +583,10 @@ class SourceToStatementHarness:
 
         self._assert_packet(packet)
         frozen_at = self._now("freeze")
+        if not self._allow_test_only_non_authoritative_canonical_type_freeze:
+            raise SourceHarnessError(
+                "non-authoritative canonical type evidence cannot enter the Builder freeze boundary"
+            )
         self._validate_fidelity_before_freeze(evaluation, frozen_at)
         preparation = packet.preparation_record()
         return _freeze_reviewed_contract(

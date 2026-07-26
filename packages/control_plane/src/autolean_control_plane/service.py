@@ -37,6 +37,7 @@ from autolean_contracts import (
 )
 
 from .artifacts import ArtifactRef, ArtifactStore
+from .builder_fidelity import validate_canonical_type_check
 from .errors import (
     ArtifactCorruption,
     ArtifactNotFound,
@@ -119,6 +120,8 @@ class TaskBinding:
     command_policy_hash: str
     axiom_profile: str
     axioms_allowlist: frozenset[str]
+    canonical_type_assurance: str | None
+    canonical_type_promotion_authority: bool
     bundle_artifact: ArtifactRef
     fidelity_evidence_artifact: ArtifactRef | None
     graph_nodes: tuple[JsonObject, ...]
@@ -156,6 +159,7 @@ class ControlPlane:
         attestation_verifier: AttestationVerifierV1,
         allow_test_only_direct_verifier_attestations: bool = False,
         allow_test_only_unreviewed_bundles: bool = False,
+        allow_test_only_non_authoritative_canonical_type_evidence: bool = False,
     ) -> None:
         if events.path.resolve() != leases.path.resolve():
             raise ValueError("events and leases must share one SQLite database for fenced writes")
@@ -167,6 +171,9 @@ class ControlPlane:
             allow_test_only_direct_verifier_attestations
         )
         self.allow_test_only_unreviewed_bundles = allow_test_only_unreviewed_bundles
+        self.allow_test_only_non_authoritative_canonical_type_evidence = (
+            allow_test_only_non_authoritative_canonical_type_evidence
+        )
 
     def _idempotency(
         self,
@@ -273,7 +280,7 @@ class ControlPlane:
         if replayed is not None:
             return self._binding_from_event(replayed)
         builder_attestation = self._verify_builder_attestation(bundle)
-        fidelity_artifact = self._verify_builder_fidelity_artifact(bundle)
+        fidelity_artifact, canonical_type_assurance = self._verify_builder_fidelity_artifact(bundle)
         desired = self._binding_from_bundle(bundle)
         artifact = self._put_model(bundle)
         binding = TaskBinding(
@@ -292,6 +299,8 @@ class ControlPlane:
             command_policy_hash=desired.command_policy_hash,
             axiom_profile=desired.axiom_profile,
             axioms_allowlist=desired.axioms_allowlist,
+            canonical_type_assurance=canonical_type_assurance,
+            canonical_type_promotion_authority=False,
             bundle_artifact=artifact,
             fidelity_evidence_artifact=fidelity_artifact,
             graph_nodes=desired.graph_nodes,
@@ -313,6 +322,8 @@ class ControlPlane:
                 "command_policy_hash": binding.command_policy_hash,
                 "axiom_profile": binding.axiom_profile,
                 "axioms_allowlist": sorted(binding.axioms_allowlist),
+                "canonical_type_assurance": binding.canonical_type_assurance,
+                "canonical_type_promotion_authority": (binding.canonical_type_promotion_authority),
                 "bundle_artifact": self._artifact_payload(artifact, kind="bundle"),
                 "fidelity_evidence_artifact": (
                     None
@@ -346,7 +357,7 @@ class ControlPlane:
                 "contract revision or bundle ID is already bound to a different frozen bundle"
             ) from error
         stored = self._binding_from_event(events[0])
-        if not self._same_logical_binding(stored, desired):
+        if not self._same_logical_binding(stored, binding):
             raise ProjectionError(
                 "canonical registration event disagrees with the requested immutable bundle"
             )
@@ -688,6 +699,8 @@ class ControlPlane:
             command_policy_hash=verifier_policy.command_policy_hash().value,
             axiom_profile=contract.policy.axiom_profile.value,
             axioms_allowlist=frozenset(contract.formal.axioms_allowlist),
+            canonical_type_assurance=None,
+            canonical_type_promotion_authority=False,
             bundle_artifact=placeholder,
             fidelity_evidence_artifact=(
                 None
@@ -706,6 +719,18 @@ class ControlPlane:
         fidelity_payload = payload.get("fidelity_evidence_artifact")
         if fidelity_payload is not None and not isinstance(fidelity_payload, dict):
             raise InvalidTransition("corrupt control-plane payload: fidelity_evidence_artifact")
+        canonical_type_assurance = payload.get("canonical_type_assurance")
+        if canonical_type_assurance is not None and (
+            not isinstance(canonical_type_assurance, str)
+            or canonical_type_assurance not in {"scripted_fake", "local_oci_prefreeze"}
+        ):
+            raise InvalidTransition("corrupt control-plane payload: canonical_type_assurance")
+        canonical_type_promotion_authority = payload.get(
+            "canonical_type_promotion_authority",
+            False,
+        )
+        if canonical_type_promotion_authority is not False:
+            raise InvalidTransition("canonical type registration event claims promotion authority")
         graph_nodes = self._required_list(payload, "graph_nodes")
         return TaskBinding(
             bundle_id=self._required_text(payload, "bundle_id"),
@@ -723,6 +748,8 @@ class ControlPlane:
             command_policy_hash=self._required_text(payload, "command_policy_hash"),
             axiom_profile=self._required_text(payload, "axiom_profile"),
             axioms_allowlist=frozenset(self._required_texts(payload, "axioms_allowlist")),
+            canonical_type_assurance=canonical_type_assurance,
+            canonical_type_promotion_authority=False,
             bundle_artifact=ArtifactRef(
                 digest=self._required_text(artifact_payload, "digest"),
                 size=self._required_int(artifact_payload, "size"),
@@ -760,14 +787,14 @@ class ControlPlane:
     def _verify_builder_fidelity_artifact(
         self,
         bundle: FormalizationTaskBundleV1,
-    ) -> ArtifactRef | None:
+    ) -> tuple[ArtifactRef | None, str | None]:
         """Require the signed handoff to root one canonical Builder evidence artifact."""
 
         fidelity = bundle.contract.fidelity
         reference = bundle.fidelity_evidence
         if fidelity is None and reference is None:
             if self.allow_test_only_unreviewed_bundles:
-                return None
+                return None, None
             raise InvalidTransition(
                 "a canonical Builder fidelity artifact is required before registration"
             )
@@ -815,6 +842,15 @@ class ControlPlane:
                 "Builder fidelity artifact generation task does not match generation_task_hash"
             )
         self._validate_candidate_generation_task_hashes(payload, generation_task_hash)
+        canonical_type_admission = validate_canonical_type_check(
+            bundle,
+            payload,
+            task=task,
+            generation_task_hash=generation_task_hash,
+            allow_test_only_non_authoritative=(
+                self.allow_test_only_non_authoritative_canonical_type_evidence
+            ),
+        )
         source_hash = self._required_object(task, "source_hash")
         statement_hash = self._required_object(task, "selected_statement_hash")
         checks = (
@@ -854,7 +890,7 @@ class ControlPlane:
         for valid, label in checks:
             if not valid:
                 raise InvalidTransition(f"Builder fidelity artifact has a different {label}")
-        return artifact
+        return artifact, canonical_type_admission.assurance
 
     def _generation_task_projection(
         self,
@@ -934,7 +970,7 @@ class ControlPlane:
                     "mathlib_revision": bundle.contract.formal.environment.mathlib_revision,
                     "imports_allowlist": list(bundle.contract.formal.imports_allowlist),
                     "axioms_allowlist": list(bundle.contract.formal.axioms_allowlist),
-                    "rendering_profile": "autolean.full-declaration-exact.v1",
+                    "rendering_profile": ("autolean.full-declaration-canonical-type.v1"),
                 },
                 "obligations": obligations,
             }
@@ -1650,6 +1686,8 @@ class ControlPlane:
             left.command_policy_hash,
             left.axiom_profile,
             left.axioms_allowlist,
+            left.canonical_type_assurance,
+            left.canonical_type_promotion_authority,
             left.fidelity_evidence_artifact,
             left.graph_nodes,
         ) == (
@@ -1668,6 +1706,8 @@ class ControlPlane:
             right.command_policy_hash,
             right.axiom_profile,
             right.axioms_allowlist,
+            right.canonical_type_assurance,
+            right.canonical_type_promotion_authority,
             right.fidelity_evidence_artifact,
             right.graph_nodes,
         )

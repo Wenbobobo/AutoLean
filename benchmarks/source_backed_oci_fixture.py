@@ -15,7 +15,6 @@ from pathlib import Path
 from typing import Final
 
 from autolean_builder import (
-    CandidateFormalization,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
@@ -26,6 +25,7 @@ from autolean_builder import (
     ReferenceCache,
     ReferenceManifestV1,
     RightsReview,
+    SelectedStatementBaseline,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
@@ -36,6 +36,7 @@ from autolean_builder import (
     StatementDraftRequest,
     TranslationTask,
 )
+from autolean_builder.testing import ScriptedCanonicalTypeQuery
 from autolean_contracts import (
     AttestationSignerV1,
     DecisionV1,
@@ -184,7 +185,7 @@ def _reference_entry(
     }
 
 
-def _source_harness(root: Path) -> SourceToStatementHarness:
+def _source_harness(root: Path, image_digest: str) -> SourceToStatementHarness:
     import pypdf
 
     if pypdf.__version__ != _PYPDF_VERSION:
@@ -251,7 +252,17 @@ def _source_harness(root: Path) -> SourceToStatementHarness:
             root / "source-preparations.db",
             confinement_root=root,
         ),
+        canonical_type_query=ScriptedCanonicalTypeQuery(
+            canonical_types_by_statement_sha256=(
+                (digest_text(HashKindV1.STATEMENT_SOURCE, STATEMENT).value, CANONICAL_TYPE),
+            ),
+            worker_image_digest=image_digest,
+            lean_version=LEAN_VERSION,
+            mathlib_revision=MATHLIB_REVISION,
+            fixture_id="source-backed-oci-architecture-test",
+        ),
         clock=lambda: _FIXED_TIME,
+        allow_test_only_non_authoritative_canonical_type_freeze=True,
     )
 
 
@@ -377,9 +388,9 @@ class _MutationAgent:
     def generate(
         self,
         task: TranslationTask,
-        selected_candidate: CandidateFormalization,
+        baseline: SelectedStatementBaseline,
     ) -> tuple[MutationProbeV1, ...]:
-        del task, selected_candidate
+        assert baseline.lean_statement_source == task.selected_lean_statement
         changes = {
             MutationKindV1.DROP_ASSUMPTION: "theorem fixture : True",
             MutationKindV1.SWAP_QUANTIFIERS: ("theorem fixture : ∃ n : Nat, ∀ m : Nat, n = n"),
@@ -476,7 +487,7 @@ def build_source_backed_oci_fixture(
 ) -> SourceBackedOciFixture:
     """Build exactly one reviewed handoff for CI or an operator-run OCI canary."""
 
-    harness = _source_harness(root)
+    harness = _source_harness(root, image_digest)
     packet = harness.prepare_draft(_TEXT_REFERENCE_ID, _draft_request(image_digest))
     evaluation = harness.run_fidelity(
         packet,

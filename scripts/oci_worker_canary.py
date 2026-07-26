@@ -596,6 +596,7 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
                     _VERIFIER_KEY.key_id: _VERIFIER_KEY,
                 }
             ),
+            allow_test_only_non_authoritative_canonical_type_evidence=True,
         )
         if plane.allow_test_only_unreviewed_bundles:
             raise RuntimeError("source-backed OCI canary cannot enable unreviewed bundle admission")
@@ -606,7 +607,14 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
             attestor=HmacAttestationSignerV1(_BUILDER_KEY),
         )
         bundle = source_backed.bundle
-        plane.register_bundle(bundle, idempotency_key="register")
+        registration = plane.register_bundle(bundle, idempotency_key="register")
+        if (
+            registration.canonical_type_assurance != "scripted_fake"
+            or registration.canonical_type_promotion_authority
+        ):
+            raise RuntimeError(
+                "source-backed OCI canary lost its test-only Builder evidence classification"
+            )
         receipt = plane.claim(
             bundle.bundle_id.value,
             worker_id="oci-real-canary-worker",
@@ -812,6 +820,10 @@ def _run_canaries(repo_root: Path, image: str) -> dict[str, object]:
             "promotion_attestation_created": False,
             "source_backed_builder_handoff": True,
             "builder_unreviewed_bypass": plane.allow_test_only_unreviewed_bundles,
+            "builder_canonical_type_assurance": registration.canonical_type_assurance,
+            "builder_canonical_type_promotion_authority": (
+                registration.canonical_type_promotion_authority
+            ),
             "builder_fidelity_evidence_digest": source_backed.evaluation.evidence_hash.value,
             "source_preparation_hash": freeze.source_preparation_hash.value,
             "bundle_handoff_hash": bundle.handoff_hash().value,

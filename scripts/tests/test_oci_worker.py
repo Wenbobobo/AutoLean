@@ -176,6 +176,7 @@ def test_real_canary_bundle_binds_reviewed_source_image_and_pure_lean_boundary(
         leases=LeaseStore(database),
         artifacts=ArtifactStore(tmp_path / "artifacts"),
         attestation_verifier=HmacAttestationVerifierV1({builder_key.key_id: builder_key}),
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
     )
     fixture = build_source_backed_oci_fixture(
         tmp_path / "source",
@@ -197,6 +198,8 @@ def test_real_canary_bundle_binds_reviewed_source_image_and_pure_lean_boundary(
     )
 
     assert plane.allow_test_only_unreviewed_bundles is False
+    assert registered.canonical_type_assurance == "scripted_fake"
+    assert registered.canonical_type_promotion_authority is False
     assert replayed == registered
     assert bundle.proof_boundary.expected_declaration == oci_worker_canary.DECLARATION
     assert bundle.contract.formal.elaborated_type == "\u2200 (n : Nat), @Eq.{1} Nat n n"

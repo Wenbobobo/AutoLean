@@ -10,7 +10,6 @@ from typing import BinaryIO
 
 import pytest
 from autolean_builder import (
-    CandidateFormalization,
     CandidateGenerationTask,
     CandidateProposal,
     CandidateReviewVerdict,
@@ -24,6 +23,7 @@ from autolean_builder import (
     ReferenceEntryV1,
     ReferenceManifestV1,
     RightsReview,
+    SelectedStatementBaseline,
     SemanticObligation,
     SemanticObligationKind,
     SemanticReviewPacket,
@@ -35,6 +35,7 @@ from autolean_builder import (
     TranslationTask,
     create_next_revision,
 )
+from autolean_builder.testing import ScriptedCanonicalTypeQuery
 from autolean_contracts import (
     AttestationPurposeV1,
     ContractChangeRequestV1,
@@ -138,6 +139,15 @@ _TEXT_SHA256 = hashlib.sha256(_TEXT_BYTES).hexdigest()
 _ATTRIBUTION = "AutoLean synthetic CC0 Builder-Prover fixture."
 
 
+def _elaborated_type(revision: int) -> str:
+    return (
+        "forall (alpha : Type), Nonempty alpha -> Finite alpha -> "
+        "forall (Noetherian : Prop), Noetherian -> Nonempty alpha /\\ "
+        "Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, "
+        + ("x < y /\\ x + 1 <= y" if revision == 2 else "x < y /\\ x <= y")
+    )
+
+
 def _reference_entry(
     *,
     reference_id: str,
@@ -239,6 +249,23 @@ def _source_harness(root: Path) -> SourceToStatementHarness:
             root / "source-preparations.db",
             confinement_root=root,
         ),
+        canonical_type_query=ScriptedCanonicalTypeQuery(
+            canonical_types_by_statement_sha256=(
+                (
+                    digest_text(HashKindV1.STATEMENT_SOURCE, _STATEMENT_V1).value,
+                    _elaborated_type(1),
+                ),
+                (
+                    digest_text(HashKindV1.STATEMENT_SOURCE, _STATEMENT_V2).value,
+                    _elaborated_type(2),
+                ),
+            ),
+            worker_image_digest="sha256:" + "c" * 64,
+            lean_version="v4.28.0",
+            mathlib_revision="closed-loop-fixture-mathlib",
+            fixture_id="closed-loop",
+        ),
+        allow_test_only_non_authoritative_canonical_type_freeze=True,
     )
 
 
@@ -251,12 +278,7 @@ def _draft_request(*, revision: int) -> StatementDraftRequest:
         else "For all x : Nat, there exists y : Nat with x < y and x <= y."
     )
     statement = _STATEMENT_V2 if is_second_revision else _STATEMENT_V1
-    elaborated = (
-        "forall (alpha : Type), Nonempty alpha -> Finite alpha -> "
-        "forall (Noetherian : Prop), Noetherian -> Nonempty alpha /\\ "
-        "Finite alpha /\\ Noetherian /\\ forall x : Nat, exists y : Nat, "
-        + ("x < y /\\ x + 1 <= y" if is_second_revision else "x < y /\\ x <= y")
-    )
+    elaborated = _elaborated_type(revision)
     source_bytes = source_text.encode()
     start_offset = _TEXT_BYTES.index(source_bytes)
     formal = FormalSpecificationV1(
@@ -397,9 +419,9 @@ class _MutationAgent:
     def generate(
         self,
         task: TranslationTask,
-        selected_candidate: CandidateFormalization,
+        baseline: SelectedStatementBaseline,
     ) -> tuple[MutationProbeV1, ...]:
-        del selected_candidate
+        assert baseline.lean_statement_source == task.selected_lean_statement
         statement = task.selected_lean_statement
         changes = {
             MutationKindV1.DROP_ASSUMPTION: statement.replace(
@@ -542,6 +564,7 @@ def _plane(tmp_path: Path) -> ControlPlane:
             }
         ),
         allow_test_only_direct_verifier_attestations=True,
+        allow_test_only_non_authoritative_canonical_type_evidence=True,
     )
 
 
