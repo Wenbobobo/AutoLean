@@ -1,6 +1,7 @@
 # Phase 1 Current Route
 
-Status: decision and sequencing record as of 2026-07-25
+Status: historical decision and sequencing snapshot as of 2026-07-25; superseded for live
+ordering by [roadmap-next.md](roadmap-next.md)
 
 ## Role of this document
 

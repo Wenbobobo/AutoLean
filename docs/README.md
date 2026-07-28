@@ -5,6 +5,18 @@ open-problem research, but Phase 1 is an architecture-validation program: a resu
 not promoted merely because an agent produced Lean-looking text or because a benchmark
 runner reports success.
 
+## Document authority
+
+| Authority | Canonical document | What it alone decides |
+| --- | --- | --- |
+| Stable specification | [Architecture](architecture.md), [protocol](protocol.md), [threat model](threat-model.md), and [Phase 1 acceptance](phase-1-acceptance.md) | Non-waivable system and acceptance invariants |
+| Observed facts | [Phase 1 progress ledger](phase-1-progress.md) | Evidence actually observed, bound to its stated commit or candidate tree |
+| Active execution | [Next operating plan](roadmap-next.md) | Current ordering, parallel waves, and task status |
+| External authority | [Operator and authority worklist](operator-and-authority-worklist.md) | Human, host, rights, account, signer, and release actions |
+| Long-range strategy | [Phase 2 fractal roadmap](phase-2-fractal-roadmap.md) | Phase 2 and later milestones and stop conditions |
+| Historical decisions | [Archive index](archive/README.md) | Superseded plans and their safe-retention policy |
+| Research input | [Research](research/) and [audits](audits/) | Evidence and proposals that cannot change a gate by themselves |
+
 ## Reading order
 
 1. [Architecture](architecture.md) defines the Builder--Prover authority split, the
@@ -40,14 +52,14 @@ runner reports success.
 12. [HF incident containment](hf-incident-containment.md) records the recovery boundary
    without including recovered data, archive names, prompts, sessions, or credentials.
 13. [Phase 1 acceptance](phase-1-acceptance.md) defines the non-waivable gates,
-    [the current route](phase-1-plan.md) resolves active sequencing,
-    [the parallel execution plan](phase-1-parallel-execution.md) assigns work packages, and
+    [the active execution board](roadmap-next.md) owns current sequencing, and
     [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
     [The Phase 1 assurance case](phase-1-assurance-case.md) maps each current safety claim to
     its replayable evidence, non-claim, and remaining acceptance gate.
-    [The next operating plan](roadmap-next.md) is the current root-agent control plan for
-    coordinating the immediate Builder bridge, vertical fixture, role benchmark, Dashboard, and
-    research work packages without promoting them into release evidence prematurely.
+    [The operator and authority worklist](operator-and-authority-worklist.md) is the only active
+    checklist for external actions. The old [route](phase-1-plan.md) and
+    [parallel plan](phase-1-parallel-execution.md) are retained historical snapshots indexed in
+    [the archive](archive/README.md).
     [The Phase 2 fractal roadmap](phase-2-fractal-roadmap.md) is the longer-horizon planning
     record for Open Problem portfolio work, Builder discovery, Prover scaling, and downstream
     Library staging.
@@ -61,16 +73,19 @@ runner reports success.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
-    `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
-    independent versus compositional proof-dependency gates. The
-    [image-owned substrate preflight](library-substrate-image-preflight.md) records the exact
+     `library-substrate-v1` pilot profile from any future general Mathlib substrate, and defines
+     independent versus compositional proof-dependency gates. The
+     [image-owned substrate preflight](library-substrate-image-preflight.md) records the exact
     child build, typed/IR inventory, sealed-Candidate query, and V2-compatible preflight facade
     without a contract, gateway, or T6 claim.
     The
     [executable proof-dependency spike](proof-dependency-gate-spike.md) records a host-mounted
-    source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.
-    The [Lean 4.28 module-origin API note](lean-module-origin-spike.md) records the imported
-    declaration boundary and the narrow image-owned test a successor manifest must implement.
+     source-v2 replay and the remaining image, type, origin, contract, and gateway blockers.
+     The [Lean 4.28 module-origin API note](lean-module-origin-spike.md) records the imported
+     declaration boundary and the narrow image-owned test a successor manifest must implement.
+     The [Dependency Closure V2 design](dependency-closure-v2-design.md) records a locally tested,
+     non-authoritative Stage A contract/materializer and the still-unimplemented Stage B
+     claim/OCI/evidence/gateway bindings.
 18. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
     deliberately narrow evidence boundary.
 19. [Operations and release](operations-release.md) defines evidence collection and the conditions
@@ -79,13 +94,18 @@ runner reports success.
     manual readiness preflight from authoritative Lean/OCI evidence.
 21. [Public repository release](public-release.md) defines the tracked-tree, license, and
     restricted-payload checks required before changing GitHub visibility.
-22. [Open questions](open-questions.md) records decisions that require an operator,
-    mathematical reviewer, or project owner.
+22. [Open questions](open-questions.md) preserves stable historical OQ identifiers.
+    Actionable operator, host, rights, reviewer, signer, and release tasks live only in the
+    [operator and authority worklist](operator-and-authority-worklist.md). The
+    [operator live gate](operator-live-gate.md) documents the bounded host command.
 23. [Formal-assistant landscape](research/formal-assistant-landscape-2026-07-24.md) records
     the local Archon-talk evidence, Danus/Reap audit boundaries, and the resulting isolated
     experiments without treating external performance claims as AutoLean results. The
     [meeting Archon takeaways](research/meeting_archon_takeaways.md) keep the newer talk snippets,
     adjacent assistant landscape, and Dashboard/context-pack lessons as advisory roadmap input.
+    The [pinned Danus code audit](research/danus-code-audit-2026-07-28.md) accepts its
+    fact-graph/context lessons only for a future untrusted research-scout layer and rejects its
+    runtime, LLM truth gate, provider policy, and shared-file authority boundary.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
@@ -95,6 +115,9 @@ runner reports success.
 26. [Phase 2 discovery lane cards](research/phase2-discovery-lane-cards-2026-07-26.md) propose
     transport-PDE and intrinsic-metric discovery routes with explicit rights, overlap, conversion,
     and stop gates; neither card authorizes source ingestion or a frozen contract.
+    The [Phase 2 open-source selection](research/phase2-open-source-selection-2026-07-26.md)
+    records iFEM as a conditional source-preparation and compile-discovery primary, not a selected
+    production pilot.
 27. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.

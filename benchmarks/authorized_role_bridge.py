@@ -21,7 +21,7 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Annotated, Literal, Never, Self, SupportsIndex
+from typing import Annotated, Literal, Never, Protocol, Self, SupportsIndex, runtime_checkable
 
 from autolean_contracts import (
     AttestationV1,
@@ -31,6 +31,8 @@ from autolean_contracts import (
     HashKindV1,
     ModelExecutionAuthorizationV1,
     ModelExecutionBudgetV1,
+    ModelExecutionCompletionPublicV1,
+    ModelExecutionCompletionReceiptV1,
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
     ModelWorkBundleV2,
@@ -43,6 +45,7 @@ from autolean_contracts import (
     digest_bytes,
     digest_model,
     digest_text,
+    model_execution_completion_public,
     model_work_bundle_id,
     model_work_case_contract_hash,
     model_work_case_hash,
@@ -61,9 +64,11 @@ from autolean_prover.providers import (
     Capability,
     ModelRequest,
     ModelResponse,
+    PrivateModelOutputStore,
     ProviderRegistry,
     TokenUsage,
     ToolCall,
+    response_from_artifact,
 )
 from pydantic import BeforeValidator, ConfigDict, Field, model_validator
 
@@ -311,6 +316,21 @@ class AuthorizedRoleTrialSidecarV2(_AuthorizedRoleTrialSidecarBase):
     usage_summary: AuthorizedRoleTrialUsageSummaryV1
 
 
+class AuthorizedRoleTrialSidecarV3(_AuthorizedRoleTrialSidecarBase):
+    """V3 public trial evidence bound to one output-bound completion receipt.
+
+    The completion projection deliberately excludes the private response artifact, nonce, exact
+    usage, and receipt body.  Those values remain available only through the injected private
+    evaluator reader below.
+    """
+
+    schema_version: Literal["autolean.authorized-role-trial-sidecar.v3"] = (
+        "autolean.authorized-role-trial-sidecar.v3"
+    )
+    usage_summary: AuthorizedRoleTrialUsageSummaryV1
+    completion: ModelExecutionCompletionPublicV1
+
+
 class AuthorizedRolePrivateOutputEntryV1(ContractModel):
     """Private-manifest index for one content-addressed normalized model response."""
 
@@ -392,6 +412,50 @@ class AuthorizedRolePrivateManifestV1(_AuthorizedRoleRunIdContractModel):
             or len(coordinates) != len(set(coordinates))
         ):
             raise ValueError("private output coordinates must be non-empty, unique, and sorted")
+        return self
+
+    def content_hash(self) -> str:
+        return _content_hash(self)
+
+
+class AuthorizedRoleCompletionPrivateOutputEntryV2(ContractModel):
+    """One private V3 trial receipt; response bytes live only in its completion artifact."""
+
+    schema_version: Literal["autolean.authorized-role-completion-output-entry.v2"] = (
+        "autolean.authorized-role-completion-output-entry.v2"
+    )
+    cell_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    case_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    repetition: int = Field(ge=1, le=100)
+    authorization_hash: str = Field(pattern=_SHA256_PATTERN)
+    elapsed_ms: int = Field(ge=0)
+    receipt: ModelExecutionCompletionReceiptV1
+
+    @model_validator(mode="after")
+    def validate_completion_binding(self) -> Self:
+        if self.receipt.record.authorization_hash.value != self.authorization_hash:
+            raise ValueError("completion receipt authorization does not match private trial entry")
+        return self
+
+
+class AuthorizedRoleCompletionPrivateManifestV2(_AuthorizedRoleRunIdContractModel):
+    """Authenticated private index for V3 completion receipts, never raw model output."""
+
+    schema_version: Literal["autolean.authorized-role-completion-manifest.v2"] = (
+        "autolean.authorized-role-completion-manifest.v2"
+    )
+    run_id: AuthorizedRoleRunIdV1
+    outputs: tuple[AuthorizedRoleCompletionPrivateOutputEntryV2, ...]
+
+    @model_validator(mode="after")
+    def validate_outputs(self) -> Self:
+        coordinates = tuple((item.cell_id, item.case_id, item.repetition) for item in self.outputs)
+        if (
+            len(coordinates) != 10
+            or coordinates != tuple(sorted(coordinates))
+            or len(coordinates) != len(set(coordinates))
+        ):
+            raise ValueError("completion manifest requires ten canonical unique trial receipts")
         return self
 
     def content_hash(self) -> str:
@@ -621,7 +685,12 @@ class _AuthorizedRoleSuiteSidecarBase(_AuthorizedRoleRunIdContractModel):
 
     def _validate_trial_set(
         self,
-        trials: tuple[AuthorizedRoleTrialSidecarV1 | AuthorizedRoleTrialSidecarV2, ...],
+        trials: tuple[
+            AuthorizedRoleTrialSidecarV1
+            | AuthorizedRoleTrialSidecarV2
+            | AuthorizedRoleTrialSidecarV3,
+            ...,
+        ],
     ) -> None:
         coordinates = tuple((item.cell_id, item.case_id, item.repetition) for item in trials)
         if (
@@ -665,6 +734,30 @@ class AuthorizedRoleSuiteSidecarV2(_AuthorizedRoleSuiteSidecarBase):
     @model_validator(mode="after")
     def validate_trials(self) -> Self:
         self._validate_trial_set(self.trials)
+        return self
+
+
+class AuthorizedRoleSuiteSidecarV3(_AuthorizedRoleSuiteSidecarBase):
+    """Completion-backed ten-trial sidecar with no public raw-output coordinate."""
+
+    schema_version: Literal["autolean.authorized-role-suite-sidecar.v3"] = (
+        "autolean.authorized-role-suite-sidecar.v3"
+    )
+    usage_summary: AuthorizedRolePublicUsageSummaryV2
+    trials: tuple[AuthorizedRoleTrialSidecarV3, ...]
+
+    @model_validator(mode="after")
+    def validate_trials(self) -> Self:
+        self._validate_trial_set(self.trials)
+        completion_ids = tuple(item.completion.completion_id.value for item in self.trials)
+        receipt_hashes = tuple(item.completion.receipt_hash.value for item in self.trials)
+        commitments = tuple(item.completion.public_output_commitment.value for item in self.trials)
+        if (
+            len(set(completion_ids)) != len(completion_ids)
+            or len(set(receipt_hashes)) != len(receipt_hashes)
+            or len(set(commitments)) != len(commitments)
+        ):
+            raise ValueError("completion-backed role trials must not reuse completion evidence")
         return self
 
 
@@ -1235,6 +1328,334 @@ class AuthorizedRoleRawOutputStore:
         return state
 
 
+class AuthorizedRoleCompletionManifestStoreV2:
+    """Private authenticated receipt manifest for completion-backed role trials.
+
+    This store persists only receipt metadata.  The sole response-byte authority is the injected
+    :class:`PrivateModelOutputStore` referenced by every receipt.
+    """
+
+    def __init__(
+        self,
+        root: Path,
+        *,
+        private_authenticator: OperatorPrivateManifestAuthenticator,
+    ) -> None:
+        if not isinstance(root, Path) or not root.is_absolute():
+            raise AuthorizedRoleBridgeError("completion manifest root must be an absolute Path")
+        if not isinstance(private_authenticator, OperatorPrivateManifestAuthenticator):
+            raise AuthorizedRoleBridgeError(
+                "completion manifest authenticator must be injected explicitly"
+            )
+        root.mkdir(parents=True, exist_ok=True)
+        self._root = root.resolve(strict=True)
+        if not self._root.is_dir():
+            raise AuthorizedRoleBridgeError("completion manifest root must be a directory")
+        self._manifests = self._root / "completion-manifests-v2"
+        self._handles = self._root / "completion-manifest-handles-v2"
+        self._run_index = self._root / "completion-manifest-run-index-v2"
+        self._private_authenticator = private_authenticator
+
+    def put_manifest(self, manifest: AuthorizedRoleCompletionPrivateManifestV2) -> str:
+        """Persist an authenticated handle after all ten receipt coordinates are complete."""
+
+        if not isinstance(manifest, AuthorizedRoleCompletionPrivateManifestV2):
+            raise AuthorizedRoleBridgeError("completion manifest has the wrong contract type")
+        payload = canonical_json_bytes(manifest.model_dump(mode="json"))
+        manifest_hash = manifest.content_hash()
+        manifest_path = self._manifest_path(manifest_hash)
+        try:
+            _write_private_exclusive(manifest_path, payload)
+        except FileExistsError:
+            try:
+                if manifest_path.read_bytes() != payload:
+                    raise AuthorizedRoleBridgeError("completion manifest hash is inconsistent")
+            except OSError as error:
+                raise AuthorizedRoleBridgeError("completion manifest is unavailable") from error
+
+        private_handle = _new_private_handle()
+        binding = AuthorizedRolePrivateManifestBindingV1(
+            private_handle=private_handle,
+            manifest_hash=manifest_hash,
+            run_id=manifest.run_id,
+            coordinates=tuple(
+                AuthorizedRolePrivateManifestCoordinateV1(
+                    cell_id=item.cell_id,
+                    case_id=item.case_id,
+                    repetition=item.repetition,
+                    authorization_hash=item.authorization_hash,
+                )
+                for item in manifest.outputs
+            ),
+        )
+        authenticator_id = self._private_authenticator.authenticator_id
+        authentication_scheme = self._private_authenticator.authentication_scheme
+        authentication_payload = _private_manifest_authentication_payload(
+            binding,
+            authenticator_id=authenticator_id,
+            authentication_scheme=authentication_scheme,
+        )
+        authentication_tag = self._private_authenticator.authenticate(authentication_payload)
+        if (
+            not isinstance(authentication_tag, str)
+            or re.fullmatch(_PRIVATE_AUTHENTICATION_TAG_PATTERN, authentication_tag) is None
+            or not self._private_authenticator.verify(authentication_payload, authentication_tag)
+        ):
+            raise AuthorizedRoleBridgeError(
+                "completion manifest authenticator returned an invalid tag"
+            )
+        record = AuthorizedRoleAuthenticatedManifestHandleV1(
+            binding=binding,
+            authenticator_id=authenticator_id,
+            authentication_scheme=authentication_scheme,
+            authentication_tag=authentication_tag,
+        )
+        try:
+            _write_private_exclusive(
+                self._handle_path(private_handle),
+                canonical_json_bytes(record.model_dump(mode="json")),
+            )
+        except FileExistsError:
+            raise AuthorizedRoleBridgeError(
+                "completion manifest handle unexpectedly collided"
+            ) from None
+        run_binding = AuthorizedRolePrivateRunIndexBindingV1(
+            run_id=manifest.run_id,
+            private_handle=private_handle,
+            manifest_hash=manifest_hash,
+        )
+        run_authentication_payload = _private_run_index_authentication_payload(
+            run_binding,
+            authenticator_id=authenticator_id,
+            authentication_scheme=authentication_scheme,
+        )
+        run_authentication_tag = self._private_authenticator.authenticate(
+            run_authentication_payload
+        )
+        if (
+            not isinstance(run_authentication_tag, str)
+            or re.fullmatch(_PRIVATE_AUTHENTICATION_TAG_PATTERN, run_authentication_tag) is None
+            or not self._private_authenticator.verify(
+                run_authentication_payload,
+                run_authentication_tag,
+            )
+        ):
+            raise AuthorizedRoleBridgeError(
+                "completion manifest run index authenticator returned an invalid tag"
+            )
+        run_record = AuthorizedRoleAuthenticatedRunIndexV1(
+            binding=run_binding,
+            authenticator_id=authenticator_id,
+            authentication_scheme=authentication_scheme,
+            authentication_tag=run_authentication_tag,
+        )
+        try:
+            _write_private_exclusive(
+                self._run_index_path(manifest.run_id),
+                canonical_json_bytes(run_record.model_dump(mode="json")),
+            )
+        except FileExistsError:
+            raise AuthorizedRoleReconciliationRequired(
+                "completion manifest already exists for this run"
+            ) from None
+        return private_handle
+
+    def resolve_run_manifest_handle(self, run_id: str) -> str:
+        """Resolve an authenticated V3 manifest handle after a local process restart."""
+
+        run_id = validate_authorized_role_run_id(run_id)
+        try:
+            payload = self._run_index_path(run_id).read_bytes()
+            record = AuthorizedRoleAuthenticatedRunIndexV1.model_validate_json(payload)
+        except (OSError, ValueError):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion run index requires private reconciliation"
+            ) from None
+        binding = record.binding
+        if (
+            canonical_json_bytes(record.model_dump(mode="json")) != payload
+            or binding.run_id != run_id
+            or record.authenticator_id != self._private_authenticator.authenticator_id
+            or record.authentication_scheme != self._private_authenticator.authentication_scheme
+            or not self._private_authenticator.verify(
+                _private_run_index_authentication_payload(
+                    binding,
+                    authenticator_id=record.authenticator_id,
+                    authentication_scheme=record.authentication_scheme,
+                ),
+                record.authentication_tag,
+            )
+        ):
+            raise AuthorizedRoleReconciliationRequired("completion run index authentication failed")
+        manifest = self.read_manifest(binding.private_handle)
+        if manifest.content_hash() != binding.manifest_hash:
+            raise AuthorizedRoleReconciliationRequired(
+                "completion run index is not bound to its manifest"
+            )
+        return binding.private_handle
+
+    def read_manifest(self, private_handle: str) -> AuthorizedRoleCompletionPrivateManifestV2:
+        """Resolve one opaque authenticated handle without exposing private filesystem paths."""
+
+        private_handle = _validated_private_handle(private_handle)
+        try:
+            payload = self._handle_path(private_handle).read_bytes()
+            record = AuthorizedRoleAuthenticatedManifestHandleV1.model_validate_json(payload)
+        except (OSError, ValueError):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion manifest handle requires private reconciliation"
+            ) from None
+        if canonical_json_bytes(record.model_dump(mode="json")) != payload:
+            raise AuthorizedRoleReconciliationRequired(
+                "completion manifest handle is not canonical"
+            )
+        binding = record.binding
+        if (
+            binding.private_handle != private_handle
+            or record.authenticator_id != self._private_authenticator.authenticator_id
+            or record.authentication_scheme != self._private_authenticator.authentication_scheme
+            or not self._private_authenticator.verify(
+                _private_manifest_authentication_payload(
+                    binding,
+                    authenticator_id=record.authenticator_id,
+                    authentication_scheme=record.authentication_scheme,
+                ),
+                record.authentication_tag,
+            )
+        ):
+            raise AuthorizedRoleReconciliationRequired("completion manifest authentication failed")
+        try:
+            manifest_payload = self._manifest_path(binding.manifest_hash).read_bytes()
+            manifest = AuthorizedRoleCompletionPrivateManifestV2.model_validate_json(
+                manifest_payload
+            )
+        except (OSError, ValueError):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion manifest requires private reconciliation"
+            ) from None
+        if (
+            canonical_json_bytes(manifest.model_dump(mode="json")) != manifest_payload
+            or manifest.content_hash() != binding.manifest_hash
+            or manifest.run_id != binding.run_id
+            or tuple(
+                AuthorizedRolePrivateManifestCoordinateV1(
+                    cell_id=item.cell_id,
+                    case_id=item.case_id,
+                    repetition=item.repetition,
+                    authorization_hash=item.authorization_hash,
+                )
+                for item in manifest.outputs
+            )
+            != binding.coordinates
+        ):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion manifest binding is inconsistent"
+            )
+        return manifest
+
+    def _manifest_path(self, manifest_hash: str) -> Path:
+        if re.fullmatch(_SHA256_PATTERN, manifest_hash) is None:
+            raise AuthorizedRoleBridgeError("completion manifest hash is invalid")
+        return self._manifests / f"{manifest_hash}.json"
+
+    def _handle_path(self, private_handle: str) -> Path:
+        return self._handles / f"{_validated_private_handle(private_handle)}.json"
+
+    def _run_index_path(self, run_id: str) -> Path:
+        run_hash = hashlib.sha256(
+            validate_authorized_role_run_id(run_id).encode("utf-8")
+        ).hexdigest()
+        return self._run_index / f"{run_hash}.json"
+
+
+@runtime_checkable
+class CompletionReceiptVerifier(Protocol):
+    """The evaluator's narrow authority to validate one already-settled receipt."""
+
+    def verify_completion(self, receipt: ModelExecutionCompletionReceiptV1) -> None: ...
+
+
+class AuthorizedRoleCompletionEvidenceReaderV2:
+    """Read-only private evaluator boundary for completion-backed role evidence.
+
+    It has no ProviderRegistry, signer, authorization issuer, or manifest writer.  It first
+    verifies the persisted completion, then reads exactly the artifact that receipt identifies.
+    """
+
+    def __init__(
+        self,
+        *,
+        manifest_store: AuthorizedRoleCompletionManifestStoreV2,
+        output_store: PrivateModelOutputStore,
+        completion_verifier: CompletionReceiptVerifier,
+    ) -> None:
+        if not isinstance(manifest_store, AuthorizedRoleCompletionManifestStoreV2):
+            raise AuthorizedRoleBridgeError("completion evidence requires a private manifest store")
+        if not isinstance(output_store, PrivateModelOutputStore):
+            raise AuthorizedRoleBridgeError("completion evidence requires a private output store")
+        if not isinstance(completion_verifier, CompletionReceiptVerifier):
+            raise AuthorizedRoleBridgeError("completion evidence requires a receipt verifier")
+        self._manifest_store = manifest_store
+        self._output_store = output_store
+        self._completion_verifier = completion_verifier
+
+    def read_manifest(self, private_handle: str) -> AuthorizedRoleCompletionPrivateManifestV2:
+        return self._manifest_store.read_manifest(private_handle)
+
+    def read_response(
+        self,
+        *,
+        manifest: AuthorizedRoleCompletionPrivateManifestV2,
+        entry: AuthorizedRoleCompletionPrivateOutputEntryV2,
+        expected_bundle_id: str,
+    ) -> ModelResponse:
+        if entry not in manifest.outputs:
+            raise AuthorizedRoleReconciliationRequired(
+                "completion entry is not a member of the private manifest"
+            )
+        receipt = entry.receipt
+        record = receipt.record
+        if (
+            record.authorization_hash.value != entry.authorization_hash
+            or record.authorization.bundle_id.value != expected_bundle_id
+        ):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion receipt is not bound to the expected role trial"
+            )
+        artifact_reference = record.private_output.artifact
+        try:
+            self._completion_verifier.verify_completion(receipt)
+            artifact = self._output_store.read_artifact(artifact_reference)
+        except Exception:
+            raise AuthorizedRoleReconciliationRequired(
+                "completion response requires private reconciliation"
+            ) from None
+        artifact_bytes = artifact.canonical_bytes()
+        if (
+            artifact.artifact_digest() != artifact_reference.artifact_digest
+            or len(artifact_bytes) != artifact_reference.size_bytes
+        ):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion artifact differs from its verified reference"
+            )
+        response = response_from_artifact(artifact)
+        usage = record.actual_usage
+        if (
+            response.provider_id != record.authorization.provider.provider_id
+            or response.model_id != record.authorization.provider.model_id
+            or (
+                response.usage.input_tokens,
+                response.usage.cached_input_tokens,
+                response.usage.output_tokens,
+            )
+            != (usage.input_tokens, usage.cached_input_tokens, usage.output_tokens)
+        ):
+            raise AuthorizedRoleReconciliationRequired(
+                "completion response differs from its verified receipt"
+            )
+        return response
+
+
 @dataclass(frozen=True, slots=True)
 class AuthorizedRoleSuiteDefinition:
     """Fixed ten-case suite derived from the locked repository calibration fixture."""
@@ -1273,6 +1694,16 @@ class AuthorizedRoleTrialExecution:
     authorization: ModelExecutionAuthorizationV1
     sidecar: AuthorizedRoleTrialSidecarV2
     private_state: AuthorizedRolePrivateReconciliationV1
+
+
+@dataclass(frozen=True, slots=True)
+class AuthorizedRoleCompletedTrialExecution:
+    """One V3 trial after its response, settlement, and receipt are durably bound."""
+
+    authorization: ModelExecutionAuthorizationV1
+    sidecar: AuthorizedRoleTrialSidecarV3
+    receipt: ModelExecutionCompletionReceiptV1
+    elapsed_ms: int
 
 
 def build_locked_calibration_floor_suite(
@@ -1805,6 +2236,120 @@ def _execute_preflighted_authorized_role_trial(
     )
 
 
+def execute_completed_authorized_role_trial(
+    prepared: PreparedAuthorizedRoleTrial,
+    *,
+    authorization_service: ModelExecutionAuthorizationService,
+    admission: AttestationV1,
+    registry: ProviderRegistry,
+    approval: ModelExecutionProviderApprovalV1,
+    budget: ModelExecutionBudgetV1,
+    output_store: PrivateModelOutputStore,
+    settlement_margin_seconds: float = _ROLE_SETTLEMENT_MARGIN_SECONDS,
+    lease_ttl_seconds: float | None = None,
+    authorization_ttl_seconds: float | None = None,
+) -> AuthorizedRoleCompletedTrialExecution:
+    """Run one role trial through the output-bound completion path exactly once."""
+
+    resolved_lease_ttl, resolved_authorization_ttl = _resolved_role_lifetimes(
+        prepared,
+        authorization_service=authorization_service,
+        settlement_margin_seconds=settlement_margin_seconds,
+        lease_ttl_seconds=lease_ttl_seconds,
+        authorization_ttl_seconds=authorization_ttl_seconds,
+    )
+    _validate_authorized_role_trial(
+        prepared,
+        authorization_service=authorization_service,
+        admission=admission,
+        registry=registry,
+        approval=approval,
+        budget=budget,
+        required_admission_validity_seconds=resolved_lease_ttl,
+    )
+    authorized = _authorize_role_trial_jit(
+        prepared,
+        authorization_service=authorization_service,
+        admission=admission,
+        registry=registry,
+        approval=approval,
+        budget=budget,
+        lease_ttl_seconds=resolved_lease_ttl,
+        authorization_ttl_seconds=resolved_authorization_ttl,
+    )
+    return _execute_preflighted_completed_authorized_role_trial(
+        authorized,
+        registry=registry,
+        output_store=output_store,
+    )
+
+
+def _execute_preflighted_completed_authorized_role_trial(
+    preflight: PreflightedAuthorizedRoleTrial,
+    *,
+    registry: ProviderRegistry,
+    output_store: PrivateModelOutputStore,
+) -> AuthorizedRoleCompletedTrialExecution:
+    """Persist one response and bind it to settled usage before exposing any V3 sidecar."""
+
+    prepared = preflight.prepared
+    authorization = preflight.authorization
+    started_ns = time.monotonic_ns()
+    completed = registry.generate_completed(
+        authorization,
+        prepared.request,
+        output_store=output_store,
+    )
+    elapsed_ms = max(0, (time.monotonic_ns() - started_ns) // 1_000_000)
+    response = completed.response
+    receipt = completed.receipt
+    record = receipt.record
+    if response.tool_calls:
+        raise AuthorizedRoleBridgeError(
+            "tool-free role work returned a tool call after completion settlement"
+        )
+    if (
+        record.authorization != authorization
+        or record.authorization_hash != authorization.authorization_hash()
+        or record.authorization.bundle_id != prepared.work_bundle.bundle_id
+        or record.authorization.bundle_hash != prepared.work_bundle.handoff_hash()
+    ):
+        raise AuthorizedRoleBridgeError(
+            "completion receipt is not bound to the prepared role trial"
+        )
+    usage = record.actual_usage
+    sidecar = AuthorizedRoleTrialSidecarV3(
+        run_id=prepared.context.run_id,
+        cell_id=prepared.context.cell_id,
+        case_id=prepared.context.case_id,
+        repetition=prepared.work_bundle.repetition,
+        role=prepared.work_bundle.role,
+        work_item_hash=prepared.context.work_item_hash,
+        model_work_bundle_hash=prepared.work_bundle.handoff_hash().value,
+        authorization_hash=authorization.authorization_hash().value,
+        provider_id=authorization.provider.provider_id,
+        model_id=authorization.provider.model_id,
+        model_revision=authorization.provider.model_revision,
+        provider_configuration_hash=authorization.provider.configuration_hash.value,
+        context_pack_hash=prepared.work_bundle.context_pack_hash.value,
+        request_hash=prepared.work_bundle.request_hash.value,
+        work_evidence_hash=prepared.work_evidence.content_hash(),
+        usage_summary=authorized_role_trial_usage_summary(
+            input_tokens=usage.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            output_tokens=usage.output_tokens,
+            elapsed_ms=elapsed_ms,
+        ),
+        completion=model_execution_completion_public(receipt),
+    )
+    return AuthorizedRoleCompletedTrialExecution(
+        authorization=authorization,
+        sidecar=sidecar,
+        receipt=receipt,
+        elapsed_ms=elapsed_ms,
+    )
+
+
 def prepare_locked_floor_trials(
     suite: AuthorizedRoleSuiteDefinition,
     *,
@@ -1963,6 +2508,124 @@ def run_authorized_role_floor_suite(
     )
 
 
+def run_completed_authorized_role_floor_suite(
+    suite: AuthorizedRoleSuiteDefinition,
+    *,
+    run_id: str,
+    authorization_service: ModelExecutionAuthorizationService,
+    admissions_by_bundle_id: Mapping[str, AttestationV1],
+    registry: ProviderRegistry,
+    approval: ModelExecutionProviderApprovalV1,
+    budgets_by_cell: dict[str, ModelExecutionBudgetV1],
+    output_store: PrivateModelOutputStore,
+    completion_manifest_store: AuthorizedRoleCompletionManifestStoreV2,
+    settlement_margin_seconds: float = _ROLE_SETTLEMENT_MARGIN_SECONDS,
+    lease_ttl_seconds: float | None = None,
+    authorization_ttl_seconds: float | None = None,
+) -> AuthorizedRoleSuiteSidecarV3:
+    """Run the fixed ten-trial suite with one receipt-bound response per coordinate.
+
+    A partial execution intentionally returns no V3 sidecar.  Callers must treat it as private
+    reconciliation, never as permission to retry a provider call or merge partial denominators.
+    """
+
+    if not isinstance(completion_manifest_store, AuthorizedRoleCompletionManifestStoreV2):
+        raise AuthorizedRoleBridgeError("completion suite requires a private manifest store")
+    if not isinstance(output_store, PrivateModelOutputStore):
+        raise AuthorizedRoleBridgeError("completion suite requires a private output store")
+    run_id = validate_authorized_role_run_id(run_id)
+    prepared_trials = prepare_locked_floor_trials(suite, run_id=run_id)
+    expected_bundle_ids = {prepared.work_bundle.bundle_id.value for prepared in prepared_trials}
+    if set(admissions_by_bundle_id) != expected_bundle_ids:
+        raise AuthorizedRoleBridgeError(
+            "suite admissions must cover each immutable model-work bundle exactly once"
+        )
+    if set(budgets_by_cell) != {cell.cell_id for cell in suite.matrix.cells}:
+        raise AuthorizedRoleBridgeError("suite budgets must cover each role cell exactly once")
+    resolved_lifetimes = tuple(
+        _resolved_role_lifetimes(
+            prepared,
+            authorization_service=authorization_service,
+            settlement_margin_seconds=settlement_margin_seconds,
+            lease_ttl_seconds=lease_ttl_seconds,
+            authorization_ttl_seconds=authorization_ttl_seconds,
+        )
+        for prepared in prepared_trials
+    )
+    cumulative_lease_window = 0.0
+    for prepared, (resolved_lease_ttl, _) in zip(
+        prepared_trials,
+        resolved_lifetimes,
+        strict=True,
+    ):
+        cumulative_lease_window += resolved_lease_ttl
+        _validate_authorized_role_trial(
+            prepared,
+            authorization_service=authorization_service,
+            admission=admissions_by_bundle_id[prepared.work_bundle.bundle_id.value],
+            registry=registry,
+            approval=approval,
+            budget=budgets_by_cell[prepared.cell.cell_id],
+            required_admission_validity_seconds=cumulative_lease_window,
+        )
+
+    execution_list: list[AuthorizedRoleCompletedTrialExecution] = []
+    for prepared, (resolved_lease_ttl, resolved_authorization_ttl) in zip(
+        prepared_trials,
+        resolved_lifetimes,
+        strict=True,
+    ):
+        authorized = _authorize_role_trial_jit(
+            prepared,
+            authorization_service=authorization_service,
+            admission=admissions_by_bundle_id[prepared.work_bundle.bundle_id.value],
+            registry=registry,
+            approval=approval,
+            budget=budgets_by_cell[prepared.cell.cell_id],
+            lease_ttl_seconds=resolved_lease_ttl,
+            authorization_ttl_seconds=resolved_authorization_ttl,
+        )
+        execution_list.append(
+            _execute_preflighted_completed_authorized_role_trial(
+                authorized,
+                registry=registry,
+                output_store=output_store,
+            )
+        )
+    executions = tuple(execution_list)
+    ordered_executions = tuple(
+        sorted(
+            executions,
+            key=lambda item: (
+                item.sidecar.cell_id,
+                item.sidecar.case_id,
+                item.sidecar.repetition,
+            ),
+        )
+    )
+    manifest = AuthorizedRoleCompletionPrivateManifestV2(
+        run_id=run_id,
+        outputs=tuple(
+            AuthorizedRoleCompletionPrivateOutputEntryV2(
+                cell_id=execution.sidecar.cell_id,
+                case_id=execution.sidecar.case_id,
+                repetition=execution.sidecar.repetition,
+                authorization_hash=execution.sidecar.authorization_hash,
+                elapsed_ms=execution.elapsed_ms,
+                receipt=execution.receipt,
+            )
+            for execution in ordered_executions
+        ),
+    )
+    private_manifest_handle = completion_manifest_store.put_manifest(manifest)
+    return AuthorizedRoleSuiteSidecarV3(
+        run_id=run_id,
+        private_manifest_handle=private_manifest_handle,
+        usage_summary=authorized_role_completion_suite_usage_summary(manifest.outputs),
+        trials=tuple(item.sidecar for item in ordered_executions),
+    )
+
+
 def _required_private_output_hash(state: AuthorizedRolePrivateReconciliationV1) -> str:
     if state.state != "response_persisted" or state.output_hash is None:
         raise AuthorizedRoleReconciliationRequired(
@@ -2048,6 +2711,29 @@ def authorized_role_suite_usage_summary(
         ),
         aggregate_output_tokens_bucket=authorized_role_token_bucket(
             sum(item.output_tokens for item in outputs)
+        ),
+        aggregate_elapsed_ms_bucket=authorized_role_elapsed_bucket(
+            sum(item.elapsed_ms for item in outputs)
+        ),
+    )
+
+
+def authorized_role_completion_suite_usage_summary(
+    outputs: tuple[AuthorizedRoleCompletionPrivateOutputEntryV2, ...],
+) -> AuthorizedRolePublicUsageSummaryV2:
+    """Derive coarse public accounting only from receipt-bound private actual usage."""
+
+    if len(outputs) != 10:
+        raise AuthorizedRoleBridgeError("completion usage summary requires exactly ten trials")
+    return AuthorizedRolePublicUsageSummaryV2(
+        aggregate_input_tokens_bucket=authorized_role_token_bucket(
+            sum(item.receipt.record.actual_usage.input_tokens for item in outputs)
+        ),
+        aggregate_cached_input_tokens_bucket=authorized_role_token_bucket(
+            sum(item.receipt.record.actual_usage.cached_input_tokens for item in outputs)
+        ),
+        aggregate_output_tokens_bucket=authorized_role_token_bucket(
+            sum(item.receipt.record.actual_usage.output_tokens for item in outputs)
         ),
         aggregate_elapsed_ms_bucket=authorized_role_elapsed_bucket(
             sum(item.elapsed_ms for item in outputs)

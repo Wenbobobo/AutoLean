@@ -1,5 +1,9 @@
 # Open Questions and Required Decisions
 
+Status: stable historical decision register. New actionable external work is tracked only in
+[operator-and-authority-worklist.md](operator-and-authority-worklist.md); retain the OQ identifiers
+below when linking old decisions to new AUTH checklist items.
+
 This is a decision register, not a backlog of optional polish. Items stay open until a named owner
 records a decision and its evidence. Defaults below are conservative so work can continue without
 silently broadening authority.

@@ -1,12 +1,14 @@
 ---
 name: run-autolean-benchmarks
-description: Preflight, run, replay, compare, and audit AutoLean role benchmarks after model, prompt, tool, retrieval, evaluator, environment, or code changes. Use for Prover, statement-formalizer, fidelity-reviewer, cheating-supervisor, or task-router/task-allocator experiments and for producing repeatable public reports plus separately controlled raw-output evidence without leaking cases, oracles, prompts, endpoints, or credentials.
+description: Preflight, run, replay, compare, and audit AutoLean role benchmarks, provider canaries, and FATE evaluations after model, prompt, tool, retrieval, evaluator, environment, or code changes. Use for Prover, statement-formalizer, fidelity-reviewer, cheating-supervisor, task-router/task-allocator, or theorem-proving experiments that require a frozen denominator, output-bound completion receipts, repeatable public reports, and separately controlled private evidence.
 ---
 
 # Run AutoLean Benchmarks
 
 Operate from the AutoLean repository root. Read `AGENTS.md` and
-`docs/role-benchmark-protocol.md` before changing a fixture or interpreting a result.
+`docs/role-benchmark-protocol.md` before changing a fixture or interpreting a role result. For
+FATE, also read `docs/fate-authorized-execution-v1.md` and the relevant compile-canary or
+agent-smoke document. Never combine a role score, a compile-only result, and a FATE proof result.
 
 ## Select the evidence level
 
@@ -16,17 +18,21 @@ Operate from the AutoLean repository root. Read `AGENTS.md` and
    fidelity.
 3. For an external model, first require an operator-owned executor that uses
    `ContextPack`, a current lease-bound `ModelExecutionAuthorizationV1`, and
-   `ProviderRegistry.generate`. Refuse to call a provider adapter or endpoint directly.
+   `ProviderRegistry.generate_completed` with a private output store. Refuse to call a provider
+   adapter or endpoint directly, and refuse legacy `generate` as promotion evidence.
 4. Refuse an online run until that role has an evaluator with the required authority:
-   independent Lean verification for Prover; human gold plus mutation and non-vacuity review for
-   statement conversion; balanced attack-family labels for reviewers/supervisors; deterministic
-   DAG simulation for allocation.
+   independent Lean verification for Prover; held-out references plus mutation, reverse-rendering,
+   and non-vacuity review for statement conversion; balanced attack-family labels for
+   reviewers/supervisors; deterministic DAG simulation for allocation. Machine quorum remains
+   advisory and cannot freeze a statement.
 5. Never add or select Anthropic or Claude. Never accept an API key in a fixture, command, report,
    prompt, database, or chat message; use an operator-owned secret reference.
 6. Treat `readiness.json` as capability evidence only. It must state
    `authority_granted: false`; it cannot replace a lease-bound execution authorization.
 7. Require V3 fixture/readiness/run/report/raw-manifest schemas and a fresh V3 SQLite database.
    Refuse V1/V2 stores and wire records; never infer missing bindings.
+8. Keep FATE M, H, and X separate. Treat trusted-statement compilation as environment evidence,
+   never as a model score.
 
 ## Freeze the experiment
 
@@ -57,8 +63,8 @@ metrics, or receipt while retaining an old commitment.
 Use the bundled forward test rather than reconstructing a long command:
 
 ```powershell
-uv run python scripts/role_benchmark.py forward-test --output-root .tmp-role-benchmark-v3-a
-uv run python scripts/role_benchmark.py forward-test --output-root .tmp-role-benchmark-v3-b
+uv run --frozen python scripts/role_benchmark.py forward-test --output-root .tmp-role-benchmark-v3-a
+uv run --frozen python scripts/role_benchmark.py forward-test --output-root .tmp-role-benchmark-v3-b
 ```
 
 Require byte-identical `readiness.json` and `report.json` across both roots, and an unchanged
@@ -83,14 +89,19 @@ comparison.
 ## Close the run
 
 Run the relevant evaluator tests plus `uv lock --check`, Ruff, Mypy, and Pytest. Retain canonical
-public reports and their SHA-256 values. Keep raw model JSON only in the separate private CAS with
-an explicit access/retention policy; never put raw restricted case input, oracle values, prompts,
-secrets, endpoint URLs, or endpoint configuration there. Record blockers as blockers; do not turn
-missing API, Lean, OCI, evaluator, or signing evidence into a zero score.
+public reports and their SHA-256 values. The public projection may contain only the completion ID,
+receipt hash, and salted output commitment; it must not contain response text, a raw response hash,
+CAS locator, nonce, exact usage/cost, endpoint, or credential. Keep raw model JSON only in the
+separate private CAS with an explicit access/retention policy; never put raw restricted case input,
+oracle values, prompts, secrets, endpoint URLs, or endpoint configuration there. Record blockers as
+blockers; do not turn missing API, Lean, OCI, evaluator, or signing evidence into a zero score.
 
-If execution crashes after a trial is marked `started`, report the claim as indeterminate. Never
-delete it or retry automatically; only a future executor with an external transactional
-idempotency protocol may relax this at-most-once boundary.
+If execution fails before settlement, report the claim as indeterminate and never retry the
+provider automatically. If settlement committed and
+`ModelExecutionCompletionRecoveryRequired` supplies a handle, call
+`ProviderRegistry.recover_completed` to revalidate the same private artifact and complete signing;
+that path must not probe or call the provider. If durable signer/store state is unavailable, report
+`reconciliation_required`.
 
 Treat an expired unstarted claim differently: reclaim it only with a higher fencing token and
 reject every operation made with the stale token.

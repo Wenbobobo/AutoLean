@@ -5,7 +5,17 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Protocol
 
-from autolean_contracts import DigestV1, EndpointClassV1
+from autolean_contracts import (
+    DigestV1,
+    EndpointClassV1,
+    ModelExecutionCompletionPendingError,
+    ModelExecutionCompletionReceiptV1,
+    ModelExecutionCompletionRecoveryHandleV1,
+    ModelExecutionCompletionRecoveryReasonV1,
+    ModelResponseArtifactV1,
+    build_model_execution_private_output,
+    model_execution_completion_recovery_handle,
+)
 from autolean_contracts.authorization import (
     ModelExecutionAuthorizationV1,
     ModelExecutionProviderBindingV1,
@@ -19,6 +29,7 @@ from autolean_prover.errors import (
 )
 from autolean_prover.providers.authorization import (
     ModelExecutionAuthorizationGate,
+    ModelExecutionCompletionRecoveryRequired,
     ProviderFailureCodeV1,
 )
 from autolean_prover.providers.base import (
@@ -33,6 +44,11 @@ from autolean_prover.providers.base import (
 from autolean_prover.providers.policy import (
     validate_provider_identity,
     validate_registry_name,
+)
+from autolean_prover.providers.private_output import (
+    PrivateModelOutputStore,
+    model_response_artifact,
+    response_from_artifact,
 )
 
 
@@ -68,6 +84,14 @@ class _RegisteredProvider:
     binding: ModelExecutionProviderBindingV1
     declared_capabilities: ProviderCapabilities
     execution_timeout_policy: ModelExecutionTimeoutPolicyV1
+
+
+@dataclass(frozen=True, slots=True)
+class CompletedModelExecution:
+    """Response plus the only promotion-capable, output-bound execution receipt."""
+
+    response: ModelResponse
+    receipt: ModelExecutionCompletionReceiptV1
 
 
 class ProviderRegistry:
@@ -154,10 +178,109 @@ class ProviderRegistry:
         authorization: ModelExecutionAuthorizationV1,
         request: ModelRequest,
     ) -> ModelResponse:
+        """Compatibility path returning no output-bound receipt.
+
+        This method remains suitable for bootstrap diagnostics only.  Its result must not be used
+        as model-execution authority or promotion evidence.
+        """
+
+        response, receipt = self._execute(
+            authorization,
+            request,
+            output_store=None,
+            commitment_nonce=None,
+        )
+        if receipt is not None:
+            raise PolicyViolation("bootstrap model execution unexpectedly returned a receipt")
+        return response
+
+    def generate_completed(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+        request: ModelRequest,
+        *,
+        output_store: PrivateModelOutputStore,
+        commitment_nonce: str | None = None,
+    ) -> CompletedModelExecution:
+        """Persist, settle, and attest one response without retrying provider execution."""
+
+        if not isinstance(output_store, PrivateModelOutputStore):
+            raise PolicyViolation(
+                "completed model generation requires a private model output store"
+            )
+        response, receipt = self._execute(
+            authorization,
+            request,
+            output_store=output_store,
+            commitment_nonce=commitment_nonce,
+        )
+        if receipt is None:
+            raise PolicyViolation("completed model execution did not return a receipt")
+        return CompletedModelExecution(response=response, receipt=receipt)
+
+    def recover_completed(
+        self,
+        recovery_handle: ModelExecutionCompletionRecoveryHandleV1,
+        *,
+        output_store: PrivateModelOutputStore,
+    ) -> CompletedModelExecution:
+        """Recover one settled completion without probing or invoking its provider."""
+
+        if not isinstance(recovery_handle, ModelExecutionCompletionRecoveryHandleV1):
+            raise PolicyViolation("completion recovery requires a stable recovery handle")
+        if not isinstance(output_store, PrivateModelOutputStore):
+            raise PolicyViolation("completion recovery requires a private model output store")
+        authorization_gate = self._authorization_gate
+        if authorization_gate is None:
+            raise PolicyViolation("completion recovery requires an injected authorization gate")
+        try:
+            receipt = authorization_gate.recover_completion(recovery_handle)
+        except ModelExecutionCompletionPendingError as error:
+            raise ModelExecutionCompletionRecoveryRequired(
+                error.recovery_handle,
+                reason=error.reason,
+            ) from None
+        except Exception:
+            raise PolicyViolation("model execution completion recovery was denied") from None
+        if (
+            not isinstance(receipt, ModelExecutionCompletionReceiptV1)
+            or model_execution_completion_recovery_handle(receipt.record) != recovery_handle
+        ):
+            raise PolicyViolation(
+                "model execution completion recovery returned a mismatched receipt"
+            )
+        try:
+            artifact = output_store.read_artifact(receipt.record.private_output.artifact)
+            self._assert_artifact_matches_completion(artifact, receipt)
+        except Exception:
+            raise ModelExecutionCompletionRecoveryRequired(
+                recovery_handle,
+                reason=ModelExecutionCompletionRecoveryReasonV1.PRIVATE_OUTPUT_UNAVAILABLE,
+            ) from None
+        return CompletedModelExecution(
+            response=response_from_artifact(artifact),
+            receipt=receipt,
+        )
+
+    def _execute(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+        request: ModelRequest,
+        *,
+        output_store: PrivateModelOutputStore | None,
+        commitment_nonce: str | None,
+    ) -> tuple[ModelResponse, ModelExecutionCompletionReceiptV1 | None]:
         registered, requested = self._preflight_generate(authorization, request)
         authorization_gate = self._authorization_gate
         if authorization_gate is None:  # Kept local for type narrowing after the shared preflight.
             raise PolicyViolation("model generation requires an injected authorization gate")
+        if output_store is not None:
+            try:
+                authorization_gate.preflight_completion(authorization)
+            except Exception:
+                raise PolicyViolation(
+                    "output-bound model completion authority was denied"
+                ) from None
         registry_key = authorization.provider.registry_name
         outbound_request_hash = request.outbound_request_hash()
         try:
@@ -226,20 +349,98 @@ class ProviderRegistry:
                 )
             failure_code = ProviderFailureCodeV1.LOCAL_POLICY_REJECTED
             self._assert_provider_binding(registered, name=registry_key)
-            failure_code = ProviderFailureCodeV1.SETTLEMENT_REJECTED
-            try:
-                authorization_gate.settle(
-                    reservation,
-                    input_tokens=response.usage.input_tokens,
-                    cached_input_tokens=response.usage.cached_input_tokens,
-                    output_tokens=response.usage.output_tokens,
+            receipt: ModelExecutionCompletionReceiptV1 | None = None
+            if output_store is None:
+                failure_code = ProviderFailureCodeV1.SETTLEMENT_REJECTED
+                try:
+                    authorization_gate.settle(
+                        reservation,
+                        input_tokens=response.usage.input_tokens,
+                        cached_input_tokens=response.usage.cached_input_tokens,
+                        output_tokens=response.usage.output_tokens,
+                    )
+                except Exception:
+                    raise PolicyViolation(
+                        f"model execution settlement was denied ({failure_code.value})"
+                    ) from None
+            else:
+                failure_code = ProviderFailureCodeV1.OUTPUT_PERSISTENCE_FAILED
+                try:
+                    artifact = output_store.put_response(response)
+                    stored_artifact = output_store.read_artifact(artifact)
+                    if stored_artifact != model_response_artifact(response):
+                        raise ProviderResponseError(
+                            "private output store changed the model response"
+                        )
+                except Exception:
+                    raise ProviderResponseError(
+                        f"private model response persistence failed ({failure_code.value})"
+                    ) from None
+                private_output = build_model_execution_private_output(
+                    authorization_hash=authorization.authorization_hash(),
+                    reservation_id=reservation.reservation_id,
+                    artifact=artifact,
+                    commitment_nonce=commitment_nonce,
                 )
-            except Exception:
-                raise PolicyViolation(
-                    f"model execution settlement was denied ({failure_code.value})"
-                ) from None
+                failure_code = ProviderFailureCodeV1.SETTLEMENT_REJECTED
+                try:
+                    receipt = authorization_gate.settle_completed(
+                        reservation,
+                        input_tokens=response.usage.input_tokens,
+                        cached_input_tokens=response.usage.cached_input_tokens,
+                        output_tokens=response.usage.output_tokens,
+                        private_output=private_output,
+                    )
+                except ModelExecutionCompletionPendingError as error:
+                    failure_code = ProviderFailureCodeV1.COMPLETION_RECOVERY_REQUIRED
+                    settled = True
+                    raise ModelExecutionCompletionRecoveryRequired(
+                        error.recovery_handle,
+                        reason=error.reason,
+                    ) from None
+                except Exception:
+                    raise PolicyViolation(
+                        f"model execution settlement was denied ({failure_code.value})"
+                    ) from None
+                failure_code = ProviderFailureCodeV1.COMPLETION_INVALID
+                record = receipt.record
+                if (
+                    record.authorization != authorization
+                    or record.reservation != reservation
+                    or record.private_output != private_output
+                    or (
+                        record.actual_usage.input_tokens,
+                        record.actual_usage.cached_input_tokens,
+                        record.actual_usage.output_tokens,
+                    )
+                    != (
+                        response.usage.input_tokens,
+                        response.usage.cached_input_tokens,
+                        response.usage.output_tokens,
+                    )
+                ):
+                    raise PolicyViolation(
+                        f"model execution completion was invalid ({failure_code.value})"
+                    )
+                recovery_handle = model_execution_completion_recovery_handle(record)
+                try:
+                    returned_artifact = output_store.read_artifact(record.private_output.artifact)
+                    self._assert_artifact_matches_completion(returned_artifact, receipt)
+                    if returned_artifact != model_response_artifact(response):
+                        raise ProviderResponseError(
+                            "private output changed after model execution settlement"
+                        )
+                except Exception:
+                    failure_code = ProviderFailureCodeV1.COMPLETION_RECOVERY_REQUIRED
+                    settled = True
+                    raise ModelExecutionCompletionRecoveryRequired(
+                        recovery_handle,
+                        reason=(
+                            ModelExecutionCompletionRecoveryReasonV1.PRIVATE_OUTPUT_UNAVAILABLE
+                        ),
+                    ) from None
             settled = True
-            return response
+            return response, receipt
         finally:
             if not settled:
                 try:
@@ -260,6 +461,30 @@ class ProviderRegistry:
         """Validate a route and signed request without probing or calling the provider."""
 
         self._preflight_generate(authorization, request)
+
+    @staticmethod
+    def _assert_artifact_matches_completion(
+        artifact: ModelResponseArtifactV1,
+        receipt: ModelExecutionCompletionReceiptV1,
+    ) -> None:
+        record = receipt.record
+        reference = record.private_output.artifact
+        usage = record.actual_usage
+        if (
+            artifact.artifact_digest() != reference.artifact_digest
+            or len(artifact.canonical_bytes()) != reference.size_bytes
+            or artifact.provider_id != record.authorization.provider.provider_id
+            or artifact.model_id != record.authorization.provider.model_id
+            or (
+                artifact.usage.input_tokens,
+                artifact.usage.cached_input_tokens,
+                artifact.usage.output_tokens,
+            )
+            != (usage.input_tokens, usage.cached_input_tokens, usage.output_tokens)
+        ):
+            raise ProviderResponseError(
+                "private model response artifact differs from its completion receipt"
+            )
 
     def _preflight_generate(
         self,

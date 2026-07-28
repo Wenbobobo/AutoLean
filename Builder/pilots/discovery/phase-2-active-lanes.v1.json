@@ -1,0 +1,559 @@
+{
+  "schema_version": "autolean.phase2-discovery-lane-manifest.v1",
+  "protocol": "autolean.builder-discovery.v1",
+  "state": "discovery",
+  "builder_freeze": "forbidden",
+  "prover_handoff": "forbidden",
+  "lanes": [
+    {
+      "lane_id": "ifem-coercive-galerkin",
+      "status": "discovery",
+      "source": {
+        "source_id": "ifem-chapters-01-10",
+        "official_record_url": "https://github.com/JSchoeberl/iFEM",
+        "source_path": [
+          "intro.md",
+          "Chapters 1-10 bounded source-lock path",
+          "abstract coercive variational/Galerkin endpoint"
+        ],
+        "resolved_revision": "a4ab841c4e5ec726e9b7742c9dcb352cb9645736",
+        "source_bytes_state": "metadata_only",
+        "rights_state": "metadata_verified_egress_pending",
+        "license_expression": "CC-BY-4.0",
+        "license_evidence_url": "https://github.com/JSchoeberl/iFEM/blob/a4ab841c4e5ec726e9b7742c9dcb352cb9645736/LICENSE",
+        "model_egress_ceiling": "local_only",
+        "external_model_source_text": "forbidden",
+        "discovery_evidence_refs": [
+          "docs/research/phase2-open-source-selection-2026-07-26.md",
+          "docs/research/ifem-source-lock-preparation-2026-07-28.md",
+          "scripts/ifem_source_lock.py"
+        ]
+      },
+      "mathlib_overlap": {
+        "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+        "state": "not_queried",
+        "observed_coverage": "not_observed",
+        "evidence_refs": [
+          "docs/research/phase2-open-source-selection-2026-07-26.md",
+          "docs/research/ifem-source-lock-preparation-2026-07-28.md"
+        ],
+        "discovery_note": "Lax--Milgram and IsCoercive are documentation-level reuse signals only; no exact type, import, restriction API, adapter, or coverage result has been observed."
+      },
+      "stop_gates": [
+        {
+          "gate_id": "ifem-source-receipt",
+          "blocks": [
+            "local_calibration",
+            "source-span-selection",
+            "mathlib-coverage-query"
+          ],
+          "resolution_required": "Operator acquisition and replay must produce the bounded thirteen-file local receipt at the pinned revision."
+        },
+        {
+          "gate_id": "ifem-rights-egress",
+          "blocks": [
+            "external-model-source-use",
+            "builder-admission"
+          ],
+          "resolution_required": "A source-specific rights decision must bind attribution and any model-egress scope; the current ceiling remains local_only."
+        },
+        {
+          "gate_id": "ifem-denominator-census",
+          "blocks": [
+            "coverage-claim",
+            "pilot-selection"
+          ],
+          "resolution_required": "Run exact pinned-Mathlib type/import queries against the content-addressed prerequisite denominator and classify direct mappings, thin adapters, and missing nodes separately."
+        },
+        {
+          "gate_id": "ifem-fidelity-boundary",
+          "blocks": [
+            "builder-freeze",
+            "prover-handoff"
+          ],
+          "resolution_required": "Resolve the continuity absolute-value convention, quantifiers, infimum boundary, and mutation controls through the Builder admission path."
+        },
+        {
+          "gate_id": "ifem-upstream-overlap",
+          "blocks": [
+            "production-pilot-selection"
+          ],
+          "resolution_required": "Repeat the current Mathlib and active-project overlap census before selecting an owned downstream API."
+        }
+      ],
+      "non_claims": [
+        "builder_freeze_forbidden",
+        "prover_handoff_forbidden",
+        "mathlib_coverage_not_claimed",
+        "production_pilot_not_selected",
+        "source_span_not_bound",
+        "library_record_not_created"
+      ],
+      "prerequisite_denominator": {
+        "denominator_id": "ifem-coercive-prerequisites",
+        "revision": "ifem-coercive-prerequisites-r01-f9d1f2d4717a",
+        "predecessor_content_sha256": null,
+        "textbook_opening_path": [
+          "intro.md",
+          "Chapter 1 first example",
+          "Chapters 2-10 prerequisite path"
+        ],
+        "score_policy_percent": [
+          70,
+          80
+        ],
+        "selected_terminal_node_id": "ifem-cea-quasi-optimality-infimum",
+        "nodes": [
+          {
+            "node_id": "ifem-poisson-galerkin-opening-example",
+            "kind": "example",
+            "textbook_stage": "opening",
+            "source_order": 1,
+            "summary": "Opening Poisson/Galerkin example retained for terminology alignment outside coverage",
+            "depends_on": [],
+            "included_in_prerequisite_denominator": false
+          },
+          {
+            "node_id": "ifem-real-scalar-field",
+            "kind": "definition",
+            "textbook_stage": "opening",
+            "source_order": 2,
+            "summary": "Real scalar field for the planned Hilbert-space path",
+            "depends_on": [],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-normed-vector-space",
+            "kind": "definition",
+            "textbook_stage": "opening",
+            "source_order": 3,
+            "summary": "Normed vector-space structure over the chosen scalar field",
+            "depends_on": [
+              "ifem-real-scalar-field"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-inner-product-space",
+            "kind": "definition",
+            "textbook_stage": "opening",
+            "source_order": 4,
+            "summary": "Inner-product structure and its induced norm",
+            "depends_on": [
+              "ifem-normed-vector-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-complete-inner-product-space",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 5,
+            "summary": "Completeness of the inner-product space",
+            "depends_on": [
+              "ifem-inner-product-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-induced-norm",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 6,
+            "summary": "Norm induced by the inner product",
+            "depends_on": [
+              "ifem-inner-product-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-continuous-linear-functional",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 7,
+            "summary": "Continuous linear functional and its continuity interface",
+            "depends_on": [
+              "ifem-normed-vector-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-dual-norm",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 8,
+            "summary": "Dual norm for continuous linear functionals",
+            "depends_on": [
+              "ifem-continuous-linear-functional",
+              "ifem-induced-norm"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-continuous-bilinear-form",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 9,
+            "summary": "Continuous bilinear form on the ambient space",
+            "depends_on": [
+              "ifem-normed-vector-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-continuity-bound",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 10,
+            "summary": "Explicit continuity-bound predicate for a bilinear form",
+            "depends_on": [
+              "ifem-continuous-bilinear-form"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-coercivity-predicate",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 11,
+            "summary": "Positive coercivity predicate with an explicit constant",
+            "depends_on": [
+              "ifem-continuous-bilinear-form"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-induced-dual-operator",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 12,
+            "summary": "Operator into the dual induced by a bilinear form",
+            "depends_on": [
+              "ifem-continuous-bilinear-form",
+              "ifem-continuous-linear-functional",
+              "ifem-dual-norm"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-operator-norm-bound",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 13,
+            "summary": "Operator-norm consequence of the continuity interface",
+            "depends_on": [
+              "ifem-induced-dual-operator",
+              "ifem-continuity-bound"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-submodule",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 14,
+            "summary": "Trial subspace represented as a submodule",
+            "depends_on": [
+              "ifem-normed-vector-space"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-closed-subspace",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 15,
+            "summary": "Closedness predicate for the trial subspace",
+            "depends_on": [
+              "ifem-submodule"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-inherited-complete-structure",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 16,
+            "summary": "Complete structure inherited by a closed trial subspace",
+            "depends_on": [
+              "ifem-complete-inner-product-space",
+              "ifem-closed-subspace"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-restricted-bilinear-form",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 17,
+            "summary": "Restriction of the bilinear form to trial and test data",
+            "depends_on": [
+              "ifem-continuous-bilinear-form",
+              "ifem-submodule"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-restricted-functional",
+            "kind": "definition",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 18,
+            "summary": "Restriction of a linear functional to the trial subspace",
+            "depends_on": [
+              "ifem-continuous-linear-functional",
+              "ifem-submodule"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-restricted-continuity",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 19,
+            "summary": "Continuity survives restriction to the trial subspace",
+            "depends_on": [
+              "ifem-continuity-bound",
+              "ifem-restricted-bilinear-form"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-restricted-coercivity",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 20,
+            "summary": "Coercivity survives restriction to the trial subspace",
+            "depends_on": [
+              "ifem-coercivity-predicate",
+              "ifem-restricted-bilinear-form"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-lax-milgram-solution-interface",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "terminal_chapter",
+            "source_order": 21,
+            "summary": "Full-space coercive variational solution interface",
+            "depends_on": [
+              "ifem-complete-inner-product-space",
+              "ifem-continuity-bound",
+              "ifem-coercivity-predicate",
+              "ifem-continuous-linear-functional",
+              "ifem-operator-norm-bound"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-galerkin-solution-interface",
+            "kind": "prerequisite_theorem",
+            "textbook_stage": "terminal_chapter",
+            "source_order": 22,
+            "summary": "Trial-subspace variational solution interface",
+            "depends_on": [
+              "ifem-inherited-complete-structure",
+              "ifem-restricted-continuity",
+              "ifem-restricted-coercivity",
+              "ifem-restricted-functional"
+            ],
+            "included_in_prerequisite_denominator": true
+          },
+          {
+            "node_id": "ifem-proper-subspace-example",
+            "kind": "example",
+            "textbook_stage": "prerequisite_chapters",
+            "source_order": 23,
+            "summary": "Proper-subspace alignment example retained outside coverage",
+            "depends_on": [
+              "ifem-submodule"
+            ],
+            "included_in_prerequisite_denominator": false
+          },
+          {
+            "node_id": "ifem-zero-form-counterexample",
+            "kind": "example",
+            "textbook_stage": "terminal_chapter",
+            "source_order": 24,
+            "summary": "Zero-form coercivity counterexample retained outside coverage",
+            "depends_on": [
+              "ifem-continuous-bilinear-form"
+            ],
+            "included_in_prerequisite_denominator": false
+          },
+          {
+            "node_id": "ifem-cea-quasi-optimality-infimum",
+            "kind": "terminal_target",
+            "textbook_stage": "terminal_chapter",
+            "source_order": 25,
+            "summary": "Prospective infimum-form quasi-optimality target",
+            "depends_on": [
+              "ifem-lax-milgram-solution-interface",
+              "ifem-galerkin-solution-interface"
+            ],
+            "included_in_prerequisite_denominator": false
+          }
+        ],
+        "content_sha256": "f9d1f2d4717aaaed9f10c6c82deae083985f643089b17c424de4e61e9845bcc5"
+      },
+      "precompile_census_plan": {
+        "denominator_id": "ifem-coercive-prerequisites",
+        "denominator_revision": "ifem-coercive-prerequisites-r01-f9d1f2d4717a",
+        "denominator_content_sha256": "f9d1f2d4717aaaed9f10c6c82deae083985f643089b17c424de4e61e9845bcc5",
+        "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+        "state": "not_started",
+        "result_artifact_sha256": null
+      }
+    },
+    {
+      "lane_id": "pde-a-classical-transport",
+      "status": "discovery",
+      "source": {
+        "source_id": "ivrii-classical-transport",
+        "official_record_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/",
+        "source_path": [
+          "Preface",
+          "0.1 What one needs to know?",
+          "Chapter 1",
+          "Chapter 2, Section 2.1 First order PDEs"
+        ],
+        "resolved_revision": null,
+        "source_bytes_state": "metadata_only",
+        "rights_state": "metadata_verified_egress_pending",
+        "license_expression": "CC-BY-SA-4.0",
+        "license_evidence_url": "https://www.math.toronto.edu/ivrii/PDE-textbook/PDE-textbook.pdf",
+        "model_egress_ceiling": "local_only",
+        "external_model_source_text": "forbidden",
+        "discovery_evidence_refs": [
+          "docs/research/phase2-discovery-lane-cards-2026-07-26.md",
+          "docs/research/pde-a-ivrii-source-acquisition-2026-07-26.md",
+          "docs/research/templates/pde-a-ivrii-source-lock.v1.template.json"
+        ]
+      },
+      "mathlib_overlap": {
+        "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+        "state": "not_queried",
+        "observed_coverage": "not_observed",
+        "evidence_refs": [
+          "docs/research/phase2-discovery-lane-cards-2026-07-26.md"
+        ],
+        "discovery_note": "Existing calculus, topology, and Lax--Milgram documentation are not an observed transport-equation API or a pinned overlap census."
+      },
+      "stop_gates": [
+        {
+          "gate_id": "pde-source-byte-lock",
+          "blocks": [
+            "source-span-selection",
+            "local_calibration"
+          ],
+          "resolution_required": "An operator must acquire and hash official Ivrii bytes in a new source-lock revision."
+        },
+        {
+          "gate_id": "pde-rigorous-statement-authority",
+          "blocks": [
+            "builder-freeze",
+            "prover-handoff"
+          ],
+          "resolution_required": "A separate rigorous theorem authority must bind regularity, domain, trace, and well-posedness hypotheses."
+        },
+        {
+          "gate_id": "pde-sign-and-trace-controls",
+          "blocks": [
+            "production-pilot-selection"
+          ],
+          "resolution_required": "The sign ledger, global initial trace, classical regularity, and uniqueness-versus-existence mutation controls must reject the listed wrong variants."
+        },
+        {
+          "gate_id": "pde-upstream-overlap",
+          "blocks": [
+            "owned-transport-api"
+          ],
+          "resolution_required": "Check current Mathlib, project-intentions, and relevant active work immediately before any admission decision."
+        }
+      ],
+      "non_claims": [
+        "builder_freeze_forbidden",
+        "prover_handoff_forbidden",
+        "mathlib_coverage_not_claimed",
+        "production_pilot_not_selected",
+        "source_span_not_bound",
+        "rigorous_statement_authority_not_bound"
+      ],
+      "prerequisite_denominator": null,
+      "precompile_census_plan": null
+    },
+    {
+      "lane_id": "mg-a-intrinsic-distance",
+      "status": "discovery",
+      "source": {
+        "source_id": "bbi-metric-geometry-chapters-01-02",
+        "official_record_url": "https://bookstore.ams.org/gsm-33/",
+        "source_path": [
+          "Chapter 1 Metric Spaces",
+          "Chapter 2 Length Spaces"
+        ],
+        "resolved_revision": null,
+        "source_bytes_state": "metadata_only",
+        "rights_state": "operator_license_required",
+        "license_expression": "copyrighted-operator-license-required",
+        "license_evidence_url": "https://bookstore.ams.org/gsm-33/",
+        "model_egress_ceiling": "local_only",
+        "external_model_source_text": "forbidden",
+        "discovery_evidence_refs": [
+          "docs/research/phase2-discovery-lane-cards-2026-07-26.md"
+        ]
+      },
+      "mathlib_overlap": {
+        "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+        "state": "not_queried",
+        "observed_coverage": "not_observed",
+        "evidence_refs": [
+          "docs/research/phase2-discovery-lane-cards-2026-07-26.md"
+        ],
+        "discovery_note": "Gromov--Hausdorff, Hausdorff-dimension, metric, path, and isometry documentation are nearby signals, not an observed path-length or intrinsic-distance hierarchy."
+      },
+      "stop_gates": [
+        {
+          "gate_id": "mg-source-rights",
+          "blocks": [
+            "source-ingestion",
+            "local_calibration",
+            "external-model-source-use"
+          ],
+          "resolution_required": "An operator-authorized copy and source-specific rights decision must bind exact section locators and model egress."
+        },
+        {
+          "gate_id": "mg-intrinsic-distance-definition",
+          "blocks": [
+            "builder-freeze",
+            "prover-handoff"
+          ],
+          "resolution_required": "Independently review extended no-path convention, infimum versus attainment, endpoint conditions, and the chosen geodesic definition."
+        },
+        {
+          "gate_id": "mg-no-path-and-attainment-controls",
+          "blocks": [
+            "production-pilot-selection"
+          ],
+          "resolution_required": "The discrete two-point case and mutations of infimum, minimum, endpoint, partition, and compactness conditions must retain their distinct dispositions."
+        },
+        {
+          "gate_id": "mg-upstream-overlap",
+          "blocks": [
+            "owned-metric-api"
+          ],
+          "resolution_required": "Repeat the Mathlib and active-project overlap census; if a compatible API exists, switch to an adapter or stop."
+        }
+      ],
+      "non_claims": [
+        "builder_freeze_forbidden",
+        "prover_handoff_forbidden",
+        "mathlib_coverage_not_claimed",
+        "production_pilot_not_selected",
+        "source_span_not_bound",
+        "operator_license_not_recorded"
+      ],
+      "prerequisite_denominator": null,
+      "precompile_census_plan": null
+    }
+  ]
+}

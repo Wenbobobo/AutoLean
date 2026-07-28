@@ -1,6 +1,6 @@
 # Phase 1 Progress Ledger
 
-Snapshot: 2026-07-25 baseline, with a 2026-07-27 working-tree addendum below
+Snapshot: 2026-07-25 baseline, with a 2026-07-27 to 2026-07-28 working-tree addendum below
 
 Baseline: `f8bf32915a3510a4d697bd09d4b11147078abd88` on `origin/main`, after merged PRs
 [#11](https://github.com/Wenbobobo/AutoLean/pull/11),
@@ -27,7 +27,7 @@ This ledger records observed evidence rather than estimated completion percentag
 means the named check ran and its scope is stated. `Blocked` names a missing prerequisite.
 Synthetic, fake, mounted-build, and local-HMAC evidence is never promoted by relabeling it.
 
-## 2026-07-27 working-tree addendum
+## 2026-07-27 to 2026-07-28 working-tree addendum
 
 This addendum records source and test surfaces present in the working tree after the historical
 baseline above.  It is deliberately **not** a replacement baseline or release record: the tree is
@@ -37,15 +37,18 @@ not yet a clean, committed candidate, and none of these rows upgrades the Phase 
 | Surface | Current evidence | Boundary that remains |
 | --- | --- | --- |
 | ModelWork V2 | `ModelWorkBundleV2` separates non-theorem model work from statement contracts. Its typed source/rights bindings, derived identifiers and hashes, parent-admission revalidation, control-plane lease, fenced authorization, revocation, and reservation paths have focused local/adversarial coverage. | Local test HMAC and process-local approval objects are not an independently operated `MODEL_WORK_ADMISSION` authority or a lawful rights decision for external source material. |
-| Authorized ten-trial role bridge | The bridge derives ten canonical trials (two for each of five roles), completes pure suite validation before registration, binds its authenticated private run index and exact private usage, and exposes only keyed, non-addressable public commitments with no private handle. The V2 evaluator accepts strict exact JSON and recomputes trial and suite usage before issuing a role-separated, explicitly non-promotable report. | It is not a production evaluator, a role-floor score, or a source of authority to send protected source text to a provider. KMS/HSM custody and an independently managed evaluator are absent. |
+| Machine semantic quorum | The deterministic sidecar rederives blinded review tasks and scoring from the contract, packet, reviewer set, and seed; enforces reviewer/failure-domain floors, critical mutation vetoes, controls, persistent dissent, and exact report verification; and exposes only `machine_advisory` with `may_freeze=false`. Focused implementation and independent attack tests passed locally. | It neither authenticates reviewer execution nor grants semantic admission, source rights, freeze authority, proof authority, or a replacement for P1-12 and `AUTH-T3-01`. |
+| Model completion and authorized role V3 | The local completion path binds the exact private response CAS, authorization, reservation, actual usage/cost, settlement event, recovery handle, and public salted commitment. The V3 role bridge/evaluator fixes ten trials, authenticates its private run index, revalidates receipts, and reads one locally rehashed artifact snapshot. A 127-test completion/bridge/evaluator/canary set passed on 2026-07-28. | Local filesystem CAS and HMAC remain single-host/test-only. No paid-provider result, production KMS signer, external evaluator, role-floor score, or permission to expose source text follows. |
+| Dependency Closure V2 Stage A | Canonical manifest/reference/artifact contracts and a two-phase pure blob materializer enforce a closed theorem inventory, dependency reachability, tree/environment binding, and no-reader-callback writes. Contract/materializer attack tests passed 40/40 on 2026-07-28. | Bundle V2, claim-scoped reads, OCI-observed declaration evidence, gateway binding, and any proof-acceptance path are intentionally absent. |
+| Authorized ten-trial role bridge V2 compatibility | The retained V2 path derives ten canonical trials (two for each of five roles), completes pure suite validation before registration, binds its authenticated private run index and exact private usage, and exposes only keyed, non-addressable public commitments with no private handle. Its evaluator accepts strict exact JSON and recomputes trial and suite usage before issuing a role-separated, explicitly non-promotable report. | V2 is retained compatibility evidence, not the current completion-backed route. It is not a production evaluator, role-floor score, or source of authority to send protected source text to a provider. |
 | FATE common executor | The executor distinguishes `regression-48`, `model-compare-90`, and `FATE-350`; locks source selection, excludes answers, preflights authorization before state mutation, and records deterministic attempt seeds for restart-safe projection. | No authorized model/Lean/verifier run is recorded. There is no pass@1, pass@4, cost, ranking, or theorem result. |
 | Dashboard event projection | The read-only projection now keeps FATE attempts, generic verification, and T7 module receipt events in separate identities; collisions and orphan/mismatched FATE terminals are rejected. API/UI tests and the production build are local software evidence. | Controlled-browser visual QA could not run in this session, and remote authentication/operation remains unapproved. The panel is not a promotion authority. |
 | T7 module receipt | The typed module-build contract binds the frozen specification job to its lease job, source tree, environment, process receipt, and declaration fanout; injected-runner attack coverage rejects a forged cross-job receipt. | No image-owned T6 module wrapper has executed it in OCI/Lean, and it has no gateway attestation, real-worker recovery result, or theorem-level kernel acceptance. |
-| 1,000-job synthetic chaos | The synthetic control-plane harness completed 1,000 jobs with 1,000 stale/expired-fence rejections, 4,000 duplicate-delivery replays, 5,000 contiguous/replay-consistent events, 4,000 CAS checks, and no lost job or duplicate terminal verdict. | This is control-plane resilience evidence only; it does not exercise Lean, OCI, provider egress, a production signer, physical power loss, or a real worker mid-transaction. |
+| Process-chaos provenance | The V2 receipt/verifier and bounded retained-workspace tests bind synthetic recovery to a candidate identity, `uv.lock`, runtime, argv, child-state files, a read-only replayed SQLite schema/event/lease history, the terminal projection, and canonical cross-bound CAS artifacts. The complete 16-test focused file passed on a static working tree on 2026-07-28. | A historical local V1 1,000-job summary is not a retained V2 provenance receipt. No fresh V2 1,000-job run and independent replay has been recorded. |
 | McKay opening alignment | The Builder alignment harness verified cached parent/derived-text provenance and emitted a redacted, source-bound opening-page observation with status `textbook_alignment_discovery_nonfreeze`. It did not guess a proposition from a weak extraction. | No statement was extracted, normalized, mapped to mathlib, frozen, handed to Prover, or semantically reviewed. Source text was not sent to a model. |
 | DeepSeek official-profile canary and five-role runner | The bootstrap canary returned redacted `execution_refused/network`. The V2 five-role runner then completed credential-free `plan` and authorization-aware `preflight` for ten trials; its single permitted live attempt reached redacted `reconciliation_required/network` without a model response. Private state remained outside the checkout and public output exposed no private handle. | These are failure-path and orchestration observations, not capability, role-floor, cost, or benchmark results. They grant no promotion or source-egress authority, and no automatic retry is authorized. |
 | Authority environment availability | This session's WSL invocation returned `Wsl/Service/E_ACCESSDENIED`; it therefore cannot create a fresh Docker/Lean receipt here. | This is a session-environment block, not evidence that the operator host cannot run Docker/WSL. A retained authority-environment replay is still required. |
-| Local software gates | The development-tree non-release suite completed with 1,304 passed, 9 environment-specific skips, and 2 repository-release tests deliberately deselected. In the index-aligned staged candidate, the complete partitioned suite closed with 1,300 passed and 15 explicit cache/Linux/OCI/WSL skips, including both repository-release tests passing; the extra skips reflect local caches and images intentionally excluded from the public candidate. Ruff format/check, all configured mypy package groups, 17 Dashboard UI tests, TypeScript typecheck/build, provider policy, public readiness, release evidence, source locks, SBOM/inventory, current/history secret scans, and staged `git diff --check` passed. | Local software gates do not replace T3 semantic admission, T6/T7 authority execution, a real model result, or independent kernel acceptance. |
+| Historical local software gates | Earlier development-tree observations recorded 1,304 passed with 9 environment-specific skips and 2 repository-release tests deselected, followed by an index-aligned staged observation of 1,300 passed with 15 explicit cache/Linux/OCI/WSL skips. This ledger does not bind those counts to an exact retained report, so they remain historical observations rather than current-candidate evidence. | Local software gates never replace T3 semantic admission, T6/T7 authority execution, a real model result, or independent kernel acceptance. A new exact staged candidate must rerun and bind its own gates. |
 
 ## Evidence classes
 
@@ -71,13 +74,13 @@ These labels are deliberately non-interchangeable:
 | Builder experience retrieval | Verified, synthetic | Content-addressed success/negative/gap records, rights/endpoint filters, deterministic ranking and budgets, poison-text rejection, and validated retrieval skill | Advisory context cannot satisfy a freeze gate |
 | Builder--Prover closure | Verified, local test-only | A post-cutoff WSL pure-Lean exact-image canary ran `prepare -> fidelity -> freeze -> bridge -> register -> claim -> OCI compile/query -> independent gateway -> terminal acceptance` with `builder_unreviewed_bypass=false`. Builder fidelity digest `d08a743f264db53c7a5b7c8c27e8a7387796559e218426883a17ed056cbe3b57`; handoff hash `2a7600baddfe5a2335b38ebdec5ee08a18261a3e6d3045c9055303fdfbe654c7`; verifier evidence SHA `55d53a7e92839badba32c4ef4287dd4895cfcfdcad73488bd96dec1ca77b50f8`; source-preparation hash `312be270ddb575ce036a7b286199027a2995d867c3e31acd935d70d9911b685d`; image `autolean/lean-worker@sha256:9a85f190bfaaf5cc79418abe3cee46cf5456b9aaaa0c78df5d3c1e380ee419e5`. Earlier V1 source-backed evidence without the generation projection remains historical only and cannot authorize new registration or promotion. | The source and review identities are synthetic fixtures; execution is `test-only-local`, the result is `not_a_promotion`, and no production authority is established. |
 | Event, lease, and artifact control plane | Verified, synthetic | SQLite WAL, command idempotency, fencing, append-only events, concurrent artifact create-if-absent, and immutable contract-revision projection | No power-loss or storage-device fault injection |
-| OS-process recovery | Verified, synthetic | 1,000 jobs; 1,000 expired leases/stale-fence rejections; 4,000 duplicate-delivery replays; 5,000 contiguous events; 4,000 artifact checks; no loss or duplicate terminal verdict. Report SHA `d80c2c0dbcbab22bfcbd0bea13f41e07c5f337a4a93d82203ef060e7765a2847` | No Lean, OCI, network, model, physical power loss, or mid-transaction kill |
+| OS-process recovery | Partial, synthetic | V2 receipt/verifier with bounded retained-workspace coverage; it rejects source/lock/argv/count/manifest drift, extra workspace files, and V1 summary substitution. A local V1 summary with report SHA `d80c2c0dbcbab22bfcbd0bea13f41e07c5f337a4a93d82203ef060e7765a2847` is historical diagnostic output, not provenance-bound evidence. | Fresh 1,000-job V2 receipt plus retained workspace and independent replay are absent; no Lean, OCI, network, model, physical power loss, or mid-transaction kill is exercised |
 | Verifier evidence and signing gateway | Verified, local test-only | Lease/context/digest-bound request, evidence-artifact rehash and cross-binding, replay ledger, fail-closed outage, stale-fence rejection, and mandatory independently authenticated execution receipt before signing | Fixture HMAC proves the software boundary only; production mTLS/ACL and KMS/HSM custody are absent |
 | FATE source boundary | Verified | FATE v4.28.0 root and three submodule commits; 350-task manifest hash `3187bac80d3aeb2dac8f5da878fe21580a4c11540a0c7db3c14a34c2e0bdc748` | FATE is a bounded Prover fixture, not the research north star, a pilot-selection oracle, or multi-file library evidence |
 | `compile-canary-12` | Verified | Managed WSL runtime, Lean 4.28.0, mathlib `8f9d9cff6bd728b17a24e163c9402775d9e6a365`; M 3/3, H 3/3, X 6/6; report SHA `87208dfc6d30c485c5a1efa85113f14334d86dd0c8544a1f2ac463d3b7aa90aa` | Original files contain `sorry`; `proof_search=false` |
 | `agent-smoke-8` | Verified, non-promotable | All eight fixed M cases attempted with one task-independent `aesop`; M-1 and M-3 compiled, type-queried, and passed the axiom policy; 2/8 total, no timeout; report SHA `c8c32f150562a9f4de9d6be84c812a6e7c6b760d624d43a1ad03b280144e5bb2` | No model Agent; mounted `.olean` tree is observed but not independently attested or image-built; no bundle/lease/signing request |
 | Role benchmark V3 | Verified, fake-only | Ten oracle/mutant cells cover five roles and two cases per role with three repetitions, for 60 scripted trials. Strict matrix/readiness/evaluator commitments, private raw CAS, public aggregate, replay, and two byte-identical forward runs are recorded. Report file SHA `06766d98d82c6a5400765c60423d4b225ab0b12d314535e414d765ccbd414f13` | `provider_id=fake` and `exact_json_v1` exercise the harness only; this is not a model score or Lean/fidelity evidence |
-| External benchmark readiness | Blocked before egress | Refuses execution on `execution_authorization_missing_v1`, `external_executor_unavailable_v1`, and `production_role_evaluator_missing_v1` | API credentials are not yet requested |
+| External benchmark readiness | Blocked before egress | Refuses execution on `execution_authorization_missing_v1`, `external_executor_unavailable_v1`, and `production_role_evaluator_missing_v1` | At the 2026-07-25 baseline, API credentials had not been requested; the later DeepSeek credential does not by itself satisfy execution authorization or evaluator custody |
 | Project DAG | Verified, synthetic | Fixed 20-node multi-file frontier, conflict, propagation, API-change, and integration-lease fixture | Does not compile a real multi-file Lean library |
 | Real Lean project-DAG preflight | Verified, byte-bound input; operator-local clean-build path | PR #18 adds a separate snapshot-first fixture: four Lean modules, twenty curated declaration nodes, byte-bound source/import/content graph, and a clean-build runner for the pinned local source-v2 image | No changed-source invalidation/rebuild, lease exercise, immutable bundle, per-node verifier, or T7 acceptance evidence |
 | Providers | Verified offline | Fake, Codex CLI, OpenAI Responses, and custom-compatible adapters; authorization/egress controls, stable failure taxonomy, and persistent circuit breaker | No paid/external run; no prohibited provider path |
@@ -108,7 +111,7 @@ downstream work.
 | 3--4 | Partial | SQLite WAL/events, leases/fencing, content-addressed artifacts, immutable workspaces, pure-Lean OCI adversarial canary, compile-canary-12, non-promotable agent-smoke-8, source-backed local vertical tests, and a host-side ordinary-dependency spike with 4/4 source-v2 fixture replay | Exercise the fixed FATE smoke bundles through the same immutable OCI/query/evidence boundary. Move ordinary-dependency evidence into a new image/contract/gateway revision with type and origin bindings; production verifier authority remains separate |
 | 5--6 | Partial | Offline Codex CLI/OpenAI Responses/custom-compatible adapters, capability/egress rejection, Archon adapter, specialist `ContextPack`, and synthetic 20-node DAG | Obtain explicit execution authorization and production role evaluators, then run registered `regression-48` pass@1. No such real-model run is recorded |
 | 7--8 | Partial | Read-only loopback Dashboard, budget and durable circuit-breaker policy, failure taxonomy, and fake-only five-role calibration fixture | Run `model-compare-90` pass@1 and role/model/retrieval/specialist ablations under one frozen experiment contract; remote Dashboard access remains unapproved |
-| 9--10 | Partial | Synthetic 1,000-job process recovery/replay evidence, Windows/Linux CI, local OCI evidence, replayable fake reports, and the separate four-module/twenty-node real-Lean T7 input preflight | Bind the real fixture to changed-source rebuild, leases, immutable bundles, clean integration, and per-node verification; record authoritative Linux execution and the remaining real worker crash/restart cases instead of treating compatibility CI or the preflight as authority |
+| 9--10 | Partial | V2 process-chaos provenance and bounded semantic retained-workspace replay tests, Windows/Linux CI, local OCI evidence, replayable fake reports, and the separate four-module/twenty-node real-Lean T7 input preflight | Run and independently replay a fresh V2 1,000-job receipt; bind the real fixture to changed-source rebuild, leases, immutable bundles, clean integration, and per-node verification; record authoritative Linux execution and the remaining real worker crash/restart cases instead of treating compatibility CI or the preflight as authority |
 | 11--12 | Not closed | SPDX SBOM, operations/release guide, protocol/interface documentation, audits, and explicit no-RC gates exist | Attempt FATE-350 pass@1 with separate M/H/X reports, review the registered paper-version subset, complete authorized production-authority evidence, and record an RC/no-RC decision. None of the benchmark/RC evidence is recorded |
 
 ## Recent merged evidence
@@ -151,36 +154,29 @@ candidate.
 | First calibrated contract slice (T5) | Blocked by T3 | A different backup may be audited, but no statement may freeze until one boundary is admitted with rights and review readiness |
 | Target-free substrate and dependency gate (T6) | Builder-only query implemented locally; blocked by T5 and real integration | The focused route is `proof_eligible=false` and its local negative/static coverage does not create proof evidence. T6 still needs an admitted immutable contract/environment revision, real OCI/Lean execution, signing-gateway replay, adversarial integration rejections, and an accepted frozen-to-verified result |
 | Real project-scale loop (T7) | Immutable source/witness/environment input, a typed module process receipt, durable same-source reuse, and atomic declaration fanout are implemented and tested with an injected fake runner; real execution is not admitted | The contract rejects fake/operator-local evidence at the kernel-acceptance boundary. It still needs an image-owned T6 module build/query wrapper, operator-local OCI replay, trusted gateway attestation, real-worker recovery, clean integration, and theorem-level kernel verification |
-| Authoritative Prover path | Partially verified | One unchanged source-backed synthetic bundle passed the full local pure-Lean path through real OCI, an independent gateway rerun, and terminal acceptance. Preserve that contract while extending the same path to the exact mathlib profile and closing production-authority and full adversarial-suite gaps |
+| Prover authority-path canary | Partially verified | One unchanged source-backed synthetic bundle passed the full local pure-Lean path through real OCI, an independent gateway rerun, and terminal acceptance. Preserve that contract while extending the same path to the exact mathlib profile and closing production-authority and full adversarial-suite gaps |
 | Controlled model/benchmark evaluation | Authorized bootstrap and ten-trial role paths are implemented; one DeepSeek canary reached only a redacted network refusal | A network refusal is not a model result. Independent capability evidence, production admission/evaluator custody, a retained successful provider run, and the frozen role protocol are still required; the bootstrap canary cannot enter role-floor results, and no FATE result closes a Builder or Library gate |
 | Release decision | Not run | Satisfy all mandatory gates and record failed, waived, and unrun items explicitly |
 
-## Operator help required
+## External-action pointer
 
-The one current human action that can unlock T3 and therefore T5 is an independently attributable
-review using the generated local review view:
-
-1. decide all ten pending source spans;
-2. resolve the two page-pair ambiguities; and
-3. accept or reject a successor formal profile, including the observed import and axiom
-   disposition.
-
-Agent agreement is advisory and cannot act as this authority. Do not send the source pages to an
-external provider or model-backed subagent: the current source record is `local_only`. No API
-secret is requested now because external execution authorization, production role evaluators,
-and applicable source-egress permission are not ready.
+This ledger records the T3/T5 blocker facts below; it does not assign work. The exact machine
+preparation and accountable exception decision are maintained only as `AUTH-T3-01` in
+[operator-and-authority-worklist.md](operator-and-authority-worklist.md). Current execution order
+is maintained only in [roadmap-next.md](roadmap-next.md).
 
 ## Pilot discovery
 
-The conditional primary is first-order model-theory sequent-calculus soundness. The two original
-candidates disagreed over a closed-only conservative formulation versus explicit structural
-freshness and open-formula contexts. The current `model-theory-closed-level-indexed-fragment`
-revision records the result as a V2 T3 gap: the `⊥`, `→`, and `∀` micro-slice is kernel-checked,
-but remains `not_selected`. Local replay establishes that the gap artifacts consistently bind the
-current manifest, workspace, source anchors, and retained build evidence; it does not establish
-source fidelity or admission authority. The read-only backup audit selected neither alternative:
-the pointwise Cea graph has only 8 nodes and 25 percent strict or 50 percent optimistic reuse,
-while van Kampen remains paused.
+The historical first-order model-theory candidate is not the current Phase 2 primary. Its two
+original candidates disagreed over a closed-only conservative formulation versus explicit
+structural freshness and open-formula contexts. The current
+`model-theory-closed-level-indexed-fragment` revision records the result as a V2 T3 gap: the `⊥`,
+`→`, and `∀` micro-slice is kernel-checked, but remains `not_selected`. Local replay establishes
+that the gap artifacts consistently bind the current manifest, workspace, source anchors, and
+retained build evidence; it does not establish source fidelity or admission authority. The
+current conditional discovery primary is the iFEM opening sequence; PDE and
+metric/algebraic-geometry remain alternatives. The earlier read-only backup audit selected
+neither the pointwise Cea graph nor van Kampen.
 
 The technical spike uses level-indexed `Formula (Fin n)` sequents internally and exposes soundness
 through an explicit `n = 0` sentence bridge. It implements only the `⊥`, `→`, and `∀` fragment and
@@ -199,48 +195,17 @@ Curvature is reference only: mathlib [PR #36036](https://github.com/leanprover-c
 is an active, open connection/geodesics work-in-progress that includes curvature. No curvature
 mapping, source-to-contract calibration, or upstream duplication is current work.
 
-Before T5 can begin, the active work requires:
+The observed T5 blockers are therefore the unresolved source locators, successor formal profile,
+rights/egress revision, and absence of an admitted replacement for `not_selected`. They remain
+facts until a new immutable decision is recorded. Failed selection, fidelity, semantic-review, or
+rights checks retain the gap; they never weaken a theorem.
 
-- visual and semantic review of all ten machine-located source spans, including reconciliation of
-  the Section 7.5 and universal-right (`∀R`) page locators;
-- an explicit successor formal profile resolving the source-v2 image, implicit `Init` import, and
-  observed `Classical.choice`, `Quot.sound`, and `propext`, plus authenticated verification of any
-  new admission decision;
-- the retained pinned-Library receipt preserving its deliberately limited scope;
-- an admitted candidate or a reviewed backup replacing the current `not_selected` state; and
-- a reviewed source-manifest/rights revision before any non-local model egress; the current
-  `local_only` decision remains binding.
+## Execution-order pointer
 
-Only after that selection may source-to-contract calibration start. A failed selection, fidelity,
-semantic-review, or rights gate retains the gap, pauses ingestion, or selects a backup; it never
-weakens a theorem.
-
-## Immediate execution order
-
-1. Treat the replayable T3 V2 decision as a blocking `gap/not_selected` record. Resolve its named
-   evidence gaps locally: decide the pending spans and locator ambiguities, then obtain an
-   independently attributable semantic/admission decision. The two audited backups are not
-   selected; a different backup would need a new read-only audit before any selection work.
-2. Keep T5 blocked until one boundary is admitted. Further backup source/rule auditing may
-   proceed, but no statement freeze or Prover bundle may be issued.
-3. Run the T6 Builder-only query inside the real OCI/Lean environment, bind it to the signing
-   gateway, and replay the rejected controls. Keep it `proof_eligible=false`; after T3/T5 permit
-   a frozen contract, rerun the unchanged bundle against the exact substrate digest.
-4. Add the locked T7 module build/query wrapper to the T6 image receipt, then run the existing
-   immutable module request through operator-local OCI and record the non-promotable receipt and
-   atomic fanout. Only after that replay succeeds, add a separate trusted-gateway verifier path,
-   real-worker crash/restart coverage, clean integration, and theorem-level kernel acceptance.
-   Never reinterpret module success as per-declaration acceptance.
-5. Keep the authorized DeepSeek bootstrap canary non-promotable. Add independent capability
-   evidence and production role evaluators before the first real, role-separated comparison under
-   the frozen benchmark protocol. Use the operator-supplied secret only by reference and only when
-   the source-egress policy permits the exact request.
-6. Continue Phase 2 public-metadata discovery for the PDE and metric-geometry lanes without
-   production ingestion. After selection and rights/domain readiness, begin expert-reviewed
-   source-to-contract calibration; feed only frozen bundles to Prover.
-7. Run fixed regression/comparison work as controlled secondary diagnostics, then deploy
-   Builder/verifier authorities behind authenticated service boundaries before any result is
-   called promotable.
+This facts ledger intentionally contains no current task ordering. The dependency-ordered 60-step
+board is [roadmap-next.md](roadmap-next.md); every host, account, rights, signer,
+semantic-exception, and release action is in
+[operator-and-authority-worklist.md](operator-and-authority-worklist.md).
 
 Repository visibility and the historical HF incident are separate decisions. Visibility may be
 changed only after all remote refs intended for publication are fetched, reachable history is

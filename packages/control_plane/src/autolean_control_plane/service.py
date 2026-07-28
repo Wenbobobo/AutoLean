@@ -20,6 +20,7 @@ from autolean_contracts import (
     FormalizationTaskBundleV1,
     GapReportV1,
     HashKindV1,
+    ProofStatusV1,
     ProofSubmissionV1,
     StableIdentifierV1,
     VerificationEvidenceArtifactV1,
@@ -32,6 +33,7 @@ from autolean_contracts import (
     digest_bytes,
     digest_text,
     proof_dependency_manifest_hash,
+    validate_axiom_policy_v1,
     verification_attestation_payload,
     verification_gateway_attestation_payload,
 )
@@ -129,6 +131,9 @@ class TaskBinding:
 
 @dataclass(frozen=True, slots=True)
 class ClaimReceipt:
+    bundle_id: str
+    bundle_hash: str
+    bundle_artifact: ArtifactRef
     lease: Lease
     event: StoredEvent
 
@@ -201,12 +206,34 @@ class ControlPlane:
     @staticmethod
     def _claim_receipt_from_event(bundle_id: str, event: StoredEvent) -> ClaimReceipt:
         payload = event.payload
+        event_bundle_id = ControlPlane._required_text(payload, "bundle_id")
+        if (
+            event.entity_type != "task"
+            or event.entity_id != bundle_id
+            or event.event_type != "task.claimed"
+            or event_bundle_id != bundle_id
+        ):
+            raise InvalidTransition("corrupt claimed-task event binding")
+        bundle_hash = ControlPlane._required_text(payload, "bundle_hash")
+        if re.fullmatch(r"[0-9a-f]{64}", bundle_hash) is None:
+            raise InvalidTransition("corrupt claimed-task bundle hash")
+        artifact_payload = ControlPlane._required_object(payload, "bundle_artifact")
+        try:
+            bundle_artifact = ArtifactRef(
+                digest=ControlPlane._required_text(artifact_payload, "digest"),
+                size=ControlPlane._required_int(artifact_payload, "size"),
+            )
+        except ValueError as error:
+            raise InvalidTransition("corrupt claimed-task bundle artifact") from error
         expires_at_text = ControlPlane._required_text(payload, "expires_at")
         try:
             expires_at = datetime.fromisoformat(expires_at_text.replace("Z", "+00:00"))
         except ValueError as error:
             raise InvalidTransition("corrupt claimed-task expiry timestamp") from error
         return ClaimReceipt(
+            bundle_id=event_bundle_id,
+            bundle_hash=bundle_hash,
+            bundle_artifact=bundle_artifact,
             lease=Lease(
                 job_id=bundle_id,
                 holder_id=ControlPlane._required_text(payload, "worker_id"),
@@ -385,10 +412,16 @@ class ControlPlane:
         replayed = self._replayed_event(idempotency)
         if replayed is not None:
             return self._claim_receipt_from_event(bundle_id, replayed)
-        self.get_binding(bundle_id)
+        binding = self.get_binding(bundle_id)
         lease = self.leases.claim(bundle_id, worker_id, ttl_seconds=ttl_seconds)
         payload = self._json_object(
             {
+                "bundle_id": binding.bundle_id,
+                "bundle_hash": binding.bundle_hash,
+                "bundle_artifact": self._artifact_payload(
+                    binding.bundle_artifact,
+                    kind="bundle",
+                ),
                 "worker_id": worker_id,
                 "fencing_token": lease.fencing_token,
                 "expires_at": lease.expires_at.isoformat(),
@@ -401,7 +434,56 @@ class ControlPlane:
             events=(NewEvent("task.claimed", payload=payload),),
             idempotency=idempotency,
         )
-        return ClaimReceipt(lease=lease, event=events[0])
+        return self._claim_receipt_from_event(bundle_id, events[0])
+
+    def fetch_claimed_bundle(self, receipt: ClaimReceipt) -> FormalizationTaskBundleV1:
+        """Load the exact registered bundle for a still-current claimed-task receipt."""
+
+        if receipt.bundle_id != receipt.lease.job_id:
+            raise InvalidTransition("claim receipt lease belongs to a different bundle")
+        self._assert_lease(receipt.bundle_id, receipt.lease)
+        stored_event = next(
+            (
+                event
+                for event in self.events.read_stream("task", receipt.bundle_id)
+                if event.event_id == receipt.event.event_id
+            ),
+            None,
+        )
+        if stored_event is None or stored_event != receipt.event:
+            raise InvalidTransition("claim receipt does not bind a persisted task claim")
+        canonical_receipt = self._claim_receipt_from_event(receipt.bundle_id, stored_event)
+        if canonical_receipt != receipt:
+            raise InvalidTransition("claim receipt differs from its persisted task claim")
+
+        binding = self.get_binding(receipt.bundle_id)
+        if (
+            receipt.bundle_hash != binding.bundle_hash
+            or receipt.bundle_artifact != binding.bundle_artifact
+        ):
+            raise InvalidTransition("claim receipt does not match the registered bundle")
+        try:
+            raw = self.artifacts.get_bytes(receipt.bundle_artifact)
+        except (ArtifactCorruption, ArtifactNotFound) as error:
+            raise InvalidTransition("claimed bundle artifact is unavailable or corrupt") from error
+        payload = self._decode_canonical_json_object(raw, label="claimed bundle")
+        try:
+            bundle = FormalizationTaskBundleV1.model_validate(payload)
+        except ValueError as error:
+            raise InvalidTransition("claimed bundle artifact is malformed") from error
+        if canonical_json(bundle.model_dump(mode="json")).encode("utf-8") != raw:
+            raise InvalidTransition("claimed bundle artifact is not canonical V1 JSON")
+        if (
+            bundle.bundle_id.value != receipt.bundle_id
+            or bundle.handoff_hash().value != receipt.bundle_hash
+            or bundle.contract.contract_id.value != binding.contract_id
+            or bundle.contract.revision != binding.revision
+            or bundle.contract.semantic_hash().value != binding.contract_hash
+            or bundle.proof_boundary.boundary_hash.value != binding.proof_boundary_hash
+        ):
+            raise InvalidTransition("claimed bundle does not match its registered binding")
+        self._assert_lease(receipt.bundle_id, receipt.lease)
+        return bundle
 
     def submit_proof(
         self,
@@ -413,6 +495,10 @@ class ControlPlane:
     ) -> StoredEvent:
         """Record a Prover candidate without granting it any verification status."""
 
+        if submission.status is not ProofStatusV1.CANDIDATE:
+            raise InvalidTransition("submit_proof accepts candidate proof status only")
+        if not submission.provenance:
+            raise InvalidTransition("proof submissions require explicit provenance")
         idempotency = self._idempotency(
             scope="submit_proof",
             key=idempotency_key,
@@ -676,6 +762,11 @@ class ControlPlane:
     def _binding_from_bundle(self, bundle: FormalizationTaskBundleV1) -> TaskBinding:
         contract = bundle.contract
         verifier_policy = contract.formal.environment.verifier_execution_policy
+        axiom_profile, axioms_allowlist = self._validated_axiom_policy(
+            contract.policy.axiom_profile.value,
+            contract.formal.axioms_allowlist,
+            label="frozen bundle",
+        )
         graph_nodes = self._graph_nodes(bundle)
         # Artifact is inserted later so this temporary reference is never returned.
         placeholder = ArtifactRef(digest="0" * 64, size=0)
@@ -697,8 +788,8 @@ class ControlPlane:
             worker_image_digest=verifier_policy.worker_image_digest,
             wrapper_protocol=verifier_policy.wrapper_protocol,
             command_policy_hash=verifier_policy.command_policy_hash().value,
-            axiom_profile=contract.policy.axiom_profile.value,
-            axioms_allowlist=frozenset(contract.formal.axioms_allowlist),
+            axiom_profile=axiom_profile,
+            axioms_allowlist=axioms_allowlist,
             canonical_type_assurance=None,
             canonical_type_promotion_authority=False,
             bundle_artifact=placeholder,
@@ -731,6 +822,11 @@ class ControlPlane:
         )
         if canonical_type_promotion_authority is not False:
             raise InvalidTransition("canonical type registration event claims promotion authority")
+        axiom_profile, axioms_allowlist = self._validated_axiom_policy(
+            self._required_text(payload, "axiom_profile"),
+            self._required_texts(payload, "axioms_allowlist"),
+            label="task registration event",
+        )
         graph_nodes = self._required_list(payload, "graph_nodes")
         return TaskBinding(
             bundle_id=self._required_text(payload, "bundle_id"),
@@ -746,8 +842,8 @@ class ControlPlane:
             worker_image_digest=self._required_text(payload, "worker_image_digest"),
             wrapper_protocol=self._required_text(payload, "wrapper_protocol"),
             command_policy_hash=self._required_text(payload, "command_policy_hash"),
-            axiom_profile=self._required_text(payload, "axiom_profile"),
-            axioms_allowlist=frozenset(self._required_texts(payload, "axioms_allowlist")),
+            axiom_profile=axiom_profile,
+            axioms_allowlist=axioms_allowlist,
             canonical_type_assurance=canonical_type_assurance,
             canonical_type_promotion_authority=False,
             bundle_artifact=ArtifactRef(
@@ -769,6 +865,20 @@ class ControlPlane:
         if lease.job_id != bundle_id:
             raise InvalidTransition("lease belongs to a different bundle")
         self.leases.assert_current(lease)
+
+    @staticmethod
+    def _validated_axiom_policy(
+        profile_text: str,
+        axioms_allowlist: tuple[str, ...],
+        *,
+        label: str,
+    ) -> tuple[str, frozenset[str]]:
+        try:
+            profile = AxiomProfileV1(profile_text)
+            validate_axiom_policy_v1(profile, axioms_allowlist)
+        except ValueError as error:
+            raise InvalidTransition(f"{label} has an invalid axiom policy") from error
+        return profile.value, frozenset(axioms_allowlist)
 
     def _verify_builder_attestation(self, bundle: FormalizationTaskBundleV1) -> AttestationV1:
         attestation = bundle.builder_attestation
@@ -1295,6 +1405,9 @@ class ControlPlane:
             raw = self.artifacts.get_bytes(digest)
         except (ArtifactCorruption, ArtifactNotFound) as error:
             raise InvalidTransition(f"{label} artifact is unavailable or corrupt") from error
+        return self._decode_canonical_json_object(raw, label=label)
+
+    def _decode_canonical_json_object(self, raw: bytes, *, label: str) -> JsonObject:
         try:
             decoded = raw.decode("utf-8")
             parsed = json.loads(

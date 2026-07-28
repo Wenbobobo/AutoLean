@@ -37,6 +37,7 @@ from autolean_builder import (
 )
 from autolean_builder.testing import ScriptedCanonicalTypeQuery
 from autolean_contracts import (
+    ActorKindV1,
     AttestationPurposeV1,
     ContractChangeRequestV1,
     ContractChangeV1,
@@ -64,6 +65,7 @@ from autolean_contracts import (
     OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     ReleaseTierV1,
     StableIdentifierV1,
     StatementContractV1,
@@ -903,6 +905,17 @@ def test_source_backed_bundle_reaches_fake_prover_and_independent_synthetic_acce
         proof_source=response.text,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, response.text),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=_id("proof-provenance-r1"),
+                actor_id=response.response_id or "fake-provider-response",
+                actor_kind=ActorKindV1.MODEL,
+                endpoint_class=EndpointClassV1.LOCAL,
+                provider=response.provider_id,
+                model_name=response.model_id,
+                model_revision="fixture-v1",
+            ),
+        ),
     )
     proof_event = plane.submit_proof(
         bundle.bundle_id.value,

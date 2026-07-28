@@ -12,7 +12,7 @@ reference fixed in
 
 ```powershell
 $env:AUTOLEAN_DEEPSEEK_API_KEY = "<operator-owned value>"
-uv run python scripts/deepseek_authorized_canary.py --operator-approved
+uv run --frozen python scripts/deepseek_authorized_canary.py --operator-approved
 ```
 
 Use `--reasoning-effort max` only when that larger canary is intentional. The
@@ -32,8 +32,9 @@ The full path is:
    `ModelExecutionAuthorizationV1` bound to the exact ContextPack and outbound
    request hashes.
 4. Reserve a one-attempt token/cost budget, call
-   `ProviderRegistry.generate`, validate mandatory usage, and settle the
-   control-plane ledger.
+   `ProviderRegistry.generate_completed`, write the normalized response only to
+   a transient private output store, and settle an output-bound completion
+   receipt in the control plane.
 
 The Builder and model-execution HMAC keys are random, process-local test
 fixtures. The SQLite state is transient. Consequently every report is marked
@@ -48,12 +49,32 @@ Every report also fixes:
 The static Registry probe only checks that the operator-declared capability
 list can satisfy this request. It is not independent endpoint evidence.
 
-Stdout contains only status, provider/model identity, token usage, and
-SHA-256 hashes. Prompt text, response text, response ID, endpoint, credential,
-paths, and signing material are never emitted. A refusal is deliberately
+Stdout contains only status, provider/model identity, frozen authorization and
+bundle hashes, and the public completion projection (completion ID, receipt hash,
+and salted output commitment). It contains no response text, response ID,
+private artifact digest, receipt body, nonce, exact token usage, cost, endpoint,
+credential, path, or signing material. A refusal is deliberately
 restricted to a stable diagnostic category. Current network categories include
 `http_400`, `http_401`, `http_402`, `http_422`, `http_429`, `http_5xx`,
 `timeout`, `network`, `invalid_json`, and `http_ok_response_invalid`, with
 coarser categories for other status codes. Response bodies, URLs, and exception
 messages are never retained or emitted. These diagnostics are canary-local and
 do not weaken `ProviderRegistry` failure sanitization.
+
+If receipt signing is interrupted after the provider response is safely stored,
+the registry raises a credential-free recovery handle. The only permitted follow
+up is `recover_prepared_canary`, which calls `ProviderRegistry.recover_completed`
+against the same private store. It does not contact the provider again.
+
+## 2026-07-28 working-session observation
+
+One operator-approved, no-retry attempt sent only the fixed synthetic `n = n` canary under the
+2,048-input/256-output-token ceiling. The outer live gate returned `blocked` with
+`provider_response_received=false`; no response text, usage, settled cost, or model score exists.
+The caller did not retain a more specific stable provider category, so this record does not infer
+an HTTP or authentication failure.
+
+A separate credential-free HTTPS reachability probe from the same Codex sandbox failed before a
+connection was established. That narrows the observed blocker to this execution environment's
+network path; it does not establish an endpoint outage and does not authorize an automatic retry.
+`AUTH-PROVIDER-01` remains open.

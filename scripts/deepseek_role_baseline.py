@@ -59,6 +59,8 @@ from autolean_prover.errors import (
 from autolean_prover.providers import (
     Capability,
     ChatCompletionsOperatorProfileV1,
+    LocalPrivateModelOutputStore,
+    ModelExecutionCompletionRecoveryRequired,
     ModelProvider,
     ProviderRegistry,
     StaticCapabilityProbe,
@@ -72,11 +74,11 @@ if str(_REPOSITORY_ROOT) not in sys.path:
 
 from benchmarks.authorized_role_bridge import (  # noqa: E402
     AuthorizedRoleBridgeError,
+    AuthorizedRoleCompletionManifestStoreV2,
     AuthorizedRoleGenerationPolicyV1,
-    AuthorizedRoleRawOutputStore,
     AuthorizedRoleReconciliationRequired,
     AuthorizedRoleSuiteDefinition,
-    AuthorizedRoleSuiteSidecarV2,
+    AuthorizedRoleSuiteSidecarV3,
     PreparedAuthorizedRoleTrial,
     TestOnlyHmacPrivateManifestAuthenticator,
     authorized_role_elapsed_bucket,
@@ -84,7 +86,7 @@ from benchmarks.authorized_role_bridge import (  # noqa: E402
     build_locked_calibration_floor_suite,
     is_safe_authorized_role_run_id,
     prepare_locked_floor_trials,
-    run_authorized_role_floor_suite,
+    run_completed_authorized_role_floor_suite,
 )
 from benchmarks.role_benchmark import RoleModelTargetV1  # noqa: E402
 
@@ -123,6 +125,8 @@ _MODEL_WORK_STATE_TABLES = (
     "model_execution_authorization_idempotency",
     "model_execution_authorization_ledger",
     "model_execution_provider_health_ledger",
+    "model_execution_completion_settlements",
+    "model_execution_completion_receipts",
     "worker_leases",
 )
 _HTTP_FAILURE_CLASSES = {
@@ -355,7 +359,8 @@ class PreparedDeepSeekRoleOperator:
     registry: ProviderRegistry
     approval: ModelExecutionProviderApprovalV1
     admissions_by_bundle_id: dict[str, AttestationV1]
-    raw_output_store: AuthorizedRoleRawOutputStore
+    output_store: LocalPrivateModelOutputStore
+    completion_manifest_store: AuthorizedRoleCompletionManifestStoreV2
     diagnostic_transport: RedactingDiagnosticTransport
     state_database: Path
 
@@ -991,12 +996,20 @@ def preflight_deepseek_role_operator(
         purpose=AttestationPurposeV1.MODEL_WORK_ADMISSION,
         label="admission",
     )
+    completion_key = _ephemeral_key(
+        purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+        label="completion",
+    )
     model_verifier = HmacAttestationVerifierV1(
         {model_key.key_id: model_key},
         clock=clock,
     )
     admission_verifier = HmacAttestationVerifierV1(
         {admission_key.key_id: admission_key},
+        clock=clock,
+    )
+    completion_verifier = HmacAttestationVerifierV1(
+        {completion_key.key_id: completion_key},
         clock=clock,
     )
     approval = ModelExecutionProviderApprovalV1(
@@ -1072,11 +1085,17 @@ def preflight_deepseek_role_operator(
             artifacts=ArtifactStore(config.state_root / "public-artifacts"),
             attestation_verifier=model_verifier,
         )
+        output_store = LocalPrivateModelOutputStore(
+            (config.private_root / "model-output-cas-v1").resolve()
+        )
         authorization_service = ModelExecutionAuthorizationService(
             control_plane=control_plane,
             signer=HmacAttestationSignerV1(model_key, clock=clock),
             verifier=model_verifier,
             admission_verifier=admission_verifier,
+            completion_signer=HmacAttestationSignerV1(completion_key, clock=clock),
+            completion_verifier=completion_verifier,
+            private_output_verifier=output_store,
             clock=clock,
             max_ttl_seconds=3600,
         )
@@ -1095,7 +1114,7 @@ def preflight_deepseek_role_operator(
             endpoint_class=EndpointClassV1.APPROVED_EXTERNAL,
             model_revision=_MODEL_REVISION,
         )
-        raw_output_store = AuthorizedRoleRawOutputStore(
+        completion_manifest_store = AuthorizedRoleCompletionManifestStoreV2(
             config.private_root,
             private_authenticator=TestOnlyHmacPrivateManifestAuthenticator(manifest_secret),
         )
@@ -1105,7 +1124,8 @@ def preflight_deepseek_role_operator(
             registry=registry,
             approval=approval,
             admissions_by_bundle_id=admissions_by_bundle_id,
-            raw_output_store=raw_output_store,
+            output_store=output_store,
+            completion_manifest_store=completion_manifest_store,
             diagnostic_transport=diagnostic_transport,
             state_database=state_database,
         )
@@ -1132,18 +1152,16 @@ def preflight_deepseek_role_operator(
     return prepared
 
 
-def _required_private_int(value: int | None) -> int:
-    if value is None:
-        raise AuthorizedRoleReconciliationRequired(
-            "settled role output lacks private usage evidence"
-        )
-    return value
-
-
 def _settled_role_sidecars(
     prepared: PreparedDeepSeekRoleOperator,
-    suite_sidecar: AuthorizedRoleSuiteSidecarV2,
+    suite_sidecar: AuthorizedRoleSuiteSidecarV3,
 ) -> tuple[DeepSeekRoleSeparatedSidecarV1, ...]:
+    manifest = prepared.completion_manifest_store.read_manifest(
+        suite_sidecar.private_manifest_handle
+    )
+    private_by_coordinate = {
+        (entry.cell_id, entry.case_id, entry.repetition): entry for entry in manifest.outputs
+    }
     sidecars: list[DeepSeekRoleSeparatedSidecarV1] = []
     for role in sorted(ModelWorkRoleV1, key=lambda item: item.value):
         role_trials = tuple(
@@ -1154,36 +1172,33 @@ def _settled_role_sidecars(
             raise AuthorizedRoleReconciliationRequired(
                 "settled role output does not contain two canonical trials"
             )
-        states = tuple(
-            prepared.raw_output_store.reconciliation_for_bundle(trial.work_bundle.bundle_id.value)
-            for trial in role_trials
-        )
-        if any(
-            state is None
-            or state.state != "response_persisted"
-            or state.input_tokens is None
-            or state.cached_input_tokens is None
-            or state.output_tokens is None
-            or state.elapsed_ms is None
-            for state in states
-        ):
-            raise AuthorizedRoleReconciliationRequired(
-                "settled role output lacks private usage evidence"
+        entries = []
+        for trial in role_trials:
+            coordinate = (
+                trial.context.cell_id,
+                trial.context.case_id,
+                trial.work_bundle.repetition,
             )
-        input_tokens = sum(
-            _required_private_int(state.input_tokens) for state in states if state is not None
-        )
+            entry = private_by_coordinate.get(coordinate)
+            if entry is None:
+                raise AuthorizedRoleReconciliationRequired(
+                    "settled role output lacks a completion receipt"
+                )
+            receipt_authorization = entry.receipt.record.authorization
+            if (
+                receipt_authorization.bundle_id != trial.work_bundle.bundle_id
+                or receipt_authorization.bundle_hash != trial.work_bundle.handoff_hash()
+            ):
+                raise AuthorizedRoleReconciliationRequired(
+                    "settled role receipt is not bound to its immutable model work"
+                )
+            entries.append(entry)
+        input_tokens = sum(entry.receipt.record.actual_usage.input_tokens for entry in entries)
         cached_tokens = sum(
-            _required_private_int(state.cached_input_tokens)
-            for state in states
-            if state is not None
+            entry.receipt.record.actual_usage.cached_input_tokens for entry in entries
         )
-        output_tokens = sum(
-            _required_private_int(state.output_tokens) for state in states if state is not None
-        )
-        elapsed_ms = sum(
-            _required_private_int(state.elapsed_ms) for state in states if state is not None
-        )
+        output_tokens = sum(entry.receipt.record.actual_usage.output_tokens for entry in entries)
+        elapsed_ms = sum(entry.elapsed_ms for entry in entries)
         sidecars.append(
             DeepSeekRoleSeparatedSidecarV1(
                 role=role,
@@ -1203,22 +1218,18 @@ def _settled_role_sidecars(
 
 
 def _has_private_reconciliation(prepared: PreparedDeepSeekRoleOperator) -> bool:
-    for trial in prepared.plan.trials:
-        try:
-            state = prepared.raw_output_store.reconciliation_for_bundle(
-                trial.work_bundle.bundle_id.value
-            )
-        except Exception:
-            return True
-        if state is not None:
-            return True
-    return False
+    try:
+        return any(_model_work_state_counts(prepared.state_database))
+    except Exception:
+        return True
 
 
 def _failure_class(error: BaseException, diagnostic: RedactingDiagnosticTransport) -> str:
     transport_failure = diagnostic.failure_class
     if transport_failure not in {"provider_response_unclassified", "http_ok"}:
         return transport_failure
+    if isinstance(error, ModelExecutionCompletionRecoveryRequired):
+        return "completion_recovery_required"
     if isinstance(error, AuthorizedRoleReconciliationRequired):
         return "private_reconciliation_required"
     if isinstance(error, OperatorInitializationQuarantined):
@@ -1255,9 +1266,15 @@ def run_preflighted_deepseek_role_operator(
 ) -> DeepSeekRolePublicReportV2:
     """Execute exactly once; any failed dispatch remains reconciliation-only."""
 
+    if _has_private_reconciliation(prepared):
+        return _report_from_plan(
+            prepared.plan,
+            status="reconciliation_required",
+            failure_class="private_reconciliation_required",
+        )
     prepared.diagnostic_transport.reset_failure()
     try:
-        suite_sidecar = run_authorized_role_floor_suite(
+        suite_sidecar = run_completed_authorized_role_floor_suite(
             prepared.plan.suite,
             run_id=prepared.plan.config.run_id,
             authorization_service=prepared.authorization_service,
@@ -1265,12 +1282,13 @@ def run_preflighted_deepseek_role_operator(
             registry=prepared.registry,
             approval=prepared.approval,
             budgets_by_cell=prepared.plan.budgets_by_cell,
-            raw_output_store=prepared.raw_output_store,
+            output_store=prepared.output_store,
+            completion_manifest_store=prepared.completion_manifest_store,
             settlement_margin_seconds=_SETTLEMENT_MARGIN_SECONDS,
             lease_ttl_seconds=_LEASE_TTL_SECONDS,
             authorization_ttl_seconds=_AUTHORIZATION_TTL_SECONDS,
         )
-        prepared.raw_output_store.resolve_manifest_handle(suite_sidecar.private_manifest_handle)
+        prepared.completion_manifest_store.read_manifest(suite_sidecar.private_manifest_handle)
         role_sidecars = _settled_role_sidecars(prepared, suite_sidecar)
     except BaseException as error:
         if isinstance(error, (KeyboardInterrupt, SystemExit)):

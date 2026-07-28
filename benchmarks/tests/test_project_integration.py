@@ -9,6 +9,7 @@ from threading import Barrier
 
 import pytest
 from autolean_contracts import (
+    ActorKindV1,
     AlignmentTargetV1,
     AttestationPurposeV1,
     ExecutionGraphV1,
@@ -31,6 +32,7 @@ from autolean_contracts import (
     OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     ReleaseTierV1,
     RightsRecordV1,
     SourceRecordV1,
@@ -313,6 +315,13 @@ def _submission(
         proof_source=source,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, source),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=_id(f"proof-provenance:{node_id}:{suffix}"),
+                actor_id="project-integration-fixture",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 

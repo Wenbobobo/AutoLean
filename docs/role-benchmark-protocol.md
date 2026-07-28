@@ -223,8 +223,9 @@ An independent caller must first supply a `MODEL_WORK_ADMISSION` attestation for
 ID. The control plane verifies and persists that attestation before it registers the immutable
 work, grants a fenced lease, and issues the existing
 `ModelExecutionAuthorizationV1` wire capability. The bridge then invokes only
-`ProviderRegistry.generate`, so provider approval, endpoint class, token/cost budget, circuit
-breaker, settlement, and failure accounting remain on the same path used by Prover model calls.
+`ProviderRegistry.generate_completed`, so provider approval, endpoint class,
+token/cost budget, circuit breaker, output binding, completion settlement, and
+failure accounting remain on the same path used by Prover model calls.
 For the fixed floor suite, all ten prepared bundles, caller-supplied admissions, exact one-attempt
 budgets, approval snapshots, provider bindings, and effective provider timeouts are validated
 without a database write, capability probe, or provider call. A bad sixth admission therefore
@@ -241,31 +242,35 @@ a parent admission that is valid for one trial from expiring before its just-in-
 can be minted and conservatively covers preceding provider/persistence slots plus the current
 claim-to-issue and authorization windows. Runtime admission, lease, and fencing checks still run
 again immediately before each provider call.
-The complete normalized `ModelResponse` available at the registry boundary (text, response ID,
-tool calls, and usage) is written first to an operator-private content-addressed store outside
-the repository. The bridge does not claim to retain the transport's original HTTP response body.
-A private manifest is stored only after all ten responses exist; only then can the public sidecar
-be returned. Its true content digest and exact per-trial token/elapsed accounting remain private;
-the V2 public suite sidecar exposes only a random opaque private handle, aggregate usage buckets,
-and one coarse usage bucket set per trial. The V1 sidecar contracts remain unchanged and are not
-accepted by the private evaluator. The evaluator recomputes all V2 trial buckets and the suite
-aggregate from authenticated private manifest entries, then rechecks the same values against the
-response artifact and reconciliation state. Missing or drifted buckets fail closed.
+The complete normalized `ModelResponse` available at the registry boundary (text,
+response ID, tool calls, and usage) is written first to an operator-private
+content-addressed store outside the repository. The bridge does not claim to
+retain the transport's original HTTP response body. The control plane then
+creates a signed, output-bound completion receipt. A private V2 completion
+manifest is stored only after all ten receipts exist; only then can the public
+sidecar be returned. The V3 public suite sidecar exposes a random opaque private
+handle, aggregate usage buckets, one coarse usage bucket set per trial, and a
+three-field `ModelExecutionCompletionPublicV1` projection. Receipt bodies,
+private artifact references, nonces, response identifiers, exact accounting, and
+cost remain private. The evaluator recomputes all V3 trial buckets and the suite
+aggregate from authenticated receipt entries, verifies each receipt before
+reading its exact response artifact, and fails closed on any missing or drifted
+binding.
 The private handle mapping is authenticated by a mandatory, non-serializable operator-private
 authenticator over the handle, manifest hash, run ID, ten coordinates, and ten authorization
 hashes. The key is neither persisted nor returned. Restart reconciliation therefore requires key
 reinjection; substitution, truncation, or a wrong key fails closed. The repository HMAC
 implementation is explicitly test-only; production operators must replace it with a KMS/HSM
 implementation of the same boundary.
-It omits each private response hash as well as the response, so low-entropy model output cannot be
-tested against a public content digest. Local evaluation exposes only a keyed, domain-separated
-commitment produced through the injected manifest authenticator. It is stable for the same
-authenticated coordinate/entry/bundle but differs from both the private CAS digest and the former
-enumerable unsalted construction. The private store also requires the reconciliation `bundle_id`
-to equal the exact prepared work bundle on every response and commitment read. Before each
-provider call the private store writes a conservative dispatch journal. If the process stops after
-a provider response but before private CAS persistence, the state remains
-`provider_outcome_ambiguous` and automatic replay is forbidden until an operator reconciles it.
+It omits each private response hash as well as the response, so low-entropy model
+output cannot be tested against a public content digest. Local evaluation exposes
+only the salted commitment carried by a verified completion receipt. The private
+reader requires the receipt authorization's `bundle_id` to equal the exact
+prepared work bundle before it reads the artifact. If receipt signing or receipt
+persistence stops after provider output storage, the registry returns a
+credential-free recovery handle; `recover_completed` must settle that same
+artifact without a second provider call. A suite runner never uses recovery as
+permission to start another trial or silently change its ten-trial denominator.
 The sidecar hard-codes
 `production_evaluator: false`, `floor_claim_eligible: false`, and
 `cross_role_aggregation_permitted: false`; it contains neither the evaluator oracle, a verdict,
@@ -296,7 +301,7 @@ suite = build_locked_calibration_floor_suite(
 trials = prepare_locked_floor_trials(suite, run_id=run_id)  # dry-run; no provider I/O
 admissions_by_bundle_id = admission_authority.admit(trials)
 
-sidecar = run_authorized_role_floor_suite(
+sidecar = run_completed_authorized_role_floor_suite(
     suite,
     run_id=run_id,
     authorization_service=authorization_service,
@@ -304,7 +309,10 @@ sidecar = run_authorized_role_floor_suite(
     registry=registry,
     approval=operator_registered_approval,
     budgets_by_cell=exact_one_attempt_budgets,
-    raw_output_store=AuthorizedRoleRawOutputStore(
+    output_store=LocalPrivateModelOutputStore(
+        operator_private_root / "model-output-cas-v1",
+    ),
+    completion_manifest_store=AuthorizedRoleCompletionManifestStoreV2(
         operator_private_root,
         private_authenticator=operator_private_authenticator,
     ),

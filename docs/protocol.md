@@ -42,8 +42,8 @@ environment.
 
 | Command | Caller | Input authority | Required checks | Allowed effect |
 | --- | --- | --- | --- | --- |
-| claim | Assigned worker | Registered bundle ID, worker identity, TTL, idempotency key | Bundle exists; SQLite lease claim produces a current fencing token | Records task claim; gives temporary authority to submit evidence for that bundle |
-| submit_proof | Current lease holder | ProofSubmissionV1 | Current lease; stable ID/revision/contract/environment binding; no sorry, admit, or sorryAx | Stores a candidate proof artifact; it is not accepted yet |
+| claim | Assigned worker | Registered bundle ID, worker identity, TTL, idempotency key | Bundle exists; SQLite lease claim produces a current fencing token and binds the registered bundle hash plus artifact reference | Records task claim; gives temporary authority to fetch that exact immutable bundle and submit evidence for it |
+| submit_proof | Current lease holder | ProofSubmissionV1 | Current lease; candidate status; nonempty provenance; stable ID/revision/contract/environment binding; no sorry, admit, or sorryAx | Stores a candidate proof artifact; it is not accepted yet |
 | report_gap | Current lease holder | GapReportV1 | Current lease and frozen contract binding | Stores evidence of a missing lemma, API mismatch, ambiguity, version drift, or resource limit; never changes a theorem |
 | request_contract_change | Current lease holder | ContractChangeRequestV1 | Current lease and old contract binding | Stores a request for Builder review; never applies it |
 | verify_submission | Current lease holder acting through an independent verifier | VerificationReportV1 | Current lease; submitted proof exists; contract/environment/axiom-profile binding; typed verifier environment evidence; lease/fencing-bound gateway attestation; kernel/build/dependency/clean-environment/axiom gates | Emits accepted or rejected verification evidence |
@@ -54,6 +54,12 @@ The named methods are
 [report_gap](../packages/control_plane/src/autolean_control_plane/service.py#L356),
 [request_contract_change](../packages/control_plane/src/autolean_control_plane/service.py#L410),
 and [verify_submission](../packages/control_plane/src/autolean_control_plane/service.py#L467).
+
+`fetch_claimed_bundle(receipt)` is the lease-bound data plane for `claim`, not a sixth semantic
+command. It rechecks the current lease and fencing token, the persisted claim event, the registered
+bundle binding, artifact size and SHA-256, canonical V1 JSON, bundle/handoff/contract/revision hashes,
+and proof-boundary hash before returning a typed bundle. A reconstructed worker therefore does not
+need access to Builder-private state or a mutable host checkout.
 
 ## Operator-Only Verifier Signing Gateway
 
@@ -155,14 +161,19 @@ acceptance plan.
 
 ## Proof and verifier boundary
 
-The Prover is only allowed to fill a proof slot. The materializer writes a protected theorem
-header and manifest, checks their hashes before and after proof work, and rejects patch paths
-outside Proof.lean; see
+The Prover is only allowed to fill a proof slot. In V1, `allowed_edit_regions` must be empty:
+line-ranged editing has no enforcement semantics yet, and `Proof.lean` is the complete write
+boundary. The materializer writes a protected theorem header and manifest, checks their hashes
+before and after proof work, and rejects patch paths outside `Proof.lean`; see
 [WorkspaceMaterializer](../Prover/src/autolean_prover/execution/workspace.py#L117).
 
 The Lean-facing verifier compiles the candidate constructed from those protected statement bytes
 and the submitted proof source. It records kernel/build/dependency/clean-environment observations
-and checks sorryAx plus the selected axiom profile; see
+and checks `sorryAx` plus the selected axiom profile. `STRICT` requires an empty allowlist;
+`MATHLIB` permits only a subset of the fixed V1 baseline `Classical.choice`, `Quot.sound`, and
+`propext`; `EXPLICIT_ALLOWLIST` permits named custom axioms. `sorryAx` is forbidden in every
+profile. Contract creation, registration/replay, and final verification all apply the same policy;
+see
 [TrustedLeanVerifier](../Prover/src/autolean_prover/verification.py#L38). The control plane will
 not accept a report whose environment, axiom profile, or contract hash differs from the frozen
 bundle. It also requires verifier-owned evidence for the exact elaborated declaration type and

@@ -14,7 +14,8 @@ Neither role may repair the other role's conclusion by silently changing a state
 
 **Working-tree update, 2026-07-27.** The current tree adds local ModelWork V2, an authorized
 ten-trial role bridge and V2 evaluator, the FATE common executor, hardened Dashboard event
-projection, a typed T7 module receipt, a synthetic 1,000-job chaos result, and a McKay opening
+projection, a typed T7 module receipt, a V2 synthetic-chaos provenance mechanism with bounded
+retained-workspace tests, and a McKay opening
 alignment discovery. These are implementation/test or explicitly non-promotable local records.
 The DeepSeek bootstrap canary reached redacted `execution_refused/network`; the five-role runner's
 `plan` and `preflight` completed, but its single live attempt reached
@@ -337,22 +338,32 @@ operator or authoritative evidence according to the execution environment.
 
 ### A9. Synthetic control-plane chaos resists duplicate and stale work, within its stated scope
 
-**Claim.** The process-chaos harness exercises the SQLite/CAS control-plane state machine under
-large synthetic restart, replay, stale-fence, and duplicate-delivery pressure.
+**Claim.** The process-chaos harness and V2 local verifier exercise a bounded synthetic SQLite/CAS
+restart/replay protocol and reject altered retained evidence. They do not yet establish a
+provenance-bound 1,000-job result.
 
-**Exact evidence.** A 1,000-job run recorded 1,000 expired-lease/stale-fence rejections, 4,000
-duplicate-delivery replays, 5,000 contiguous/replay-consistent events, 4,000 CAS checks, no lost
-job, and no duplicate terminal verdict. The harness and its boundary are documented in
-[`docs/control-plane-process-chaos.md`](control-plane-process-chaos.md).
+**Exact evidence.**
 
-**Evidence class.** `synthetic` control-plane resilience.
+- Harness and boundary: [`scripts/control_plane_process_chaos.py`](../scripts/control_plane_process_chaos.py)
+  and [`docs/control-plane-process-chaos.md`](control-plane-process-chaos.md).
+- Focused retained-workspace tests run a two-job campaign, independently replay the exact SQLite
+  event/lease/fence state and canonical typed CAS graph, and reject V1-summary substitution,
+  source-root drift, non-SQLite or semantically tampered state, missing or extra manifest entries,
+  unreferenced artifacts, and unexpected workspace files:
+  [`scripts/tests/test_control_plane_process_chaos.py`](../scripts/tests/test_control_plane_process_chaos.py).
+- The older local V1 1,000-job summary is not a V2 receipt with a retained workspace, source
+  candidate, lock/runtime binding, or independent replay. It is not credited by this assurance case.
+
+**Evidence class.** `synthetic`, bounded local test coverage.
 
 **Non-claim.** This does not exercise Lean, OCI, provider egress, production signing, physical
 power loss, or a real worker killed during a transaction. It does not authenticate a proof or
 replace T6/T7 authority-environment evidence.
 
-**Remaining acceptance gate.** Retain an authority-environment worker recovery result after the
-T6 image-owned wrapper and T7 leased execution exist. Do not reclassify the synthetic result as
+**Remaining acceptance gate.** From one exact source candidate, run a fresh 1,000-job V2 campaign,
+retain its workspace and receipt, and run the independent V2 verifier before treating the synthetic
+operational gate as complete. Then retain an authority-environment worker recovery result after the
+T6 image-owned wrapper and T7 leased execution exist. Do not reclassify either synthetic result as
 kernel or production evidence.
 
 ### A10. Public-release policy protects the source and operator boundary, but is not a release
@@ -399,8 +410,9 @@ test.  At minimum, the following independent evidence is still required before a
 4. at least one actual authorized provider execution through the frozen role path with independent
    evaluation and production verifier evidence; a full FATE-350 or published model ranking is
    additionally required only when those benchmark claims are reported;
-5. authority-environment T6/T7 recovery evidence beyond the completed synthetic chaos run, plus
-   SBOM, operations, exact staged public-release, and controlled-browser evidence;
+5. a fresh independently verified V2 1,000-job synthetic-chaos receipt, authority-environment
+   T6/T7 recovery evidence, plus SBOM, operations, exact staged public-release, and
+   controlled-browser evidence;
 6. a release decision that names every remaining failed, waived, or unrun gate.
 
 An evidence upgrade must add a result record, not edit this conclusion optimistically.  The record

@@ -14,7 +14,7 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, Protocol
 
 from autolean_contracts import (
     AttestationError,
@@ -25,9 +25,22 @@ from autolean_contracts import (
     DigestV1,
     FormalizationTaskBundleV1,
     HashKindV1,
+    ModelExecutionActualUsageV1,
+    ModelExecutionCompletionPendingError,
+    ModelExecutionCompletionReceiptV1,
+    ModelExecutionCompletionRecordV1,
+    ModelExecutionCompletionRecoveryHandleV1,
+    ModelExecutionCompletionRecoveryReasonV1,
+    ModelExecutionPrivateOutputBindingV1,
+    ModelResponseArtifactRefV1,
+    ModelResponseArtifactV1,
     ModelWorkBundleV2,
     StableIdentifierV1,
+    build_model_execution_completion_record,
     digest_model,
+    model_execution_completion_attestation_payload,
+    model_execution_completion_evidence_identity,
+    model_execution_completion_recovery_handle,
     model_work_admission_evidence_identity,
     model_work_admission_payload,
     stable_identifier,
@@ -59,6 +72,9 @@ _PROVIDER_FAILURE_CODES = frozenset(
         "probe_capability_mismatch_v1",
         "generation_failed_v1",
         "response_invalid_v1",
+        "output_persistence_failed_v1",
+        "completion_invalid_v1",
+        "completion_recovery_required_v1",
         "settlement_rejected_v1",
         "local_policy_rejected_v1",
     }
@@ -120,6 +136,15 @@ class _AuthorizationSubject:
     parent_admission_expires_at: datetime | None = None
 
 
+class _PrivateModelOutputVerifier(Protocol):
+    """Return one parsed response after verifying the exact referenced CAS bytes."""
+
+    def read_artifact(
+        self,
+        reference: ModelResponseArtifactRefV1,
+    ) -> ModelResponseArtifactV1: ...
+
+
 class ModelExecutionAuthorizationService:
     """Issue, revoke, reserve, and settle model authority against one ControlPlane database.
 
@@ -145,6 +170,9 @@ class ModelExecutionAuthorizationService:
         signer: AttestationSignerV1,
         verifier: AttestationVerifierV1,
         admission_verifier: AttestationVerifierV1 | None = None,
+        completion_signer: AttestationSignerV1 | None = None,
+        completion_verifier: AttestationVerifierV1 | None = None,
+        private_output_verifier: _PrivateModelOutputVerifier | None = None,
         clock: Callable[[], datetime] | None = None,
         max_ttl_seconds: float = _DEFAULT_MAX_TTL_SECONDS,
         provider_failure_threshold: int = _DEFAULT_PROVIDER_FAILURE_THRESHOLD,
@@ -155,6 +183,9 @@ class ModelExecutionAuthorizationService:
         self._signer = signer
         self._verifier = verifier
         self._admission_verifier = admission_verifier
+        self._completion_signer = completion_signer
+        self._completion_verifier = completion_verifier
+        self._private_output_verifier = private_output_verifier
         self._clock = clock or (lambda: datetime.now(UTC))
         self._max_ttl_seconds = self._validate_max_ttl_seconds(max_ttl_seconds)
         self._provider_failure_threshold = self._validate_provider_failure_threshold(
@@ -822,6 +853,25 @@ class ModelExecutionAuthorizationService:
             self._assert_parent_admission(connection, authorization)
             self._assert_provider_circuit_closed(connection, provider)
 
+    def preflight_completion(self, authorization: ModelExecutionAuthorizationV1) -> None:
+        """Require the complete private-output and signing boundary before provider I/O."""
+
+        if (
+            self._completion_signer is None
+            or self._completion_verifier is None
+            or self._private_output_verifier is None
+            or not callable(getattr(self._private_output_verifier, "read_artifact", None))
+        ):
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        self._verify_capability(authorization)
+        with self._events.connection() as connection:
+            stored = self._stored_authorization(connection, authorization.authorization_id.value)
+            self._assert_same_capability(stored, authorization)
+            self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
+
     def reserve(
         self,
         authorization: ModelExecutionAuthorizationV1,
@@ -971,6 +1021,193 @@ class ModelExecutionAuthorizationService:
                 event_type="success",
             )
 
+    def settle_completed(
+        self,
+        reservation: ModelExecutionReservationV1,
+        *,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+        private_output: ModelExecutionPrivateOutputBindingV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        """Atomically bind settled usage to a verified private response artifact."""
+
+        self._validate_actual_usage(
+            input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens,
+        )
+        if not isinstance(private_output, ModelExecutionPrivateOutputBindingV1):
+            raise ModelExecutionAuthorizationError(
+                "model execution private output binding is invalid"
+            )
+        verifier = self._private_output_verifier
+        if self._completion_signer is None or self._completion_verifier is None or verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        artifact = self._read_private_output_artifact(private_output.artifact)
+
+        completion_record: ModelExecutionCompletionRecordV1
+        with self._events.write_transaction() as connection:
+            authorization = self._stored_authorization(
+                connection,
+                reservation.authorization_id.value,
+            )
+            self._verify_capability(authorization)
+            self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
+            self._assert_private_output_artifact_binding(
+                artifact,
+                authorization=authorization,
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
+            )
+            states = self._reservation_states(connection, authorization.authorization_id.value)
+            state = states.get(reservation.reservation_id.value)
+            self._assert_reservation_matches(reservation, state)
+            if state is not None and state.state == "settled":
+                completion_record = self._stored_completion_record(
+                    connection,
+                    reservation.reservation_id.value,
+                )
+                if (
+                    completion_record.authorization != authorization
+                    or completion_record.reservation != reservation
+                    or completion_record.private_output != private_output
+                    or (
+                        completion_record.actual_usage.input_tokens,
+                        completion_record.actual_usage.cached_input_tokens,
+                        completion_record.actual_usage.output_tokens,
+                    )
+                    != (input_tokens, cached_input_tokens, output_tokens)
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "model execution completion replay differs from its settled record"
+                    )
+            else:
+                if state is None or state.state != "reserved":
+                    raise ModelExecutionAuthorizationError(
+                        "model execution reservation is not active"
+                    )
+                actual_cost = authorization.pricing.cost_for_usage(
+                    input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
+                    output_tokens=output_tokens,
+                )
+                if (
+                    input_tokens > state.reserved_input_tokens
+                    or output_tokens > state.reserved_output_tokens
+                    or actual_cost > state.reserved_cost_microusd
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "provider usage exceeded the pre-authorized model execution reservation"
+                    )
+                settled_at = self._now()
+                settlement_event_id = str(uuid.uuid4())
+                completion_record = build_model_execution_completion_record(
+                    authorization=authorization,
+                    reservation=reservation,
+                    actual_usage=ModelExecutionActualUsageV1(
+                        input_tokens=input_tokens,
+                        cached_input_tokens=cached_input_tokens,
+                        output_tokens=output_tokens,
+                        actual_cost_microusd=actual_cost,
+                    ),
+                    private_output=private_output,
+                    settled_at=settled_at,
+                    settlement_event_id=settlement_event_id,
+                )
+                self._append_ledger_event(
+                    connection,
+                    authorization_id=authorization.authorization_id.value,
+                    reservation_id=reservation.reservation_id.value,
+                    attempt_number=reservation.attempt_number,
+                    event_type="settled",
+                    actual_input_tokens=input_tokens,
+                    actual_cached_input_tokens=cached_input_tokens,
+                    actual_output_tokens=output_tokens,
+                    actual_cost_microusd=actual_cost,
+                    event_id=settlement_event_id,
+                    recorded_at=settled_at,
+                )
+                connection.execute(
+                    """
+                    INSERT INTO model_execution_completion_settlements (
+                        reservation_id, authorization_id, completion_id,
+                        settlement_event_id, settlement_event_hash,
+                        completion_record_hash, completion_record_json, settled_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        reservation.reservation_id.value,
+                        authorization.authorization_id.value,
+                        completion_record.completion_id.value,
+                        completion_record.settlement_event_id,
+                        completion_record.settlement_event_hash.value,
+                        completion_record.record_hash().value,
+                        canonical_json(completion_record.model_dump(mode="json")),
+                        self._timestamp(settled_at),
+                    ),
+                )
+                self._append_provider_health_event(
+                    connection,
+                    provider=authorization.provider,
+                    authorization_id=authorization.authorization_id.value,
+                    reservation_id=reservation.reservation_id.value,
+                    event_type="success",
+                )
+        return self._attest_completion(completion_record)
+
+    def recover_completion(
+        self,
+        recovery_handle: ModelExecutionCompletionRecoveryHandleV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        """Retry only CAS validation and signing for an already-settled completion."""
+
+        if not isinstance(recovery_handle, ModelExecutionCompletionRecoveryHandleV1):
+            raise ModelExecutionAuthorizationError(
+                "completion recovery requires a stable credential-free recovery handle"
+            )
+        with self._events.connection() as connection:
+            record = self._stored_completion_record(
+                connection,
+                recovery_handle.reservation_id.value,
+            )
+        if model_execution_completion_recovery_handle(record) != recovery_handle:
+            raise ModelExecutionAuthorizationError(
+                "completion recovery handle does not match its durable settlement"
+            )
+        return self._attest_completion(record)
+
+    def verify_completion(self, receipt: ModelExecutionCompletionReceiptV1) -> None:
+        """Verify one stored receipt without requiring its historical lease to remain live."""
+
+        self._verify_completion_receipt(receipt)
+        artifact = self._read_private_output_artifact(receipt.record.private_output.artifact)
+        usage = receipt.record.actual_usage
+        self._assert_private_output_artifact_binding(
+            artifact,
+            authorization=receipt.record.authorization,
+            input_tokens=usage.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            output_tokens=usage.output_tokens,
+        )
+        with self._events.connection() as connection:
+            stored_record = self._stored_completion_record(
+                connection,
+                receipt.record.reservation.reservation_id.value,
+            )
+            stored_receipt = self._stored_completion_receipt(
+                connection,
+                receipt.record.completion_id.value,
+            )
+        if stored_record != receipt.record or stored_receipt != receipt:
+            raise ModelExecutionAuthorizationError(
+                "model execution completion differs from its control-plane record"
+            )
+
     def abandon(
         self,
         reservation: ModelExecutionReservationV1,
@@ -1087,6 +1324,30 @@ class ModelExecutionAuthorizationService:
                 CREATE INDEX IF NOT EXISTS model_execution_authorization_ledger_auth
                     ON model_execution_authorization_ledger (authorization_id, event_sequence);
 
+                CREATE TABLE IF NOT EXISTS model_execution_completion_settlements (
+                    reservation_id TEXT PRIMARY KEY,
+                    authorization_id TEXT NOT NULL,
+                    completion_id TEXT NOT NULL UNIQUE,
+                    settlement_event_id TEXT NOT NULL UNIQUE,
+                    settlement_event_hash TEXT NOT NULL UNIQUE,
+                    completion_record_hash TEXT NOT NULL,
+                    completion_record_json TEXT NOT NULL,
+                    settled_at TEXT NOT NULL
+                ) WITHOUT ROWID;
+
+                CREATE INDEX IF NOT EXISTS model_execution_completion_settlements_auth
+                    ON model_execution_completion_settlements (
+                        authorization_id, settled_at
+                    );
+
+                CREATE TABLE IF NOT EXISTS model_execution_completion_receipts (
+                    completion_id TEXT PRIMARY KEY,
+                    reservation_id TEXT NOT NULL UNIQUE,
+                    receipt_hash TEXT NOT NULL,
+                    receipt_json TEXT NOT NULL,
+                    issued_at TEXT NOT NULL
+                ) WITHOUT ROWID;
+
                 CREATE TABLE IF NOT EXISTS model_execution_provider_health_ledger (
                     event_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
                     event_id TEXT NOT NULL UNIQUE,
@@ -1192,6 +1453,30 @@ class ModelExecutionAuthorizationService:
                 BEFORE DELETE ON model_execution_authorization_ledger
                 BEGIN
                     SELECT RAISE(ABORT, 'model execution ledger is append-only');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_settlements_forbid_update
+                BEFORE UPDATE ON model_execution_completion_settlements
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion settlements are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_settlements_forbid_delete
+                BEFORE DELETE ON model_execution_completion_settlements
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion settlements are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_receipts_forbid_update
+                BEFORE UPDATE ON model_execution_completion_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion receipts are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_receipts_forbid_delete
+                BEFORE DELETE ON model_execution_completion_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion receipts are immutable');
                 END;
 
                 CREATE TRIGGER IF NOT EXISTS model_execution_provider_health_ledger_forbid_update
@@ -1811,6 +2096,320 @@ class ModelExecutionAuthorizationService:
                 "stored model execution authorization is corrupt"
             ) from error
 
+    def _read_private_output_artifact(
+        self,
+        reference: ModelResponseArtifactRefV1,
+    ) -> ModelResponseArtifactV1:
+        reader = self._private_output_verifier
+        if reader is None or not callable(getattr(reader, "read_artifact", None)):
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion has no private artifact reader"
+            )
+        try:
+            artifact = reader.read_artifact(reference)
+        except Exception:
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact verification failed"
+            ) from None
+        if (
+            not isinstance(artifact, ModelResponseArtifactV1)
+            or artifact.artifact_digest() != reference.artifact_digest
+            or len(artifact.canonical_bytes()) != reference.size_bytes
+        ):
+            raise ModelExecutionAuthorizationError(
+                "private model response reader returned a mismatched artifact"
+            )
+        return artifact
+
+    @staticmethod
+    def _assert_private_output_artifact_binding(
+        artifact: ModelResponseArtifactV1,
+        *,
+        authorization: ModelExecutionAuthorizationV1,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        if (
+            artifact.provider_id != authorization.provider.provider_id
+            or artifact.model_id != authorization.provider.model_id
+        ):
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact provider or model differs from authorization"
+            )
+        if (
+            artifact.usage.input_tokens,
+            artifact.usage.cached_input_tokens,
+            artifact.usage.output_tokens,
+        ) != (input_tokens, cached_input_tokens, output_tokens):
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact usage differs from settlement"
+            )
+
+    def _ensure_completion_artifact_available(
+        self,
+        record: ModelExecutionCompletionRecordV1,
+    ) -> None:
+        try:
+            artifact = self._read_private_output_artifact(record.private_output.artifact)
+            usage = record.actual_usage
+            self._assert_private_output_artifact_binding(
+                artifact,
+                authorization=record.authorization,
+                input_tokens=usage.input_tokens,
+                cached_input_tokens=usage.cached_input_tokens,
+                output_tokens=usage.output_tokens,
+            )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                model_execution_completion_recovery_handle(record),
+                reason=ModelExecutionCompletionRecoveryReasonV1.PRIVATE_OUTPUT_UNAVAILABLE,
+            ) from error
+
+    def _attest_completion(
+        self,
+        record: ModelExecutionCompletionRecordV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        signer = self._completion_signer
+        verifier = self._completion_verifier
+        recovery_handle = model_execution_completion_recovery_handle(record)
+        if signer is None or verifier is None:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE,
+            )
+        self._ensure_completion_artifact_available(record)
+        try:
+            with self._events.connection() as connection:
+                stored_record = self._stored_completion_record(
+                    connection,
+                    record.reservation.reservation_id.value,
+                )
+                if stored_record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "completion signing record differs from durable settlement"
+                    )
+                existing = connection.execute(
+                    """
+                    SELECT receipt_json
+                    FROM model_execution_completion_receipts
+                    WHERE completion_id = ?
+                    """,
+                    (record.completion_id.value,),
+                ).fetchone()
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=(ModelExecutionCompletionRecoveryReasonV1.RECEIPT_PERSISTENCE_UNAVAILABLE),
+            ) from error
+        if existing is not None:
+            try:
+                receipt = self._parse_completion_receipt(str(existing["receipt_json"]))
+                self._verify_completion_receipt(receipt)
+                if receipt.record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "stored completion receipt differs from its settlement"
+                    )
+            except Exception as error:
+                raise ModelExecutionCompletionPendingError(
+                    recovery_handle,
+                    reason=(ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE),
+                ) from error
+            self._ensure_completion_artifact_available(record)
+            return receipt
+        try:
+            attestation = signer.issue(
+                purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(record),
+                evidence_identity=model_execution_completion_evidence_identity(record),
+                ttl_seconds=self._max_ttl_seconds,
+            )
+            receipt = ModelExecutionCompletionReceiptV1(
+                record=record,
+                receipt_hash=record.record_hash(),
+                completion_attestation=attestation,
+            )
+            verifier.verify(
+                attestation,
+                expected_purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(record),
+            )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE,
+            ) from error
+        self._ensure_completion_artifact_available(record)
+        serialized = canonical_json(receipt.model_dump(mode="json"))
+        selected_receipt = receipt
+        try:
+            with self._events.write_transaction() as connection:
+                stored_record = self._stored_completion_record(
+                    connection,
+                    record.reservation.reservation_id.value,
+                )
+                if stored_record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "completion settlement changed before receipt persistence"
+                    )
+                existing = connection.execute(
+                    """
+                    SELECT receipt_json
+                    FROM model_execution_completion_receipts
+                    WHERE completion_id = ?
+                    """,
+                    (record.completion_id.value,),
+                ).fetchone()
+                if existing is not None:
+                    replay = self._parse_completion_receipt(str(existing["receipt_json"]))
+                    if replay.record != record:
+                        raise ModelExecutionAuthorizationError(
+                            "completion receipt identity is already bound to another settlement"
+                        )
+                    self._verify_completion_receipt(replay)
+                    selected_receipt = replay
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO model_execution_completion_receipts (
+                            completion_id, reservation_id, receipt_hash, receipt_json, issued_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            record.completion_id.value,
+                            record.reservation.reservation_id.value,
+                            receipt.receipt_hash.value,
+                            serialized,
+                            self._timestamp(receipt.completion_attestation.issued_at),
+                        ),
+                    )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=(ModelExecutionCompletionRecoveryReasonV1.RECEIPT_PERSISTENCE_UNAVAILABLE),
+            ) from error
+        self._ensure_completion_artifact_available(record)
+        return selected_receipt
+
+    def _verify_completion_receipt(
+        self,
+        receipt: ModelExecutionCompletionReceiptV1,
+    ) -> None:
+        verifier = self._completion_verifier
+        if verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        if not isinstance(receipt, ModelExecutionCompletionReceiptV1):
+            raise ModelExecutionAuthorizationError("model execution completion receipt is invalid")
+        try:
+            verifier.verify(
+                receipt.completion_attestation,
+                expected_purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(receipt.record),
+            )
+        except AttestationError as error:
+            raise ModelExecutionAuthorizationError(
+                "model execution completion attestation was rejected"
+            ) from error
+
+    @staticmethod
+    def _parse_completion_record(serialized: str) -> ModelExecutionCompletionRecordV1:
+        try:
+            return ModelExecutionCompletionRecordV1.model_validate_json(serialized)
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion record is corrupt"
+            ) from error
+
+    @staticmethod
+    def _parse_completion_receipt(serialized: str) -> ModelExecutionCompletionReceiptV1:
+        try:
+            return ModelExecutionCompletionReceiptV1.model_validate_json(serialized)
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion receipt is corrupt"
+            ) from error
+
+    def _stored_completion_record(
+        self,
+        connection: sqlite3.Connection,
+        reservation_id: str,
+    ) -> ModelExecutionCompletionRecordV1:
+        row = connection.execute(
+            """
+            SELECT completion_id, settlement_event_id, settlement_event_hash,
+                   completion_record_hash, completion_record_json
+            FROM model_execution_completion_settlements
+            WHERE reservation_id = ?
+            """,
+            (reservation_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model execution has no output-bound settlement")
+        serialized = str(row["completion_record_json"])
+        record = self._parse_completion_record(serialized)
+        if (
+            canonical_json(record.model_dump(mode="json")) != serialized
+            or record.reservation.reservation_id.value != reservation_id
+            or record.completion_id.value != str(row["completion_id"])
+            or record.settlement_event_id != str(row["settlement_event_id"])
+            or record.settlement_event_hash.value != str(row["settlement_event_hash"])
+            or record.record_hash().value != str(row["completion_record_hash"])
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion record is misbound"
+            )
+        return record
+
+    def _stored_completion_receipt(
+        self,
+        connection: sqlite3.Connection,
+        completion_id: str,
+    ) -> ModelExecutionCompletionReceiptV1:
+        row = connection.execute(
+            """
+            SELECT reservation_id, receipt_hash, receipt_json
+            FROM model_execution_completion_receipts
+            WHERE completion_id = ?
+            """,
+            (completion_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model execution completion receipt is unknown")
+        serialized = str(row["receipt_json"])
+        receipt = self._parse_completion_receipt(serialized)
+        if (
+            canonical_json(receipt.model_dump(mode="json")) != serialized
+            or receipt.record.completion_id.value != completion_id
+            or receipt.record.reservation.reservation_id.value != str(row["reservation_id"])
+            or receipt.receipt_hash.value != str(row["receipt_hash"])
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion receipt is misbound"
+            )
+        self._verify_completion_receipt(receipt)
+        return receipt
+
+    @staticmethod
+    def _validate_actual_usage(
+        *,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        values = (input_tokens, cached_input_tokens, output_tokens)
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model execution usage must contain non-negative integers"
+            )
+        if input_tokens < 1:
+            raise ModelExecutionAuthorizationError("model execution input usage must be positive")
+        if cached_input_tokens > input_tokens:
+            raise ModelExecutionAuthorizationError("cached input tokens cannot exceed input tokens")
+
     @staticmethod
     def _assert_same_capability(
         stored: ModelExecutionAuthorizationV1,
@@ -2021,6 +2620,8 @@ class ModelExecutionAuthorizationService:
         actual_output_tokens: int | None = None,
         actual_cost_microusd: int | None = None,
         reason: str | None = None,
+        event_id: str | None = None,
+        recorded_at: datetime | None = None,
     ) -> None:
         connection.execute(
             """
@@ -2032,7 +2633,7 @@ class ModelExecutionAuthorizationService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(uuid.uuid4()),
+                event_id or str(uuid.uuid4()),
                 authorization_id,
                 reservation_id,
                 attempt_number,
@@ -2045,7 +2646,7 @@ class ModelExecutionAuthorizationService:
                 actual_output_tokens,
                 actual_cost_microusd,
                 reason,
-                self._timestamp(self._now()),
+                self._timestamp(recorded_at or self._now()),
             ),
         )
 

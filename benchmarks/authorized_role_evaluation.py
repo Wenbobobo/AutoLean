@@ -14,18 +14,29 @@ import math
 from collections.abc import Mapping
 from typing import Literal, Never, Self
 
-from autolean_contracts import ContractModel, ModelWorkRoleV1, canonical_json_bytes
+from autolean_contracts import (
+    ContractModel,
+    ModelWorkRoleV1,
+    canonical_json_bytes,
+    model_execution_completion_public,
+)
 from pydantic import ConfigDict, Field, model_validator
 
 from benchmarks.authorized_role_bridge import (
+    AuthorizedRoleCompletionEvidenceReaderV2,
+    AuthorizedRoleCompletionPrivateManifestV2,
+    AuthorizedRoleCompletionPrivateOutputEntryV2,
     AuthorizedRolePrivateManifestV1,
     AuthorizedRolePrivateOutputEntryV1,
     AuthorizedRoleRawOutputStore,
     AuthorizedRoleRunIdV1,
     AuthorizedRoleSuiteDefinition,
     AuthorizedRoleSuiteSidecarV2,
+    AuthorizedRoleSuiteSidecarV3,
     AuthorizedRoleTrialSidecarV2,
+    AuthorizedRoleTrialSidecarV3,
     PreparedAuthorizedRoleTrial,
+    authorized_role_completion_suite_usage_summary,
     authorized_role_suite_usage_summary,
     authorized_role_trial_usage_summary,
     prepare_locked_floor_trials,
@@ -138,6 +149,26 @@ def evaluate_authorized_role_suite_exact_json(
         raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE) from None
 
 
+def evaluate_completed_authorized_role_suite_exact_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleExactJsonEvaluationReportV1:
+    """Score V3 output-bound completions through a read-only private evidence boundary."""
+
+    try:
+        return _evaluate_completed_authorized_role_suite_exact_json(
+            suite,
+            sidecar,
+            evidence_reader=evidence_reader,
+        )
+    except AuthorizedRoleEvaluationError:
+        raise
+    except Exception:
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE) from None
+
+
 def _evaluate_authorized_role_suite_exact_json(
     suite: AuthorizedRoleSuiteDefinition,
     sidecar: AuthorizedRoleSuiteSidecarV2,
@@ -186,6 +217,66 @@ def _evaluate_authorized_role_suite_exact_json(
                     expected_bundle_id=bundle_id,
                     coordinate_hash=coordinate_hash,
                 ),
+            )
+        )
+
+    canonical_results = tuple(sorted(results, key=lambda item: item.coordinate_hash))
+    first_target = suite.matrix.cells[0].model
+    return AuthorizedRoleExactJsonEvaluationReportV1(
+        run_id=sidecar.run_id,
+        provider_id=first_target.provider_id,
+        model_id=first_target.model_id,
+        model_revision=first_target.model_revision,
+        provider_configuration_hash=first_target.provider_configuration_hash,
+        evaluator_hash=evaluator_hash,
+        trials=canonical_results,
+        role_metrics=_role_metrics(canonical_results),
+    )
+
+
+def _evaluate_completed_authorized_role_suite_exact_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleExactJsonEvaluationReportV1:
+    if not isinstance(sidecar, AuthorizedRoleSuiteSidecarV3):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    if not isinstance(evidence_reader, AuthorizedRoleCompletionEvidenceReaderV2):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    prepared = prepare_locked_floor_trials(suite, run_id=sidecar.run_id)
+    manifest = evidence_reader.read_manifest(sidecar.private_manifest_handle)
+    joined = _validated_completed_private_join(prepared, sidecar, manifest)
+    evaluator_hash = _evaluator_hash(suite)
+    cases = {case.case_id: case for case in suite.matrix.cases}
+
+    results: list[AuthorizedRoleExactJsonTrialResultV1] = []
+    for trial, public, private in joined:
+        response = evidence_reader.read_response(
+            manifest=manifest,
+            entry=private,
+            expected_bundle_id=trial.work_bundle.bundle_id.value,
+        )
+        if (
+            response.provider_id != public.provider_id
+            or response.model_id != public.model_id
+            or response.tool_calls
+        ):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        expected_output = cases[trial.context.case_id].expected_output
+        if not isinstance(expected_output, Mapping):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        candidate = _strict_json_object(response.text)
+        passed = candidate is not None and canonical_json_bytes(candidate) == canonical_json_bytes(
+            expected_output
+        )
+        results.append(
+            AuthorizedRoleExactJsonTrialResultV1(
+                coordinate_hash=_coordinate_hash(public),
+                role=public.role,
+                passed=passed,
+                score_micros=_ONE_MILLION if passed else 0,
+                output_commitment=public.completion.public_output_commitment.value,
             )
         )
 
@@ -283,6 +374,92 @@ def _validated_private_join(
     return tuple(joined)
 
 
+def _validated_completed_private_join(
+    prepared: tuple[PreparedAuthorizedRoleTrial, ...],
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    manifest: AuthorizedRoleCompletionPrivateManifestV2,
+) -> tuple[
+    tuple[
+        PreparedAuthorizedRoleTrial,
+        AuthorizedRoleTrialSidecarV3,
+        AuthorizedRoleCompletionPrivateOutputEntryV2,
+    ],
+    ...,
+]:
+    if (
+        manifest.run_id != sidecar.run_id
+        or len(prepared) != 10
+        or len(manifest.outputs) != 10
+        or sidecar.usage_summary != authorized_role_completion_suite_usage_summary(manifest.outputs)
+    ):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    prepared_by_coordinate = {
+        (
+            item.context.cell_id,
+            item.context.case_id,
+            item.work_bundle.repetition,
+        ): item
+        for item in prepared
+    }
+    public_by_coordinate = {
+        (item.cell_id, item.case_id, item.repetition): item for item in sidecar.trials
+    }
+    private_by_coordinate = {
+        (item.cell_id, item.case_id, item.repetition): item for item in manifest.outputs
+    }
+    coordinates = set(prepared_by_coordinate)
+    if (
+        len(prepared_by_coordinate) != 10
+        or set(public_by_coordinate) != coordinates
+        or set(private_by_coordinate) != coordinates
+    ):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+
+    joined: list[
+        tuple[
+            PreparedAuthorizedRoleTrial,
+            AuthorizedRoleTrialSidecarV3,
+            AuthorizedRoleCompletionPrivateOutputEntryV2,
+        ]
+    ] = []
+    for coordinate in sorted(coordinates):
+        trial = prepared_by_coordinate[coordinate]
+        public = public_by_coordinate[coordinate]
+        private = private_by_coordinate[coordinate]
+        target = trial.cell.model
+        bundle = trial.work_bundle
+        receipt = private.receipt
+        authorization = receipt.record.authorization
+        if (
+            public.run_id != sidecar.run_id
+            or public.role != bundle.role
+            or public.work_item_hash != trial.context.work_item_hash
+            or public.model_work_bundle_hash != bundle.handoff_hash().value
+            or public.provider_id != target.provider_id
+            or public.model_id != target.model_id
+            or public.model_revision != target.model_revision
+            or public.provider_configuration_hash != target.provider_configuration_hash
+            or public.context_pack_hash != bundle.context_pack_hash.value
+            or public.request_hash != bundle.request_hash.value
+            or public.work_evidence_hash != trial.work_evidence.content_hash()
+            or private.authorization_hash != public.authorization_hash
+            or authorization.authorization_hash().value != private.authorization_hash
+            or authorization.bundle_id != bundle.bundle_id
+            or authorization.bundle_hash != bundle.handoff_hash()
+            or public.completion != model_execution_completion_public(receipt)
+            or public.usage_summary
+            != authorized_role_trial_usage_summary(
+                input_tokens=receipt.record.actual_usage.input_tokens,
+                cached_input_tokens=receipt.record.actual_usage.cached_input_tokens,
+                output_tokens=receipt.record.actual_usage.output_tokens,
+                elapsed_ms=private.elapsed_ms,
+            )
+        ):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        joined.append((trial, public, private))
+    return tuple(joined)
+
+
 def _evaluator_hash(suite: AuthorizedRoleSuiteDefinition) -> str:
     cases = tuple(
         {
@@ -310,7 +487,7 @@ def _evaluator_hash(suite: AuthorizedRoleSuiteDefinition) -> str:
     ).hexdigest()
 
 
-def _coordinate_hash(sidecar: AuthorizedRoleTrialSidecarV2) -> str:
+def _coordinate_hash(sidecar: AuthorizedRoleTrialSidecarV2 | AuthorizedRoleTrialSidecarV3) -> str:
     return hashlib.sha256(
         canonical_json_bytes(
             {

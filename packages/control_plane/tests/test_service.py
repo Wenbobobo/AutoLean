@@ -5,14 +5,17 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 
 import pytest
 from autolean_contracts import (
+    ActorKindV1,
     AlignmentTargetV1,
     AttestationPurposeV1,
+    EditRegionV1,
     ExecutionGraphV1,
     FidelityEvidenceArtifactRefV1,
     FidelityReportV1,
@@ -30,7 +33,9 @@ from autolean_contracts import (
     MathematicalSpecificationV1,
     OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
+    ProofStatusV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     ReleaseTierV1,
     RightsRecordV1,
     SourceRecordV1,
@@ -59,6 +64,7 @@ from autolean_contracts.graphs import (
     MathematicalNodeV1,
 )
 from autolean_control_plane import (
+    ArtifactRef,
     ArtifactStore,
     ControlPlane,
     DashboardProjection,
@@ -181,6 +187,7 @@ def _bundle(
     nonce: str | None = None,
     bundle_key: str = "bundle",
     additional_source_spans: tuple[SourceSpanV1, ...] = (),
+    allowed_edit_regions: tuple[EditRegionV1, ...] = (),
 ) -> FormalizationTaskBundleV1:
     source_id = _id("source")
     span = SourceSpanV1(
@@ -245,6 +252,7 @@ def _bundle(
         policy=TaskPolicyV1(
             release_tier=ReleaseTierV1.CALIBRATION,
             fidelity_risk=FidelityRiskV1.L1_SIMPLE,
+            allowed_edit_regions=allowed_edit_regions,
         ),
     )
     frozen_payload = draft.model_dump(mode="python", round_trip=True)
@@ -723,6 +731,13 @@ def _submission(bundle: FormalizationTaskBundleV1) -> ProofSubmissionV1:
         proof_source=source,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, source),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=_id("proof-provenance"),
+                actor_id="control-plane-test-worker",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 
@@ -3933,3 +3948,150 @@ def test_legacy_registration_projection_rejects_ambiguous_json(
             ).fetchone()
             is None
         )
+
+
+def test_claimed_bundle_can_be_fetched_after_restart_and_materialized(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(bundle_key="claimed-fetch")
+    first = _plane(tmp_path)
+    binding = first.register_bundle(bundle, idempotency_key="register-claimed-fetch")
+    receipt = first.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch",
+        ttl_seconds=60,
+        idempotency_key="claim-claimed-fetch",
+    )
+
+    restarted = _plane(tmp_path)
+    fetched = restarted.fetch_claimed_bundle(receipt)
+    replayed = restarted.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch",
+        ttl_seconds=60,
+        idempotency_key="claim-claimed-fetch",
+    )
+
+    from autolean_prover.execution import WorkspaceMaterializer
+
+    workspace = WorkspaceMaterializer().materialize(
+        fetched,
+        tmp_path / "claimed-fetch-workspace",
+    )
+    assert fetched == bundle
+    assert receipt.bundle_id == binding.bundle_id
+    assert receipt.bundle_hash == binding.bundle_hash
+    assert receipt.bundle_artifact == binding.bundle_artifact
+    assert replayed == receipt
+    assert restarted.fetch_claimed_bundle(replayed) == bundle
+    assert workspace.bundle == bundle
+    assert workspace.proof_path.name == "Proof.lean"
+
+    with pytest.raises(InvalidTransition, match="different bundle"):
+        restarted.fetch_claimed_bundle(replace(receipt, bundle_id=_id("forged-bundle").value))
+    with pytest.raises(InvalidTransition, match="persisted task claim"):
+        restarted.fetch_claimed_bundle(replace(receipt, bundle_hash="f" * 64))
+    with pytest.raises(InvalidTransition, match="persisted task claim"):
+        restarted.fetch_claimed_bundle(
+            replace(
+                receipt,
+                bundle_artifact=ArtifactRef(
+                    digest="f" * 64,
+                    size=receipt.bundle_artifact.size,
+                ),
+            )
+        )
+
+
+def test_fetch_claimed_bundle_rejects_stale_lease_and_corrupt_artifact(
+    tmp_path: Path,
+) -> None:
+    now = [datetime.now(UTC)]
+
+    def clock() -> datetime:
+        return now[0]
+
+    plane = _plane(tmp_path, clock=clock)
+    bundle = _bundle(
+        bundle_key="claimed-fetch-stale",
+        signer=_builder_signer(clock),
+        nonce="claimed-fetch-stale-builder",
+    )
+    plane.register_bundle(bundle, idempotency_key="register-claimed-fetch-stale")
+    receipt = plane.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch-stale",
+        ttl_seconds=1,
+        idempotency_key="claim-claimed-fetch-stale",
+    )
+
+    artifact_path = plane.artifacts.path_for(receipt.bundle_artifact)
+    artifact_path.write_bytes(b"corrupt")
+    with pytest.raises(InvalidTransition, match="unavailable or corrupt"):
+        plane.fetch_claimed_bundle(receipt)
+
+    now[0] += timedelta(seconds=2)
+    restarted = _plane(tmp_path, clock=clock)
+    with pytest.raises(StaleFence):
+        restarted.fetch_claimed_bundle(receipt)
+
+
+def test_submit_proof_rejects_non_candidate_status_and_missing_provenance(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    bundle = _bundle(bundle_key="submission-gate")
+    plane.register_bundle(bundle, idempotency_key="register-submission-gate")
+    receipt = plane.claim(
+        bundle.bundle_id.value,
+        worker_id="submission-gate-worker",
+        ttl_seconds=60,
+        idempotency_key="claim-submission-gate",
+    )
+    submission = _submission(bundle)
+
+    with pytest.raises(InvalidTransition, match="candidate proof status only"):
+        plane.submit_proof(
+            bundle.bundle_id.value,
+            lease=receipt.lease,
+            submission=submission.model_copy(update={"status": ProofStatusV1.KERNEL_VERIFIED}),
+            idempotency_key="submit-non-candidate",
+        )
+    with pytest.raises(InvalidTransition, match="explicit provenance"):
+        plane.submit_proof(
+            bundle.bundle_id.value,
+            lease=receipt.lease,
+            submission=submission.model_copy(update={"provenance": ()}),
+            idempotency_key="submit-without-provenance",
+        )
+    assert plane.events.read_stream("proof", submission.proof_id.value) == ()
+
+
+def test_v1_bundle_rejects_line_ranged_edit_regions() -> None:
+    with pytest.raises(ValueError, match="do not support line-ranged editable regions"):
+        _bundle(
+            bundle_key="line-ranged-edit-region",
+            allowed_edit_regions=(
+                EditRegionV1(
+                    artifact_ref="Proof.lean",
+                    start_line=1,
+                    end_line=1,
+                ),
+            ),
+        )
+
+
+def test_registration_replay_rejects_an_invalid_mathlib_axiom_policy(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    bundle = _bundle(bundle_key="invalid-replayed-axiom-policy")
+    plane.register_bundle(bundle, idempotency_key="register-valid-axiom-policy")
+    event = plane.events.read_stream("task", bundle.bundle_id.value)[0]
+    payload = dict(event.payload)
+    payload["axiom_profile"] = "mathlib"
+    payload["axioms_allowlist"] = ["Classical.choice", "AutoLean.UnsafeAxiom"]
+    tampered = replace(event, payload=payload)
+
+    with pytest.raises(InvalidTransition, match="invalid axiom policy"):
+        plane._binding_from_event(tampered)

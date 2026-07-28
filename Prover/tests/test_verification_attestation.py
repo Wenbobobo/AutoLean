@@ -10,12 +10,14 @@ from pathlib import Path
 
 import pytest
 from autolean_contracts import (
+    ActorKindV1,
     AttestationPurposeV1,
     HashKindV1,
     HmacAttestationKeyV1,
     HmacAttestationSignerV1,
     HmacAttestationVerifierV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     VerificationEvidenceArtifactV2,
     VerificationSigningLeaseBindingV1,
     VerificationSigningRequestV1,
@@ -141,6 +143,13 @@ def _submission(bundle) -> ProofSubmissionV1:
         proof_source=proof,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, proof),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=stable_id("attested-proof-provenance"),
+                actor_id="verification-attestation-fixture",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 

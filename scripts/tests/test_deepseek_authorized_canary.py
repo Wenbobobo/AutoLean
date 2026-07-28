@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import sqlite3
 from collections.abc import Mapping
@@ -154,19 +153,21 @@ def test_canary_uses_full_authorization_chain_and_redacts_output(tmp_path: Path)
         assert report[key] == expected
     assert report["provider_id"] == "deepseek"
     assert report["model_id"] == "deepseek-v4-pro"
-    assert report["usage"] == {
-        "input_tokens": 23,
-        "cached_input_tokens": 3,
-        "output_tokens": 7,
-    }
     assert report["hashes"] == {
         "authorization": authorization.authorization_hash().value,
         "bundle": prepared.bundle.handoff_hash().value,
         "contract": prepared.bundle.contract.semantic_hash().value,
         "context_pack": authorization.context_pack_hash.value,
         "outbound_request": authorization.request_hash.value,
-        "response_text_sha256": hashlib.sha256(b"by\n  rfl").hexdigest(),
-        "response_id_sha256": hashlib.sha256(b"synthetic-response-id").hexdigest(),
+    }
+    completion = report["completion"]
+    assert isinstance(completion, dict)
+    assert completion["schema_version"] == "autolean.model-execution-completion-public.v1"
+    assert set(completion) == {
+        "schema_version",
+        "completion_id",
+        "receipt_hash",
+        "public_output_commitment",
     }
     serialized = json.dumps(report, sort_keys=True)
     for forbidden in (
@@ -176,6 +177,12 @@ def test_canary_uses_full_authorization_chain_and_redacts_output(tmp_path: Path)
         "api.deepseek.com",
         "x" * 32,
         "Bearer",
+        "synthetic-response-id",
+        "artifact_digest",
+        "nonce",
+        '"usage"',
+        '"input_tokens"',
+        '"output_tokens"',
     ):
         assert forbidden not in serialized
 
@@ -225,7 +232,11 @@ def test_tampered_authorization_is_rejected_before_transport(tmp_path: Path) -> 
     )
 
     with pytest.raises(PolicyViolation, match="authorization was denied"):
-        prepared.registry.generate(tampered, prepared.request)
+        prepared.registry.generate_completed(
+            tampered,
+            prepared.request,
+            output_store=prepared.output_store,
+        )
 
     assert transport.calls == 0
 
@@ -272,7 +283,11 @@ def test_budget_denial_is_rejected_before_transport(tmp_path: Path) -> None:
     authorization = canary.issue_canary_authorization(prepared, budget=budget)
 
     with pytest.raises(PolicyViolation, match="authorization was denied"):
-        prepared.registry.generate(authorization, prepared.request)
+        prepared.registry.generate_completed(
+            authorization,
+            prepared.request,
+            output_store=prepared.output_store,
+        )
 
     assert transport.calls == 0
 
@@ -313,7 +328,7 @@ def test_cli_requires_explicit_operator_approval(capsys: pytest.CaptureFixture[s
 
     assert exit_code == 2
     assert json.loads(capsys.readouterr().out) == {
-        "schema_version": "autolean.deepseek-authorized-canary.v1",
+        "schema_version": "autolean.deepseek-authorized-canary.v2",
         "status": "operator_approval_required",
         **_BOOTSTRAP_ONLY_FIELDS,
     }
@@ -334,7 +349,7 @@ def test_cli_maps_failure_type_without_emitting_exception_text(
     output = capsys.readouterr().out
     assert marker not in output
     assert json.loads(output) == {
-        "schema_version": "autolean.deepseek-authorized-canary.v1",
+        "schema_version": "autolean.deepseek-authorized-canary.v2",
         "status": "execution_refused",
         "failure_class": "configuration",
         **_BOOTSTRAP_ONLY_FIELDS,
@@ -484,7 +499,7 @@ def test_cli_emits_http_category_without_body_url_or_exception_text(
     assert marker not in output
     assert "https://" not in output
     assert json.loads(output) == {
-        "schema_version": "autolean.deepseek-authorized-canary.v1",
+        "schema_version": "autolean.deepseek-authorized-canary.v2",
         "status": "execution_refused",
         "failure_class": "http_402",
         **_BOOTSTRAP_ONLY_FIELDS,

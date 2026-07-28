@@ -65,8 +65,8 @@ are complete. An earlier failure atomically moves each root still owned by this
 invocation to a random marker-bound quarantine name beside the requested root.
 Runtime never recursively deletes or cleans a quarantine. `run` repeats that
 whole-suite gate and then delegates execution to
-`run_authorized_role_floor_suite`, which registers, mints, and consumes one
-short-lived capability at a time.
+`run_completed_authorized_role_floor_suite`, which registers, mints, and
+consumes one short-lived capability at a time.
 
 The locked per-trial limits are one attempt, 512 input tokens, 256 output tokens,
 a 120-second provider timeout, a 30-second settlement margin, a 150-second model
@@ -77,17 +77,23 @@ not a claim about the provider's current quoted price.
 
 ## Evidence and failure
 
-Raw responses, response identifiers, exact usage, elapsed time, and
-reconciliation journals are written only to the private root. A successful run
-stores an authenticated private manifest plus a no-clobber, authenticated run
-index. Its opaque handle remains inside the trusted process and operator-private
-reconciliation path. Public report V2 exposes only
-`private_evidence_committed: true`; neither the handle nor a CAS locator is
-written to stdout.
-The authorized bridge emits V2 suite/trial sidecars: the suite contains aggregate
-token/time buckets and every trial contains its own coarse buckets. V1 sidecars
-remain parseable historical contracts but are not accepted by the evaluator
-because they lack the per-trial usage binding.
+Raw responses, response identifiers, exact usage, elapsed time, completion
+nonces, and receipt bodies are written only to the private root. A successful
+run stores each normalized response in `LocalPrivateModelOutputStore` and then
+stores an authenticated private V2 completion manifest with the full ten
+completion receipts plus a no-clobber authenticated run index. Its opaque handle
+remains inside the trusted process and operator-private reconciliation path.
+Public report V2 exposes only `private_evidence_committed: true`; neither the
+handle nor a CAS locator is written to stdout.
+
+The authorized bridge emits V3 suite/trial sidecars. Every public trial contains
+the existing answer-free bindings, coarse token/time buckets, and exactly one
+`ModelExecutionCompletionPublicV1`: completion ID, receipt hash, and salted
+public output commitment. It does not contain a receipt body, nonce, private
+artifact reference, response hash, response text, response ID, exact usage, or
+cost. A V3 suite has exactly ten distinct completion IDs, receipt hashes, and
+output commitments. V1/V2 sidecars remain historical contracts only; the
+completion evaluator accepts V3.
 
 Stdout is one canonical JSON object. It contains the non-promotion authority
 class, frozen budget and plan hash, and five role-separated sidecars. Successful
@@ -97,10 +103,14 @@ message, exact usage, score, private handle, manifest digest, or private-store
 locator.
 
 A provider or network failure emits only a stable redacted `failure_class`.
-Because the private dispatch journal is written before provider entry, such a
-failure is normally `reconciliation_required`. The runner never retries the
-provider automatically. An operator must inspect the private state and choose a
-new run deliberately; the public failure record is not replay permission.
+After a provider response, the control plane first persists an output-bound
+completion settlement. If receipt signing or post-settlement persistence is
+interrupted, it emits a credential-free recovery handle internally and the
+provider must not be called again: `ProviderRegistry.recover_completed` settles
+the same receipt from the private artifact. The runner never retries the
+provider automatically. Any existing completion or authorization state turns a
+later run invocation into `reconciliation_required`; the public failure record
+is not replay permission.
 
 Initialization failures that were moved aside report only
 `operator_initialization_quarantined`; a parent or ownership drift that cannot
@@ -122,48 +132,48 @@ never recursively deletes or overwrites foreign bytes.
 
 ## Optional local exact-JSON evaluation
 
-`benchmarks.authorized_role_evaluation.evaluate_authorized_role_suite_exact_json`
+`benchmarks.authorized_role_evaluation.evaluate_completed_authorized_role_suite_exact_json`
 is the integration point for a DeepSeek runner that elects to evaluate a
 successfully settled suite. Call it while the exact `suite_sidecar` and the same
-`PreparedDeepSeekRoleOperator.raw_output_store` are still available:
+`PreparedDeepSeekRoleOperator` are still available:
 
 ```python
 from benchmarks.authorized_role_evaluation import (
-    evaluate_authorized_role_suite_exact_json,
+    evaluate_completed_authorized_role_suite_exact_json,
 )
+from benchmarks.authorized_role_bridge import AuthorizedRoleCompletionEvidenceReaderV2
 
-evaluation = evaluate_authorized_role_suite_exact_json(
+evaluation = evaluate_completed_authorized_role_suite_exact_json(
     prepared.plan.suite,
     suite_sidecar,
-    raw_output_store=prepared.raw_output_store,
+    evidence_reader=AuthorizedRoleCompletionEvidenceReaderV2(
+        manifest_store=prepared.completion_manifest_store,
+        output_store=prepared.output_store,
+        completion_verifier=prepared.authorization_service,
+    ),
 )
 ```
 
-The private store first authenticates the opaque manifest handle and checks its
+The private reader first authenticates the opaque manifest handle and checks its
 MAC, run binding, canonical manifest hash, and ten coordinate/authorization
 bindings. The evaluator then joins all ten entries to the locked suite and
-answer-free sidecars. Only after that complete join does it request each
-`ModelResponse`; every read reauthenticates the handle, requires the exact
-manifest entry, checks reconciliation state and usage, and verifies the response
-through its content-addressed hash. The reconciliation state's `bundle_id` must
-also equal the exact prepared work bundle. Before scoring, the evaluator
-recomputes every trial bucket and the suite aggregate from authenticated exact
-usage and elapsed values; any missing or altered bucket fails closed.
+answer-free V3 sidecars. For every entry, it verifies the completion receipt
+before reading the one exact private artifact named by that receipt. It rejects a
+receipt whose authorization or immutable work bundle is misbound. Before
+scoring, it recomputes every trial bucket and the suite aggregate from the
+receipt-bound exact usage and private elapsed values; any missing or altered
+binding fails closed.
 
 Candidate text must be one JSON object. Duplicate keys at any depth, `NaN`,
 infinite values, arrays, scalars, and malformed JSON score zero. A valid object
 is compared to the evaluator-owned oracle by canonical JSON bytes. Parse details
 are not returned.
 
-The resulting
-`AuthorizedRoleExactJsonEvaluationReportV1` contains only run and model identity,
-an evaluator commitment, opaque coordinate hashes, per-trial pass/score and
-keyed, domain-separated output commitments, and five separate role metrics. The
-private store derives commitments through the already injected manifest
-authenticator; the evaluator never constructs them from a public unsalted hash.
-They bind the private response hash to its opaque coordinate and exact bundle,
-remain stable for the same authenticated entry, and are not enumerable private
-CAS addresses. Its fixed authority fields are:
+The resulting `AuthorizedRoleExactJsonEvaluationReportV1` contains only run and
+model identity, an evaluator commitment, opaque coordinate hashes, per-trial
+pass/score and receipt-derived public output commitments, and five separate role
+metrics. The evaluator never constructs an unsalted output hash and does not
+publish a private CAS address. Its fixed authority fields are:
 
 ```json
 {

@@ -5,6 +5,7 @@ from typing import Literal
 
 from autolean_contracts import (
     AlignmentTargetV1,
+    AxiomProfileV1,
     ExecutionGraphV1,
     FidelityRiskV1,
     FormalGraphV1,
@@ -42,6 +43,8 @@ def frozen_bundle(
     *,
     external_egress: bool = False,
     execution_policy_version: Literal["1.0", "2.0"] = "2.0",
+    axiom_profile: AxiomProfileV1 = AxiomProfileV1.STRICT,
+    axioms_allowlist: tuple[str, ...] = (),
 ) -> FormalizationTaskBundleV1:
     source_id = stable_id("source")
     span = SourceSpanV1(
@@ -90,6 +93,7 @@ def frozen_bundle(
             environment_hash=digest_text(HashKindV1.ENVIRONMENT, "fixture-environment"),
         ),
         imports_allowlist=("Mathlib",),
+        axioms_allowlist=axioms_allowlist,
     )
     draft = StatementContractV1(
         contract_id=stable_id("contract"),
@@ -113,6 +117,7 @@ def frozen_bundle(
         policy=TaskPolicyV1(
             release_tier=ReleaseTierV1.CALIBRATION,
             fidelity_risk=FidelityRiskV1.L1_SIMPLE,
+            axiom_profile=axiom_profile,
         ),
     )
     frozen_payload = draft.model_dump(mode="python", round_trip=True)

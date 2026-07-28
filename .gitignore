@@ -17,6 +17,7 @@ build/
 .worktrees/
 /.cache/
 /.codex-tmp/
+/.tmp/
 .agents/
 .quarantine/
 .tmp-*

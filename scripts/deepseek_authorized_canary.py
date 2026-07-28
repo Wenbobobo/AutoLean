@@ -2,7 +2,8 @@
 
 This is deliberately a non-promotable protocol canary. It uses a synthetic CC0 frozen bundle,
 an operator-declared bootstrap approval, a fenced control-plane lease, exact context/request
-hashes, a one-attempt budget, ``ProviderRegistry.generate``, and durable usage settlement.
+ hashes, a one-attempt budget, ``ProviderRegistry.generate_completed``, and a durable,
+ output-bound completion receipt.
 The process-local HMAC authorities are ephemeral test fixtures and establish no release authority.
 The static capability list is not an independent endpoint feature probe and cannot admit a model
 to a role-floor benchmark.
@@ -14,7 +15,6 @@ credential value, SQLite path, or attestation material.
 from __future__ import annotations
 
 import argparse
-import hashlib
 import json
 import os
 import secrets
@@ -47,6 +47,8 @@ from autolean_contracts import (
     ModelExecutionAuthorizationError,
     ModelExecutionAuthorizationV1,
     ModelExecutionBudgetV1,
+    ModelExecutionCompletionReceiptV1,
+    ModelExecutionCompletionRecoveryHandleV1,
     ModelExecutionPricingV1,
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
@@ -65,6 +67,7 @@ from autolean_contracts import (
     builder_attestation_payload,
     digest_model,
     digest_text,
+    model_execution_completion_public,
     stable_identifier,
 )
 from autolean_control_plane import (
@@ -85,13 +88,15 @@ from autolean_prover.errors import (
 from autolean_prover.providers import (
     Capability,
     ChatCompletionsOperatorProfileV1,
+    LocalPrivateModelOutputStore,
+    ModelExecutionCompletionRecoveryRequired,
     ModelRequest,
     ProviderRegistry,
     StaticCapabilityProbe,
 )
 from autolean_prover.providers.responses import HttpxResponsesTransport, ResponsesTransport
 
-_SCHEMA_VERSION = "autolean.deepseek-authorized-canary.v1"
+_SCHEMA_VERSION = "autolean.deepseek-authorized-canary.v2"
 _AUTHORITY_STATUS = "non-promotable-ephemeral-test-authority"
 _CAPABILITY_EVIDENCE_CLASS = "static_declared_only"
 _INDEPENDENT_CAPABILITY_PROBE_STATUS = "not_independently_probed"
@@ -137,6 +142,7 @@ class PreparedCanary:
     context_pack: ContextPack
     request: ModelRequest
     approval: ModelExecutionProviderApprovalV1
+    output_store: LocalPrivateModelOutputStore
 
 
 class SafeDiagnosticTransport:
@@ -353,11 +359,20 @@ def prepare_canary(
         secret=secrets.token_bytes(32),
         allowed_purposes=frozenset({AttestationPurposeV1.MODEL_EXECUTION}),
     )
+    completion_key = HmacAttestationKeyV1(
+        key_id="deepseek-canary-ephemeral-completion-v1",
+        secret=secrets.token_bytes(32),
+        allowed_purposes=frozenset({AttestationPurposeV1.MODEL_EXECUTION_COMPLETION}),
+    )
     verifier = HmacAttestationVerifierV1(
         {
             builder_key.key_id: builder_key,
             model_key.key_id: model_key,
         },
+        clock=clock,
+    )
+    completion_verifier = HmacAttestationVerifierV1(
+        {completion_key.key_id: completion_key},
         clock=clock,
     )
     database = state_root / "control.db"
@@ -368,10 +383,14 @@ def prepare_canary(
         attestation_verifier=verifier,
         allow_test_only_unreviewed_bundles=True,
     )
+    output_store = LocalPrivateModelOutputStore((state_root / "private-model-output-v1").resolve())
     authorization_service = ModelExecutionAuthorizationService(
         control_plane=control_plane,
         signer=HmacAttestationSignerV1(model_key, clock=clock),
         verifier=verifier,
+        completion_signer=HmacAttestationSignerV1(completion_key, clock=clock),
+        completion_verifier=completion_verifier,
+        private_output_verifier=output_store,
         clock=clock,
     )
     bundle = _synthetic_bundle(
@@ -434,6 +453,7 @@ def prepare_canary(
         context_pack=context_pack,
         request=request,
         approval=approval,
+        output_store=output_store,
     )
 
 
@@ -481,14 +501,41 @@ def execute_prepared_canary(
     prepared: PreparedCanary,
     authorization: ModelExecutionAuthorizationV1,
 ) -> dict[str, object]:
-    """Execute via the registry and return a redacted, bootstrap-only report."""
+    """Execute once and return only an output-bound public receipt projection."""
 
-    response = prepared.registry.generate(authorization, prepared.request)
-    response_id_sha256 = (
-        None
-        if response.response_id is None
-        else hashlib.sha256(response.response_id.encode("utf-8")).hexdigest()
+    completed = prepared.registry.generate_completed(
+        authorization,
+        prepared.request,
+        output_store=prepared.output_store,
     )
+    return _completed_canary_report(prepared, authorization, completed.receipt)
+
+
+def recover_prepared_canary(
+    prepared: PreparedCanary,
+    recovery_handle: ModelExecutionCompletionRecoveryHandleV1,
+) -> dict[str, object]:
+    """Finish a locally interrupted receipt settlement without contacting the provider again."""
+
+    completed = prepared.registry.recover_completed(
+        recovery_handle,
+        output_store=prepared.output_store,
+    )
+    return _completed_canary_report(
+        prepared,
+        completed.receipt.record.authorization,
+        completed.receipt,
+    )
+
+
+def _completed_canary_report(
+    prepared: PreparedCanary,
+    authorization: ModelExecutionAuthorizationV1,
+    receipt: ModelExecutionCompletionReceiptV1,
+) -> dict[str, object]:
+    """Project a private receipt without response bytes, artifact reference, or exact accounting."""
+
+    provider = receipt.record.authorization.provider
     return {
         "schema_version": _SCHEMA_VERSION,
         "status": "settled",
@@ -498,22 +545,16 @@ def execute_prepared_canary(
         "independent_capability_probe_status": _INDEPENDENT_CAPABILITY_PROBE_STATUS,
         "provider_approval_class": _PROVIDER_APPROVAL_CLASS,
         "role_floor_admission": _ROLE_FLOOR_ADMISSION,
-        "provider_id": response.provider_id,
-        "model_id": response.model_id,
+        "provider_id": provider.provider_id,
+        "model_id": provider.model_id,
         "hashes": {
             "authorization": authorization.authorization_hash().value,
             "bundle": prepared.bundle.handoff_hash().value,
             "contract": prepared.bundle.contract.semantic_hash().value,
             "context_pack": authorization.context_pack_hash.value,
             "outbound_request": authorization.request_hash.value,
-            "response_text_sha256": hashlib.sha256(response.text.encode("utf-8")).hexdigest(),
-            "response_id_sha256": response_id_sha256,
         },
-        "usage": {
-            "input_tokens": response.usage.input_tokens,
-            "cached_input_tokens": response.usage.cached_input_tokens,
-            "output_tokens": response.usage.output_tokens,
-        },
+        "completion": model_execution_completion_public(receipt).model_dump(mode="json"),
     }
 
 
@@ -592,6 +633,8 @@ def main(argv: Sequence[str] | None = None) -> int:
         failure_class = "configuration"
     except CapabilityError:
         failure_class = "capability"
+    except ModelExecutionCompletionRecoveryRequired:
+        failure_class = "completion_recovery_required"
     except ModelExecutionAuthorizationError:
         failure_class = "authorization"
     except ProviderResponseError:

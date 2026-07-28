@@ -16,7 +16,7 @@ from autolean_prover.errors import ConfigurationError
 
 from benchmarks.authorized_role_bridge import (
     AuthorizedRoleBridgeError,
-    AuthorizedRoleRawOutputStore,
+    AuthorizedRoleCompletionManifestStoreV2,
 )
 from benchmarks.authorized_role_bridge import (
     TestOnlyHmacPrivateManifestAuthenticator as PrivateManifestHmacFixture,
@@ -238,8 +238,8 @@ def test_run_executes_ten_calls_and_exposes_only_role_separated_sidecars(
     assert report.status == "settled"
     assert len(transport.calls) == 10
     assert report.private_evidence_committed is True
-    private_handle = prepared.raw_output_store.resolve_run_manifest_handle(config.run_id)
-    manifest_hash = prepared.raw_output_store.resolve_manifest_handle(private_handle)
+    private_handle = prepared.completion_manifest_store.resolve_run_manifest_handle(config.run_id)
+    manifest_hash = prepared.completion_manifest_store.read_manifest(private_handle).content_hash()
     assert len(manifest_hash) == 64
     assert len(report.roles) == 5
     assert all(len(item.trial_sidecar_hashes) == 2 for item in report.roles)
@@ -269,8 +269,8 @@ def test_run_executes_ten_calls_and_exposes_only_role_separated_sidecars(
         str(config.private_root),
         private_handle,
         "private_manifest_handle",
-        "authorized-role-manifest-handles",
-        "authorized-role-run-index",
+        "completion-manifest-handles-v2",
+        "completion-manifest-run-index-v2",
         "expected_output",
     ):
         assert forbidden not in public
@@ -279,13 +279,13 @@ def test_run_executes_ten_calls_and_exposes_only_role_separated_sidecars(
     )
     assert _PRIVATE_RESPONSE_MARKER.encode() in private_payload
 
-    restarted_store = AuthorizedRoleRawOutputStore(
+    restarted_store = AuthorizedRoleCompletionManifestStoreV2(
         config.private_root,
         private_authenticator=PrivateManifestHmacFixture(_MANIFEST_SECRET.encode("utf-8")),
     )
     restarted_handle = restarted_store.resolve_run_manifest_handle(config.run_id)
     assert restarted_handle == private_handle
-    assert restarted_store.resolve_manifest_handle(restarted_handle) == manifest_hash
+    assert restarted_store.read_manifest(restarted_handle).content_hash() == manifest_hash
 
     outbound = json.dumps(
         [call["payload"] for call in transport.calls],
@@ -333,7 +333,7 @@ def test_run_stdout_contains_no_private_locator_or_operator_path(
     )
     stdout = capsys.readouterr().out.strip()
     report = json.loads(stdout)
-    private_store = AuthorizedRoleRawOutputStore(
+    private_store = AuthorizedRoleCompletionManifestStoreV2(
         private_root,
         private_authenticator=PrivateManifestHmacFixture(_MANIFEST_SECRET.encode("utf-8")),
     )
@@ -346,8 +346,8 @@ def test_run_stdout_contains_no_private_locator_or_operator_path(
     for forbidden in (
         private_handle,
         "private_manifest_handle",
-        "authorized-role-manifest-handles",
-        "authorized-role-run-index",
+        "completion-manifest-handles-v2",
+        "completion-manifest-run-index-v2",
         str(state_root),
         str(private_root),
         _PRIVATE_RESPONSE_MARKER,
@@ -615,7 +615,7 @@ def test_private_store_initialization_failure_rolls_back_approval_and_retries(
         raise AuthorizedRoleBridgeError(marker)
 
     with monkeypatch.context() as scoped:
-        scoped.setattr(runner, "AuthorizedRoleRawOutputStore", fail_private_store)
+        scoped.setattr(runner, "AuthorizedRoleCompletionManifestStoreV2", fail_private_store)
         report = runner.execute_operator_mode(
             config,
             environment=_environment(),

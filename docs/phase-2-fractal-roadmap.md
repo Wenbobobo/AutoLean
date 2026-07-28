@@ -1,7 +1,7 @@
 # Phase 2 Fractal Roadmap
 
-Status: planning record, not a release claim
-Date: 2026-07-26
+Status: strategic milestone record, not an execution-order or release authority
+Updated: 2026-07-28
 
 ## Executive summary
 
@@ -26,9 +26,10 @@ Phase 2 preparation may begin in discovery mode now. Use only these four status 
 - `planned`: a proposed lane or dependency route with no completed source/library audit;
 - `discovery`: public-metadata, rights, overlap, and dependency analysis with no source ingestion,
   contract freeze, or Prover handoff;
-- `local_calibration`: a fixed, rights-cleared sample may be converted by humans or local tools to
-  calibrate fidelity. It defaults to no external model egress and cannot freeze a contract, hand
-  work to Prover, or support promotion; and
+- `local_calibration`: a fixed, rights-cleared sample may be converted by blinded, de-correlated
+  machine roles, with manual review used only for an explicit unresolved exception. It defaults to
+  no external model egress and cannot freeze a contract, hand work to Prover, or support promotion;
+  and
 - `production_ingestion`: source-bound statement conversion and downstream execution.
 
 Only `production_ingestion` waits for all Phase 1 gates below. Discovery may run now.
@@ -38,9 +39,37 @@ pilot, a frozen contract, or Phase 2 production evidence.
 
 `local_calibration_fixture` / `pre_calibration_fixture` is an artifact class, not a fifth Phase-2
 status. It remains in `discovery`: its repository-synthetic bytes may exercise schemas, reports,
-and deterministic replay, but pending human content review, illustrative Lean-like text, and
+and deterministic replay, but pending calibrated machine review, illustrative Lean-like text, and
 synthetic mutation declarations do not satisfy the rights-cleared source, independent-candidate,
 or semantic-review requirements of real `local_calibration`.
+
+## Discovery evidence ledger
+
+The content-addressed
+[active-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) now records all
+three discovery lanes with source, rights, overlap, stop gates, and `local_only` model egress. The
+iFEM lane also freezes prerequisite denominator revision
+`ifem-coercive-prerequisites-r01-f9d1f2d4717a` before any coverage observation. Its mathlib census
+is still `not_started`, exact bounded source bytes have not been acquired, and the manifest
+explicitly forbids Builder freeze and Prover handoff. This closes discovery-manifest construction,
+not rights clearance, textbook calibration, pilot admission, or a coverage claim.
+
+## Machine-first review policy
+
+Routine semantic work defaults to deterministic gates plus blinded machine roles: source binding,
+two independent claim atomizations, two formalization candidates, de-correlated critics, an
+adversarial falsifier, a library critic, and a cheating supervisor. Consensus is deterministic,
+not another model vote. Critical mutation survival, a counterexample, unresolved dissent, shared
+model failure domain, or stale calibration forces abstention.
+
+Machine screening remains a non-promotable advisory state. Measured harmful false-accept and
+risk-coverage gates may reduce how often an accountable reviewer must intervene, but they do not
+grant a model semantic-admission authority or permission to transition a real candidate to
+`frozen`. Any future exception requires a separately versioned authority policy and an explicit,
+accountable decision. Machine roles also cannot grant source rights, attest that an authority host
+or signer exists, or make a public novelty claim. Every remaining external decision is maintained
+only in
+[operator-and-authority-worklist.md](operator-and-authority-worklist.md).
 
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |
@@ -62,8 +91,8 @@ Milestones:
 3. Prover engine: discharge frozen statements or return useful gaps at scale.
 4. Library record: maintain an independent downstream formal-work tree with upstream-ready review
    surfaces.
-5. Conjecture track: isolate open conjectures until semantic, axiom, reproduction, and expert
-   reviews pass.
+5. Conjecture track: isolate open conjectures until semantic, axiom, reproduction, and independent
+   research-accountability reviews pass.
 
 Stop condition: if any layer starts optimizing for benchmark success while bypassing statement
 fidelity, freeze, or clean verification, pause that layer and return to the contract boundary.
@@ -75,7 +104,7 @@ fidelity, freeze, or clean verification, pause that layer and return to the cont
 Tasks:
 
 - Build a graph of open-problem families, textbook prerequisites, mathlib coverage, active upstream
-  efforts, and expert availability.
+  efforts, and availability of independently reproducible evidence.
 - Score nodes by leverage: number of downstream conjectures unlocked, missing-definition density,
   proof expectedness, source clarity, and formalization overlap.
 - Keep conjecture nodes quarantined from theorem nodes.
@@ -103,7 +132,7 @@ Tasks:
 
 Evidence:
 
-- 50-100 reviewed statement candidates in `local_calibration`.
+- 50-100 machine-reviewed statement candidates in `local_calibration`, with abstentions retained.
 - Mutation gates for quantifiers, relation direction, missing side conditions, vacuity, and examples.
 - Reverse-rendered statement packets and reviewer decisions.
 
@@ -179,8 +208,9 @@ Stop condition:
 
 Tasks:
 
-- After an explicit rights and local-use decision, convert 50-100 statements manually/with local
-  agents in `local_calibration`.
+- After an explicit rights and local-use decision, convert 50-100 statements with blinded local or
+  authorized model roles in `local_calibration`; manual intervention is an exception artifact, not
+  the default route.
 - Include textbook opening definitions, early examples, and theorem statements before harder nodes.
 - Use independent conversion candidates and adversarial checkers for every selected statement.
 - Keep the resulting candidates non-frozen and out of Prover; external model egress remains off
@@ -225,7 +255,7 @@ Goal: produce a coherent chapter-scale formal asset, not a scattered benchmark s
 
 Tasks:
 
-- Formalize a 20-40 node chapter slice with source-reviewed statement contracts.
+- Formalize a 20-40 node chapter slice with source-bound, admission-reviewed statement contracts.
 - Separate definitions, reusable lemmas, local theorem bridges, and downstream-staging theorems.
 - Keep examples and counterexamples as first-class tests.
 
@@ -303,25 +333,15 @@ Recommended lane split:
 | Sol | high | contract boundary design, verifier/OCI semantics, Phase 2 field selection, proof-dependency gates |
 | Root | high-level only | architecture decisions, task decomposition, final acceptance, release/stop decisions |
 
-## Immediate next tasks
+## Execution-order pointer
 
-1. Close the Phase 1 vertical fixture gap: one frozen bundle through Prover verified/gap with retained
-   rejection controls.
-2. Add an authorized production evaluator and run the first preset-backed real-model role
-   comparison without changing the frozen matrix, evaluator, or per-role reporting boundary.
-3. Update Dashboard projection with real phase-feedback links for Builder observation, Prover attempts,
-   and gaps.
-4. Prepare two Phase 2 lane cards, but keep them discovery-only until Phase 1 freeze/verify closes.
-5. Create a compact weekly progress ledger format: completed evidence, blocked gates, next task queue,
-   operator asks.
+This strategic document intentionally does not maintain immediate tasks. Current status,
+dependency order, and parallel waves live only in [roadmap-next.md](roadmap-next.md); observed
+results live only in [phase-1-progress.md](phase-1-progress.md).
 
-## Operator asks
+## External-action pointer
 
-No API key is needed for the next dry-run and documentation work. Later, request only specific
-operator-owned references:
-
-- approved Codex/OpenAI or compatible endpoint;
-- budget and timeout limits;
-- source-egress permission class;
-- reviewer availability for first contracts;
-- repository visibility decision after public-readiness gates.
+Do not maintain a second operator list here. Host execution, provider accounts, source rights,
+signer custody, public novelty review, and release ownership are concrete checkboxes in
+[operator-and-authority-worklist.md](operator-and-authority-worklist.md). Unchecked external items
+do not stop discovery or machine preparation; they block only the acceptance effect named there.

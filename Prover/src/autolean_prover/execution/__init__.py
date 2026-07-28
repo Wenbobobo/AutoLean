@@ -5,6 +5,12 @@ from autolean_prover.execution.authority import (
     OciExecutionClaim,
 )
 from autolean_prover.execution.base import ExecutionHarness, ProcessRequest, ProcessResult
+from autolean_prover.execution.dependency_closure import (
+    DependencyClosureBlobReader,
+    DependencyClosureIntegrityError,
+    DependencyClosureMaterializer,
+    MaterializedDependencyClosure,
+)
 from autolean_prover.execution.lean_runner import (
     ElaboratedTypeEvidence,
     LeanRunEvidence,
@@ -23,6 +29,9 @@ from autolean_prover.execution.workspace import (
 
 __all__ = [
     "CleanSubprocessHarness",
+    "DependencyClosureBlobReader",
+    "DependencyClosureIntegrityError",
+    "DependencyClosureMaterializer",
     "ElaboratedTypeEvidence",
     "ExecutionClaimValidator",
     "ExecutionHarness",
@@ -30,6 +39,7 @@ __all__ = [
     "ImageOwnedVerifierIdentity",
     "LeanRunEvidence",
     "LeanRunner",
+    "MaterializedDependencyClosure",
     "MaterializedWorkspace",
     "OciExecutionClaim",
     "OciExecutionEvidence",

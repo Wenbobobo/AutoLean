@@ -38,11 +38,13 @@ test-only gateway receipt never closes a Builder semantic gate or a promotion ga
 
 Other hard blockers are:
 
-- no retained 1,000-job **OS-process** kill/restart/replay report proving no loss, duplicate
-  acceptance, or stale-fence submission. The bounded synthetic harness in
+- no fresh V2 1,000-job **OS-process** kill/restart/replay receipt with its retained workspace and
+  a successful independent replay. The V2 receipt must bind the exact Git candidate or dirty
+  fingerprint, `uv.lock`, runtime, canonical argv, child state, SQLite files, and
+  content-addressed artifacts. The bounded synthetic harness in
   [`scripts/control_plane_process_chaos.py`](../scripts/control_plane_process_chaos.py) exercises
-  this control-plane protocol boundary; its small smoke default and the older in-process
-  reconstruction harness are useful regressions but do not satisfy this gate;
+  this control-plane protocol boundary; its small smoke default, the historical V1 summary, and
+  the older in-process reconstruction harness are useful regressions but do not satisfy this gate;
 - no verified FATE source manifest plus separately reported M/H/X benchmark result;
 - no controlled-browser dashboard evidence covering rendered sanitizer/XSS payloads, desktop and
   mobile layouts, and authenticated non-loopback access;
@@ -86,6 +88,21 @@ create a content-addressed source manifest with the strict adapter documented in
 verification output. Store only the adapter's manifest hash and redacted result metadata in release
 evidence, never answer files or model prompts.
 
+For the synthetic process-chaos gate, use a new ignored workspace and receipt path under the
+operator-owned `release-evidence/` directory, then verify without moving either path. The V2
+verifier intentionally fails when the source candidate, lock file, runtime, command line, retained
+files, or artifact hashes differ from the receipt. It also read-only replays the retained SQLite
+schema, event/lease/fence history, terminal Dashboard projection, and canonical typed CAS
+artifacts; a matching file hash alone is not sufficient.
+
+```powershell
+$runId = [guid]::NewGuid().ToString("N")
+$workspace = "release-evidence/control-plane-process-chaos-$runId.workspace"
+$receipt = "release-evidence/control-plane-process-chaos-$runId.v2.json"
+uv run --frozen python scripts/control_plane_process_chaos.py --jobs 1000 --workspace $workspace --provenance-output $receipt
+uv run --frozen python scripts/control_plane_process_chaos.py --verify-provenance $receipt --workspace $workspace
+```
+
 ## Promotion checklist
 
 1. Record a real source commit and clean-tree evidence from a non-empty Git repository. If either
@@ -98,11 +115,11 @@ evidence, never answer files or model prompts.
 4. Record clean Lean and elaborated-type verification in the pinned Linux/WSL2 OCI environment.
    The report must bind the contract, proof boundary, toolchain/mathlib, imported axioms, and
    immutable artifact hashes. Otherwise stop with `blocked: authoritative-execution`.
-5. Record the required 1,000-job OS-process chaos/replay report, worker isolation,
-   controlled-browser dashboard sanitizer/authentication/remote-access tests, and provider policy
-   tests. The process-chaos report is limited to synthetic SQLite/artifact recovery and cannot
-   substitute for Lean/OCI, power-loss, or mid-transaction crash evidence. Otherwise stop with
-   `blocked: operational-safety`.
+5. Record the required fresh V2 1,000-job OS-process chaos receipt, retained workspace, and
+   independent replay, plus worker isolation, controlled-browser dashboard
+   sanitizer/authentication/remote-access tests, and provider policy tests. The process-chaos
+   receipt is limited to synthetic SQLite/artifact recovery and cannot substitute for Lean/OCI,
+   power-loss, or mid-transaction crash evidence. Otherwise stop with `blocked: operational-safety`.
 6. Generate and retain an SPDX or CycloneDX SBOM using a documented generator and policy. The
    offline lock inventory is an input, not a substitute. Otherwise stop with `blocked: sbom`.
 7. Have the release owner publish a signed or otherwise independently retained release decision that

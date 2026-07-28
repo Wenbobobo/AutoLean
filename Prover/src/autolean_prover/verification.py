@@ -14,6 +14,7 @@ from autolean_contracts import (
     VerificationReportV1,
     digest_text,
     stable_identifier,
+    validate_axiom_policy_v1,
 )
 
 from autolean_prover.errors import ValidationError
@@ -235,6 +236,13 @@ class TrustedLeanVerifier:
     def _axiom_failures(workspace: MaterializedWorkspace, axioms: tuple[str, ...]) -> list[str]:
         contract = workspace.bundle.contract
         failures: list[str] = []
+        try:
+            validate_axiom_policy_v1(
+                contract.policy.axiom_profile,
+                contract.formal.axioms_allowlist,
+            )
+        except ValueError as error:
+            failures.append(f"Lean axiom policy is invalid: {error}")
         observed = set(axioms)
         if "sorryAx" in observed:
             failures.append("sorryAx is prohibited")

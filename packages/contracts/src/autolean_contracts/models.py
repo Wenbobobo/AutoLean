@@ -60,6 +60,33 @@ class AxiomProfileV1(StrEnum):
     EXPLICIT_ALLOWLIST = "explicit_allowlist"
 
 
+MATHLIB_AXIOMS_V1: tuple[str, ...] = (
+    "Classical.choice",
+    "Quot.sound",
+    "propext",
+)
+
+
+def validate_axiom_policy_v1(
+    profile: AxiomProfileV1,
+    axioms_allowlist: tuple[str, ...],
+) -> None:
+    """Validate the exact V1 axiom policy shared by Builder and verifier."""
+
+    allowed = set(axioms_allowlist)
+    if "sorryAx" in allowed:
+        raise ValueError("sorryAx is prohibited in every axiom profile")
+    if profile is AxiomProfileV1.STRICT and allowed:
+        raise ValueError("the strict axiom profile requires an empty allowlist")
+    if profile is AxiomProfileV1.MATHLIB:
+        unsupported = allowed - set(MATHLIB_AXIOMS_V1)
+        if unsupported:
+            raise ValueError(
+                "the mathlib axiom profile contains non-baseline axioms: "
+                + ", ".join(sorted(unsupported))
+            )
+
+
 class FidelityRiskV1(StrEnum):
     L0_REUSE = "l0_reuse"
     L1_SIMPLE = "l1_simple"
@@ -676,6 +703,10 @@ class StatementContractV1(ContractModel):
     def validate_contract(self) -> StatementContractV1:
         if self.rights.source_id != self.source.source_id:
             raise ValueError("rights record must refer to the contract source")
+        validate_axiom_policy_v1(
+            self.policy.axiom_profile,
+            self.formal.axioms_allowlist,
+        )
         source_span_ids = {span.span_id.value for span in self.source.spans}
         if any(item.source_span_id.value not in source_span_ids for item in self.alignments):
             raise ValueError("every alignment must reference a known source span")
@@ -904,6 +935,11 @@ class FormalizationTaskBundleV1(ContractModel):
     def validate_frozen_snapshot(self) -> FormalizationTaskBundleV1:
         if self.contract.status is not StatementStatusV1.FROZEN:
             raise ValueError("only a frozen statement contract can be bridged")
+        if self.contract.policy.allowed_edit_regions:
+            raise ValueError(
+                "V1 bundles do not support line-ranged editable regions; "
+                "Proof.lean is the complete write boundary"
+            )
         require_digest_kind(
             self.graph_snapshot_hash,
             HashKindV1.GRAPH_SNAPSHOT,
