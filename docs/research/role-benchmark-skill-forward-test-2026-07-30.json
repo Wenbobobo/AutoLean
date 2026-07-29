@@ -5,7 +5,7 @@
     "promotion_allowed": false,
     "real_provider_executed": false
   },
-  "base_commit": "2174984a558404ad3d1009c790b31fff9275d89b",
+  "base_commit": "a9a4bdcd1617d93fbc67b69a792f517d4303cbc5",
   "evidence": {
     "private_manifest_output_count": 15,
     "private_manifest_sha256": "45356a0de03a146ef11df3e1d2e69fe13ead175c779febcc36b82c704fcf9251",
@@ -27,8 +27,8 @@
   "inputs": [
     {
       "path": "skills/run-autolean-benchmarks/SKILL.md",
-      "sha256": "145c1315f997b0b9363092b14568edd14a8eb172e1705521ac05e530de35ab7c",
-      "size_bytes": 7042
+      "sha256": "6c95262e5ab659676c1e9c97b09101976ec4ff891d0b66c3f62344efc4ec6fc9",
+      "size_bytes": 7254
     },
     {
       "path": "skills/run-autolean-benchmarks/agents/openai.yaml",
@@ -37,18 +37,18 @@
     },
     {
       "path": "benchmarks/role_benchmark.py",
-      "sha256": "16dd5841d3c61816b3435fc6e4140041ce873b11f7d475ca7392e496809126f0",
-      "size_bytes": 113638
+      "sha256": "db7c3705ad7a39da03331d866bb2af4edb86f9b0f50d8b0ff6b1b828fe2782e6",
+      "size_bytes": 117782
     },
     {
       "path": "scripts/role_benchmark.py",
-      "sha256": "7cdd80fb77e267977449ebf97208d4dcb91f6b7cca56429f6c125010a8959dfd",
-      "size_bytes": 10675
+      "sha256": "c2c62e29187afb4b44b854b44c982d08baf2fb96f6abfca3768e2464b3e3c8a6",
+      "size_bytes": 10467
     },
     {
       "path": "benchmarks/tests/test_role_benchmark.py",
-      "sha256": "953c8428ee15f0da2a87223c8159a4d94e3bf1c3e18411956c155b1cfaf1e696",
-      "size_bytes": 50212
+      "sha256": "a58c4739259d6ff48c519fd72841c29c4ea6837fd64942511e3476e1b14403c9",
+      "size_bytes": 53724
     },
     {
       "path": "benchmarks/roles/fake-smoke.v3.json",
@@ -57,5 +57,11 @@
     }
   ],
   "observed_on": "2026-07-30",
-  "schema_version": "autolean.role-benchmark-skill-forward-test-evidence.v1"
+  "schema_version": "autolean.role-benchmark-skill-forward-test-evidence.v1",
+  "validation": {
+    "focused_tests_passed": 45,
+    "manifest_commit_failure_report_blocked": true,
+    "manifest_retry_executor_calls_after": 15,
+    "manifest_retry_executor_calls_before": 15
+  }
 }

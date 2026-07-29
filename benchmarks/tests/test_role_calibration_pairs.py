@@ -14,6 +14,7 @@ from benchmarks.role_benchmark import (
     FakeRoleBenchmarkFixtureV1,
     RoleBenchmarkError,
     RoleBenchmarkHarness,
+    RoleBenchmarkPrivateManifestStore,
     RoleBenchmarkRawOutputStore,
     RoleBenchmarkReportV1,
     RoleBenchmarkStore,
@@ -21,6 +22,7 @@ from benchmarks.role_benchmark import (
     compare_report_suite,
     compare_reports,
     load_fake_fixture,
+    operator_private_benchmark_paths,
     stable_case_selection,
 )
 
@@ -33,12 +35,17 @@ def _run_fixture(
     root: Path,
 ) -> RoleBenchmarkReportV1:
     root.mkdir()
+    private_paths = operator_private_benchmark_paths(
+        "role-calibration-pairs-replay",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(root / "operator-private")},
+    )
     with RoleBenchmarkStore(root / "roles.sqlite3") as store:
         return RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(root / "raw-outputs"),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="role-calibration-pairs-replay",
         )
@@ -181,17 +188,21 @@ def test_calibration_pair_comparison_suite_keeps_roles_separate(
 def test_compare_suite_cli_preset_emits_all_role_pairs(tmp_path: Path) -> None:
     fixture = load_fake_fixture(FIXTURE_PATH)
     database = tmp_path / "roles.sqlite3"
-    raw_root = tmp_path / "operator-private-raw"
     environment = {
         **os.environ,
         "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
     }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-run",
+        environment=environment,
+    )
     with RoleBenchmarkStore(database) as store:
         report = RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(raw_root),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="suite-cli-run",
         )
@@ -234,12 +245,17 @@ def test_compare_suite_cli_preset_appends_explicit_pairs_and_rejects_duplicate_r
         **os.environ,
         "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
     }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-preset-duplicate-run",
+        environment=environment,
+    )
     with RoleBenchmarkStore(database) as store:
         report = RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(tmp_path / "operator-private-raw"),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="suite-cli-preset-duplicate-run",
         )
@@ -280,12 +296,17 @@ def test_compare_suite_cli_rejects_cross_role_pair(tmp_path: Path) -> None:
         **os.environ,
         "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
     }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-cross-role-run",
+        environment=environment,
+    )
     with RoleBenchmarkStore(database) as store:
         report = RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(tmp_path / "operator-private-raw"),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="suite-cli-cross-role-run",
         )

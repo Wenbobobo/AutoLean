@@ -76,7 +76,9 @@ Require byte-identical `readiness.json` and `report.json` across both roots, and
 private per-run manifest. The readiness report must mark `scripted_fake` ready and
 `authorized_external` blocked. Raw JSON and its manifest live only under the fixed
 operator-private state root, outside every Git checkout. Do not add caller-selected raw paths,
-publish that state, or copy it into the output roots.
+publish that state, or copy it into the output roots. Reject any run for which the manifest was not
+atomically committed and read back before the public report became available; a storage failure
+must leave the completed trials resumable and the report unavailable.
 
 ## Compare
 

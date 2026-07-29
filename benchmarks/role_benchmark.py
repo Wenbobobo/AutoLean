@@ -1027,6 +1027,11 @@ def _validated_private_artifact_root(root: Path) -> Path:
     return resolved
 
 
+def _private_path_binding(path: Path) -> str:
+    normalized = os.path.normcase(os.path.abspath(os.fspath(path)))
+    return hashlib.sha256(normalized.encode("utf-8")).hexdigest()
+
+
 def operator_private_benchmark_paths(
     run_id: str,
     *,
@@ -1116,11 +1121,98 @@ def prepare_private_manifest_path(paths: RoleBenchmarkPrivatePaths) -> Path:
     return paths.manifest_path
 
 
+class RoleBenchmarkPrivateManifestStore:
+    """Durably commit the private manifest before a public report can be completed."""
+
+    def __init__(self, paths: RoleBenchmarkPrivatePaths) -> None:
+        self._paths = paths
+        self._raw_output_root_binding = _private_path_binding(paths.raw_output_root)
+        self._manifest_path = prepare_private_manifest_path(paths)
+        self._raw_output_root = _validated_private_artifact_root(paths.raw_output_root)
+
+    @property
+    def raw_output_root(self) -> Path:
+        return self._raw_output_root
+
+    @property
+    def raw_output_root_binding(self) -> str:
+        return self._raw_output_root_binding
+
+    @property
+    def manifest_path(self) -> Path:
+        return self._manifest_path
+
+    def load(self) -> RoleBenchmarkRawArtifactManifestV1:
+        try:
+            payload = self._manifest_path.read_bytes()
+            manifest = RoleBenchmarkRawArtifactManifestV1.model_validate_json(payload)
+        except (OSError, ValueError) as error:
+            raise RoleBenchmarkError(
+                "private raw artifact manifest is unavailable or invalid"
+            ) from error
+        if manifest.canonical_json_bytes() != payload:
+            raise RoleBenchmarkError("private raw artifact manifest is not canonical")
+        return manifest
+
+    def commit(
+        self,
+        manifest: RoleBenchmarkRawArtifactManifestV1,
+    ) -> RoleBenchmarkRawArtifactManifestV1:
+        try:
+            validated = RoleBenchmarkRawArtifactManifestV1.model_validate(
+                manifest.model_dump(mode="json")
+            )
+        except (AttributeError, ValueError) as error:
+            raise RoleBenchmarkError("private raw artifact manifest is invalid") from error
+
+        path = prepare_private_manifest_path(self._paths)
+        payload = validated.canonical_json_bytes()
+        temporary = path.parent / f".autolean-manifest-{uuid.uuid4().hex}.tmp"
+        descriptor: int | None = None
+        try:
+            flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_BINARY", 0)
+            descriptor = os.open(temporary, flags, 0o600)
+            handle = os.fdopen(descriptor, "wb", closefd=True)
+            descriptor = None
+            with handle:
+                handle.write(payload)
+                handle.flush()
+                os.fsync(handle.fileno())
+            try:
+                os.link(temporary, path)
+            except FileExistsError:
+                pass
+            except OSError as error:
+                raise RoleBenchmarkError(
+                    "could not atomically persist the private raw artifact manifest"
+                ) from error
+            _reject_reparse_point(path, label="private manifest path")
+            persisted = self.load()
+            if persisted != validated or persisted.content_hash() != validated.content_hash():
+                raise RoleBenchmarkError("private raw artifact manifest conflicts with the run")
+            return persisted
+        finally:
+            if descriptor is not None:
+                os.close(descriptor)
+            with suppress(OSError):
+                temporary.unlink()
+
+
 class RoleBenchmarkRawOutputStore:
     """Private CAS for raw model JSON; prompts, inputs, and evaluator oracles stay elsewhere."""
 
     def __init__(self, root: Path) -> None:
-        self._artifacts = ArtifactStore(_validated_private_artifact_root(root))
+        self._root_binding = _private_path_binding(root)
+        self._root = _validated_private_artifact_root(root)
+        self._artifacts = ArtifactStore(self._root)
+
+    @property
+    def root(self) -> Path:
+        return self._root
+
+    @property
+    def root_binding(self) -> str:
+        return self._root_binding
 
     def put_output(self, output: object) -> str:
         _validate_json_value(output, label="raw benchmark output")
@@ -2549,6 +2641,7 @@ class RoleBenchmarkHarness:
         executor: RoleBenchmarkExecutor,
         store: RoleBenchmarkStore,
         raw_output_store: RoleBenchmarkRawOutputStore,
+        private_manifest_store: RoleBenchmarkPrivateManifestStore,
         readiness: RoleBenchmarkReadinessReportV1,
         run_id: str,
     ) -> RoleBenchmarkReportV1:
@@ -2563,6 +2656,12 @@ class RoleBenchmarkHarness:
             raise RoleBenchmarkError("executor has no valid typed descriptor") from error
         if not isinstance(descriptor, RoleBenchmarkExecutorDescriptorV1):
             raise RoleBenchmarkError("executor descriptor has an invalid type")
+        if not isinstance(private_manifest_store, RoleBenchmarkPrivateManifestStore):
+            raise RoleBenchmarkError("benchmark run requires a private manifest store")
+        if raw_output_store.root_binding != private_manifest_store.raw_output_root_binding:
+            raise RoleBenchmarkError(
+                "raw output and private manifest stores must use the same operator-private root"
+            )
         try:
             readiness = RoleBenchmarkReadinessReportV1.model_validate(
                 readiness.model_dump(mode="json")
@@ -2676,9 +2775,10 @@ class RoleBenchmarkHarness:
         results = store.load_results(run_id)
         _validated_report_metrics(manifest, results)
         raw_manifest = raw_output_store.build_manifest(manifest, results)
-        store.bind_raw_artifact_manifest(run_id, raw_manifest.content_hash())
+        persisted_manifest = private_manifest_store.commit(raw_manifest)
+        store.bind_raw_artifact_manifest(run_id, persisted_manifest.content_hash())
         report = store.report(run_id)
-        validate_report_private_manifest(report, raw_manifest)
+        validate_report_private_manifest(report, persisted_manifest)
         return report
 
 

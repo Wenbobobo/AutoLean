@@ -70,8 +70,11 @@ Git checkout. A private per-run manifest binds each trial coordinate to the outp
 in the aggregate report. It contains no prompt, input, oracle, credential, endpoint, or absolute
 path. Public reports must never embed or publish the manifest or raw blobs, and the public-release
 gate rejects their directory and filename patterns. Immediately before writing the manifest, the
-CLI revalidates its fixed path against the operator-private root and rejects symlink, junction, and
-other reparse-point traversal; a private manifest cannot be redirected into a checkout.
+Harness revalidates its fixed path against the operator-private root and rejects symlink, junction,
+and other reparse-point traversal; a private manifest cannot be redirected into a checkout. It then
+atomically commits and reads back the manifest before binding its hash in SQLite. A failed manifest
+commit leaves completed trials resumable but keeps `store.report(run_id)` unavailable; retry writes
+no duplicate trial results and can finish the same run after private storage recovers.
 
 Every public trial has a commitment over the complete `RoleBenchmarkTrialResultV1`, including
 verdict, score, elapsed/token/cost accounting, and execution receipt. The report recomputes one
@@ -189,7 +192,9 @@ records two byte-identical V3 readiness/report runs across five fake roles and f
 This is replay evidence only: the external backend remained blocked, no real provider ran, and the
 result carries no proof, semantic, competence, or promotion authority. The skill now requires an
 explicit writable operator-private root before trials; an unavailable default state directory
-fails before a database or model call instead of hanging during final manifest creation.
+fails before a database or model call instead of hanging during final manifest creation. The
+Harness also persists that manifest before it completes the public report, so a crash cannot leave
+a report whose bound private manifest was never committed.
 
 ## External-provider bridge
 

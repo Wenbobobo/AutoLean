@@ -68,6 +68,7 @@ def main() -> None:
     )
     from benchmarks.role_benchmark import (
         RoleBenchmarkHarness,
+        RoleBenchmarkPrivateManifestStore,
         RoleBenchmarkRawOutputStore,
         RoleBenchmarkStore,
         ScriptedFakeRoleExecutor,
@@ -78,8 +79,6 @@ def main() -> None:
         load_fake_fixture,
         load_raw_artifact_manifest_json,
         operator_private_benchmark_paths,
-        prepare_private_manifest_path,
-        raw_artifact_manifest_json,
         report_json,
         validate_report_private_manifest,
     )
@@ -164,7 +163,7 @@ def main() -> None:
         )
         database = output_root / "roles.sqlite3"
         private_paths = operator_private_benchmark_paths(str(args.run_id))
-        private_manifest_path = prepare_private_manifest_path(private_paths)
+        private_manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
         raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
         with RoleBenchmarkStore(database) as store:
             report = RoleBenchmarkHarness().run(
@@ -172,15 +171,12 @@ def main() -> None:
                 executor=executor,
                 store=store,
                 raw_output_store=raw_store,
+                private_manifest_store=private_manifest_store,
                 readiness=readiness,
                 run_id=str(args.run_id),
             )
-        manifest = raw_store.build_manifest(report.run, report.results)
+        manifest = private_manifest_store.load()
         validate_report_private_manifest(report, manifest)
-        _write_or_print(
-            raw_artifact_manifest_json(manifest),
-            str(private_manifest_path),
-        )
         _write_or_print(report_json(report), str(output_root / "report.json"))
         sys.stdout.write(report_json(report))
         return
@@ -194,22 +190,19 @@ def main() -> None:
             )
             executor = ScriptedFakeRoleExecutor(fixture)
             private_paths = operator_private_benchmark_paths(str(args.run_id))
-            private_manifest_path = prepare_private_manifest_path(private_paths)
+            private_manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
             raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
             report = RoleBenchmarkHarness().run(
                 fixture.matrix,
                 executor=executor,
                 store=store,
                 raw_output_store=raw_store,
+                private_manifest_store=private_manifest_store,
                 readiness=readiness,
                 run_id=str(args.run_id),
             )
-            manifest = raw_store.build_manifest(report.run, report.results)
+            manifest = private_manifest_store.load()
             validate_report_private_manifest(report, manifest)
-            _write_or_print(
-                raw_artifact_manifest_json(manifest),
-                str(private_manifest_path),
-            )
             _write_or_print(report_json(report), args.output)
         elif args.command == "report":
             report = store.report(str(args.run_id))
