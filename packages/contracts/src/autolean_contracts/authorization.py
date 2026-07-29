@@ -47,6 +47,12 @@ def _validate_public_identifier(value: str, *, label: str) -> None:
         raise ValueError("Anthropic and Claude identifiers are not permitted in AutoLean")
 
 
+def validate_model_routing_identifier(value: str, *, label: str) -> None:
+    """Apply the repository-wide provider-family policy to a public routing identifier."""
+
+    _validate_public_identifier(value, label=label)
+
+
 class ModelExecutionProviderBindingV1(ContractModel):
     """The exact registry/provider/model/endpoint selection an authorization permits."""
 

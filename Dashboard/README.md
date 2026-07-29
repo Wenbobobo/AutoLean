@@ -27,7 +27,7 @@ worker fencing tokens, or heartbeat timestamps. Consequently, the UI neither dra
 mathematical-to-formal-to-execution links nor claims lease freshness. Adding those signals
 requires an explicitly reviewed projection-schema revision, not a UI-side heuristic.
 
-The projection recognizes two additional public execution families through fixed allowlists.
+The projection recognizes three additional public event families through fixed allowlists.
 `autolean.t7-synthetic-node-result.v2` becomes an execution node whose status is explicitly
 synthetic and non-promotable; a completed fixture never appears as a verified proof. Its private
 node ID is replaced by a domain-separated SHA-256 public reference before entering any snapshot
@@ -38,10 +38,13 @@ after deterministic replay finds exactly one prior started event with the same s
 run, problem, attempt number, and attempt seed. V2 requires an explicit deterministic seed in both
 events; V1 remains readable as historical evidence. Neither path exports lease holders, fencing tokens,
 source modules, approval snapshots, raw model output, candidate source, private CAS handles,
-or private digests. Builder pre-calibration records and ModelWork/authorized-role sidecars are
-not Dashboard inputs yet: they are not registered control-plane public event schemas, so the
-Dashboard deliberately leaves them out rather than inferring a state from files or private
-stores.
+or private digests. ResearchScout's `research_hypothesis` and `research_observation` records are
+a third, non-execution family: a strict advisory-only envelope yields a timeline/work-record item,
+but never a graph node, run, task ID, phase-feedback milestone, contract revision, or verification
+state. It contains no statement/evidence text, prompt, source excerpt, endpoint, credential, or
+declared usage. Builder pre-calibration records and ModelWork/authorized-role sidecars remain
+outside Dashboard input: they are not registered control-plane public event schemas, so the
+Dashboard deliberately leaves them out rather than inferring a state from files or private stores.
 
 `GET /api/phase-feedback` exposes replay-derived milestone and evidence feedback for current
 frozen bundles. It keeps Builder fidelity, proof-candidate verification, unresolved

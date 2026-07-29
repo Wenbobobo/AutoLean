@@ -323,6 +323,21 @@ test("T7 and FATE public execution events remain distinct from proof verificatio
   assert.notEqual(classifyWorkRecord(fateEvent).category, "verification");
 });
 
+test("research advisory events remain a non-authoritative work-record category", () => {
+  const advisoryEvent = {
+    sequence: 3,
+    event_type: "research_hypothesis",
+    entity_id: "a".repeat(64),
+    task_id: null,
+    occurred_at: "2026-07-29T12:00:02Z",
+    summary: "Research advisory hypothesis: lemma"
+  };
+
+  assert.equal(classifyWorkRecord(advisoryEvent).category, "research_advisory");
+  assert.notEqual(classifyWorkRecord(advisoryEvent).category, "task");
+  assert.notEqual(classifyWorkRecord(advisoryEvent).category, "verification");
+});
+
 test("synthetic execution is visually explicit and cannot become a nominal proof state", () => {
   const node: GraphNode = {
     id: "dashboard-node|t7-bundle|execution|t7:node-a",

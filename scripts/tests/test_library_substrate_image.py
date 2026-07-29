@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -226,6 +227,23 @@ def test_build_command_has_frozen_offline_flags(tmp_path: Path) -> None:
         "Dockerfile.library-substrate",
     ]
     assert command[-1] == str(tmp_path)
+
+
+def test_main_reports_wsl_delegation_failure_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(os, "name", "nt")
+    monkeypatch.setattr(
+        substrate,
+        "_delegate_to_wsl",
+        lambda _arguments: substrate.fail("WSL delegation unavailable"),
+    )
+
+    assert substrate.main(("build",)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "library-substrate-image: WSL delegation unavailable\n"
 
 
 def test_child_image_reference_requires_docker_recorded_repo_digest() -> None:

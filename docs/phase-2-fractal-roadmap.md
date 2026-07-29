@@ -1,7 +1,7 @@
 # Phase 2 Fractal Roadmap
 
 Status: strategic milestone record, not an execution-order or release authority
-Updated: 2026-07-29
+Updated: 2026-07-30
 
 ## Executive summary
 
@@ -74,9 +74,13 @@ iFEM lane also freezes prerequisite denominator revision
 `ifem-coercive-prerequisites-r01-f9d1f2d4717a` before any coverage observation. Its mathlib census
 is still `not_started`. The exact 13-file source set has now been acquired and replayed as
 `local_only`. Text-free indexes bind 10 notebooks and 161 cells plus three ATX-heading sections in
-`intro.md`; no mathematical claim span has been selected. The manifest explicitly forbids Builder
-freeze and Prover handoff. This closes source-byte acquisition and locator construction, not model
-egress, source interpretation, textbook calibration, pilot admission, or a coverage claim.
+`intro.md`; no mathematical claim span has been selected. A deterministic candidate-only
+MathematicalGraph projection now contains 25 nodes and 49 planning edges. Its source anchors are
+index-position locators, not semantic mappings, and its edges are declared-unreviewed or
+low-confidence overlap signals, not mathematical dependencies. It creates no FormalGraph,
+ExecutionGraph, contract, freeze, or Prover handoff. This closes source-byte acquisition, locator
+construction, and a graph skeleton only, not model egress, source interpretation, textbook
+calibration, pilot admission, or a coverage claim.
 
 ## Machine-first review policy
 
@@ -95,6 +99,12 @@ an accountable reviewer must intervene, but they do not alter that authority rul
 exception requires a separately versioned authority policy and an explicit, accountable decision.
 Every remaining external decision is maintained only in
 [operator-and-authority-worklist.md](operator-and-authority-worklist.md).
+
+The current repository-synthetic calibration surface now includes a five-execution source-span
+self-calibration harness and a deterministic 5/3/3 train/dev/held-out structural split over the
+eleven canonical fixtures. Both use exact local fake providers and measure replayable structure,
+not mathematical equivalence. They provide no evidence about real models, textbook fidelity,
+semantic admission, Lean compilation, freeze, or Builder-to-Prover transfer.
 
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |

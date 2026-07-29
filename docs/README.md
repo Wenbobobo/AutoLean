@@ -51,8 +51,11 @@ runner reports success.
     [DeepSeek output-budget ablation](deepseek-output-budget-ablation.md) repeats a fresh 256
     control with one bounded larger-output arm and reports only receipt-bound saturation, never a
     score or competence conclusion. Its first tracked
-    [run report](research/deepseek-output-budget-ablation-2026-07-29.json) stopped after one
-    redacted `network` failure and contains no budget comparison.
+    [2026-07-29 run report](research/deepseek-output-budget-ablation-2026-07-29.json) stopped after
+    one redacted `network` failure. A fresh
+    [2026-07-30 rerun](research/deepseek-output-budget-ablation-2026-07-30.json) did the same and
+    skipped the candidate arm. Neither contains a budget comparison or supports an endpoint,
+    authentication, billing, or model-quality conclusion.
 11. [FATE compile canary](fate-compile-canary.md), the non-promotable
     [agent-smoke-8 vertical bridge](fate-agent-smoke.md), and the
     [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain,
@@ -75,9 +78,16 @@ runner reports success.
     primary, curvature's reference-only boundary, backups, and selection gates. The
     [T3 human-review packet](../Builder/pilots/model-theory-admission/human-review/README.md)
     provides the reproducible reviewer view without claiming that review or admission occurred.
+    The [T3 machine-review packet](model-theory-t3-machine-review.md) binds nine unresolved
+    ambiguities, three mutation controls, and three unselected successor profiles; its construction
+    is complete, but `AUTH-T3-01` remains open and it cannot admit, freeze, or hand off a statement.
 15. [Multi-agent self-calibration](self-calibration-decision.md) defines the independent
     candidate, textbook/open-problem alignment, adversarial-review, and pinned-Library-spike
-    decision loop that precedes manual Builder calibration.
+    decision loop that precedes manual Builder calibration. The
+    [source-span synthetic self-calibration harness](builder-source-span-self-calibration.md) and
+    [deterministic 5/3/3 held-out protocol](builder-held-out-calibration.md) exercise proposal,
+    review, mutation, abstention, split, and replay structure over eleven project-synthetic samples.
+    They are fake-provider architecture regressions, not real-model or semantic calibration.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
@@ -116,8 +126,10 @@ runner reports success.
     fact-graph/context lessons only for a future untrusted research-scout layer and rejects its
     runtime, LLM truth gate, provider policy, and shared-file authority boundary.
     The [integration decision](research/danus-integration-decision-2026-07-29.md) and
-    [proposal-only adapter](research/research-scout-adapter-v1.md) implement only that advisory
-    boundary; scout output cannot freeze a contract, mutate a graph, or reach Prover authority.
+    [proposal-only adapter and event projection](research/research-scout-adapter-v1.md) implement
+    only that advisory boundary. The control plane appends digest-only ResearchScout events and the
+    read-only Dashboard renders a short work record without creating a task or graph node; scout
+    output cannot freeze a contract, mutate a graph, schedule work, or reach Prover authority.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
@@ -137,7 +149,10 @@ runner reports success.
     records the 10-notebook / 161-cell locator replay without source text, while the
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
     binds the actual 25-node / 21-prerequisite denominator and keeps every mapping `unknown`
-    until the pinned Lean query and semantic classification evidence exist.
+    until the pinned Lean query and semantic classification evidence exist. The
+    [25-node/49-edge candidate dependency graph](ifem-candidate-dependency-graph.md) is a
+    source-text-free planning projection only; it creates no semantic mapping, FormalGraph,
+    ExecutionGraph, freeze, or Prover handoff.
 27. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.

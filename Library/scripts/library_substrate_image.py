@@ -2275,9 +2275,9 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 
 def main(arguments: Sequence[str] | None = None) -> int:
     parsed = parse_arguments(arguments)
-    if os.name == "nt" and not parsed.native:
-        return _delegate_to_wsl(parsed)
     try:
+        if os.name == "nt" and not parsed.native:
+            return _delegate_to_wsl(parsed)
         if parsed.action == "build":
             result = build()
         elif parsed.action == "verify":

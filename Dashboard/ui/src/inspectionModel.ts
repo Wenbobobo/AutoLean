@@ -37,6 +37,10 @@ export function classifyWorkRecord(event: EventView): WorkRecord {
   else if (event.event_type.startsWith("verification.")) category = "verification";
   else if (event.event_type.startsWith("t7_synthetic_node_v2.")) category = "synthetic_execution";
   else if (event.event_type.startsWith("fate.attempt.")) category = "benchmark";
+  else if (
+    event.event_type === "research_hypothesis" ||
+    event.event_type === "research_observation"
+  ) category = "research_advisory";
   else if (event.event_type === "proof.submitted") category = "attempt";
   else if (event.event_type.startsWith("task.")) category = "task";
   return { sequence: event.sequence, category, event };

@@ -25,7 +25,9 @@ closures. All near-term milestones must therefore preserve the public protocol b
 The repository has a substantial Phase 1 skeleton: contracts, control-plane events, ModelWork V2,
 an authorized ten-trial role bridge, a FATE common executor, a read-only Dashboard projection,
 source/fidelity harnesses, typed T7 module receipts, synthetic chaos coverage, and downstream
-Library workspace documentation. Remote facts checked on 2026-07-29: public draft
+Library workspace documentation. It also has a proposal-only ResearchScout event projection, a
+complete non-authoritative T3 machine packet, and bounded synthetic Builder calibration protocols.
+Remote facts checked on 2026-07-29: public draft
 [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) is open and mergeable at
 `cd42ba76473002cfff9eaf4b8710e90fa3877cd4`, and GitHub Actions
 [CI run #64](https://github.com/Wenbobobo/AutoLean/actions/runs/30364517594) succeeded. Its updated
@@ -38,10 +40,12 @@ An earlier local DeepSeek official-profile canary reached only a redacted networ
 ten-call role observation settled every request, but every completion saturated the fixed 256-token
 output ceiling and remains non-promotable. A versioned 512-token ablation then passed zero-call
 preflight but stopped after its first 256-token control request returned redacted `network`; it made
-no retry and no comparison. None of these observations supports a competence conclusion.
-Earlier session-local WSL denial is historical environment-path evidence, not a claim about the
-present operator host. Fresh host, Lean, gateway, and provider results must be retained under their
-own exact execution identities.
+no retry and no comparison. An independent 2026-07-30 rerun again stopped after one control-arm
+`network` failure and skipped the candidate arm. These are sandbox-route observations, not endpoint,
+authentication, billing, or model-quality diagnoses, and none supports a competence conclusion.
+A fresh 2026-07-30 WSL probe returned `Wsl/EnumerateDistros/Service/E_ACCESSDENIED`; no authoritative
+Lean or OCI execution occurred. Fresh authority-host, gateway, and provider results must be retained
+under their own exact execution identities.
 
 The remaining work is not to invent another runtime. It is to close a narrow vertical path in which
 one admitted Builder statement moves through the exact same interfaces that future textbook and
@@ -79,9 +83,9 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | --- | --- | --- |
 | P1-08 | Partial | Exercise `SourceRecordV1` and `RightsRecordV1` on a real, exact, explicitly licensed source; URL metadata alone is insufficient. |
 | P1-09 | Done | Retain reverse rendering, non-vacuity controls, examples/counterexamples, and critical semantic mutations as hard Builder gates. |
-| P1-10 | Done | Preserve the locally tested, non-promotable [machine-semantic-quorum](../Builder/src/autolean_builder/machine_semantic_quorum.py) sidecar with blinded roles, failure-domain accounting, hard vetoes, persistent dissent, and `may_freeze=false`. This closes software construction only, not P1-12 or `AUTH-T3-01`. |
+| P1-10 | Done | Preserve the locally tested, non-promotable [machine-semantic-quorum](../Builder/src/autolean_builder/machine_semantic_quorum.py) sidecar with blinded roles, failure-domain accounting, hard vetoes, persistent dissent, and `may_freeze=false`. This closes quorum construction only; P1-12 has separate packet evidence, and this row cannot close `AUTH-T3-01`. |
 | P1-11 | Done | Preserve the model-theory T3 V2 decision as immutable `gap/not_selected`; no machine vote may rewrite it. |
-| P1-12 | Next | Produce the complete T3 machine review, ambiguity table, mutation results, and successor-profile alternatives without claiming admission. |
+| P1-12 | Done | Preserve the complete, deterministic [T3 machine review packet](model-theory-t3-machine-review.md): all nine ambiguities remain unresolved, three mutation controls are retained, three successor profiles remain unselected, and every authority flag is false. This closes packet construction only; `AUTH-T3-01` remains open. |
 | P1-13 | External | Close `AUTH-T3-01`, or explicitly retain the T3 gap and move the first real-contract attempt to a new source. |
 | P1-14 | External | Obtain one rights-ready, semantically accountable boundary for the first real T5 contract. |
 | P1-15 | Done | Preserve SQLite WAL, CAS artifacts, leases, fencing, append-only events, and deterministic projection. |
@@ -99,9 +103,9 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P1-22 | External | Close `AUTH-T7-01`: run a real leased image-owned build, stale-fence rejection, crash/restart, clean integration, and per-node verification. |
 | P1-23 | External | Retain one real rights-cleared frozen contract through unchanged bundle, Prover, OCI, kernel query, and independent verifier. |
 | P1-24 | Done | Preserve Fake, Codex CLI, OpenAI Responses, and custom-compatible providers; keep Claude/Anthropic absent and prohibit automatic fallback. |
-| P1-25 | Partial | Preserve the DeepSeek official profile, redacted canary, authorized ten-trial role route, and output-budget ablation protocol. The ten-call observation settled at the fixed 256-token ceiling; the separate 512-token ablation passed zero-call preflight but stopped on its first redacted `network` failure, skipped the candidate arm, and emitted no comparison. Neither is promotable or supports a competence conclusion. |
+| P1-25 | Partial | Preserve the DeepSeek official profile, redacted canary, authorized ten-trial role route, and output-budget ablation protocol. The ten-call observation settled at the fixed 256-token ceiling. Both the 2026-07-29 ablation and a fresh 2026-07-30 rerun stopped on their first redacted control-arm `network` failure, skipped the candidate arm, and emitted no comparison. Neither run is promotable or supports an endpoint, authentication, billing, or model-competence conclusion. |
 | P1-26 | External | Close `AUTH-PROVIDER-01`: retain one successful real-provider run and independent evaluation without turning it into proof or fidelity evidence. |
-| P1-27 | Partial | Preserve the canonical FATE lock, common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. The current compile canary has not rerun because WSL returned `Wsl/Service/E_ACCESSDENIED`; any earlier canary is historical and nonbinding. |
+| P1-27 | Partial | Preserve the canonical FATE lock, common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. The current compile canary has not rerun because a fresh 2026-07-30 probe returned `Wsl/EnumerateDistros/Service/E_ACCESSDENIED`; no current Lean/OCI authority result exists, and any earlier canary is historical and nonbinding. |
 | P1-28 | Next | After P1-26, run `regression-48` pass@1 under one frozen model/tool/retrieval/budget contract. |
 
 ### Phase 1: Weeks 7--8, comparison and observation
@@ -110,7 +114,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | --- | --- | --- |
 | P1-29 | Next | After P1-26, run compare-90 pass@1 and pass@4 plus model, retrieval, and specialist-role ablations; never merge role scores. |
 | P1-30 | Next | Run FATE-350 only after the smaller frozen routes are stable; report M/H/X and failures separately. |
-| P1-31 | Partial | Preserve the loopback read-only Dashboard, three graph lanes, evidence-state health semantics, sanitization, and event identity separation. |
+| P1-31 | Partial | Preserve the loopback read-only Dashboard, three graph lanes, evidence-state health semantics, sanitization, and event identity separation. The ResearchScout proposal-only event is now replayed as an advisory work-record summary without creating a graph node, run, task, contract, or authority state. |
 | P1-32 | Next | Link real Builder revisions, proof/gap attempts, T7 receipts, and verifier evidence in the Dashboard projection without adding control actions. |
 | P1-33 | Done | A fresh V2 1,000-job local synthetic receipt is bound to candidate `cd42ba76473002cfff9eaf4b8710e90fa3877cd4`, `uv.lock`, runtime, canonical argv, retained manifest, exact SQLite schema/event/lease/fence history, terminal projection, and typed cross-bound CAS artifacts. Its independent read-only replay verified 1,000 completed jobs, 5,000 contiguous events, 4,000 artifacts, and 4,000 duplicate deliveries with no loss or duplicate terminal verdict. This closes provenance-bound synthetic recovery only; it cannot close P1-16, T6/T7, production signer custody, or the release gate. |
 
@@ -131,7 +135,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-01 | Partial | Maintain two or three discovery lanes without presenting any as an admitted pilot. |
 | P2-02 | Partial | Keep iFEM Chapters 1--10 as the conditional primary for source preparation and compile discovery only. |
 | P2-03 | Partial | Retain PDE and metric/algebraic-geometry lane cards with explicit stop conditions and no production-ingestion claim. |
-| P2-04 | Partial | Thirteen pinned iFEM source files are locally locked and independently replayed under `local_only`, with source-lock receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`. Digest-only indexes now bind 161 notebook cells and three `intro.md` heading sections. This closes locator construction only: no mathematical claim span is selected, and rights/egress authority, semantic admission, freeze, and Prover handoff remain open. |
+| P2-04 | Partial | Thirteen pinned iFEM source files are locally locked and independently replayed under `local_only`, with source-lock receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`. Digest-only indexes bind 161 notebook cells and three `intro.md` heading sections. A deterministic [candidate-only dependency graph](ifem-candidate-dependency-graph.md) now records 25 nodes and 49 planning edges without source text. This closes source/locator and graph-skeleton construction only: there is no semantic source mapping, mathematical dependency claim, FormalGraph, ExecutionGraph, freeze, or Prover handoff. |
 | P2-05 | Done | Preserve the [active discovery-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) with source, rights, overlap, and stop gates for every active lane. This is discovery metadata only; egress remains `local_only` until `AUTH-RIGHTS-01` closes. |
 | P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. The bound coverage census remains `not_started`; no coverage result is claimed. |
 | P2-07 | Next | Compile exact pinned-mathlib type/import queries and classify direct mappings, thin adapters, and missing nodes separately. |
@@ -143,8 +147,8 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | --- | --- | --- |
 | P2-09 | Done | Preserve the eleven-sample repository-synthetic opening corpus as a schema fixture. It covers every required mutation family, but is not textbook calibration or semantic evidence. |
 | P2-10 | Done | Keep the required mutation-family coverage locked to the eleven-sample synthetic corpus; source-specific calibration and measured detection performance remain separate next gates. |
-| P2-11 | Next | Build a held-out calibration set with harmful negatives and known formal references; report false acceptance, mutation recall, abstention, and correlated double faults. |
-| P2-12 | Next | For each real candidate, run two blinded semantic-atom extractions, two blinded formalizations, de-correlated critics, and one adversarial falsifier. |
+| P2-11 | Partial | Preserve the deterministic [5/3/3 held-out structural protocol](builder-held-out-calibration.md) over the eleven project-synthetic samples, including cross-partition digest isolation and precommitted fake-provider budgets. It measures strict JSON and declared structural-drift detection only; harmful negatives, known formal references, real-model repetitions, false-acceptance/risk-coverage estimates, and semantic calibration remain open. |
+| P2-12 | Partial | Preserve the [source-span synthetic self-calibration harness](builder-source-span-self-calibration.md): two proposers, reverse review, mutation critic, and adjudicator run over the canonical eleven-sample corpus with all authority false. No real textbook candidate, independent real agent execution, semantic-equivalence result, freeze, or Prover handoff has occurred. |
 | P2-13 | Next | Treat any critical dissent, surviving mutation, counterexample, shared lineage, or stale calibration as abstention, not a majority-vote pass. |
 | P2-14 | External | Close source-specific `AUTH-RIGHTS-01`; then create 50--100 real non-frozen `local_calibration` candidates starting from textbook definitions and openings. |
 | P2-15 | Next | Keep machine-screened candidates in a non-promotable sandbox lane until the measured risk-coverage policy and accountable admission boundary are explicit. |
@@ -154,7 +158,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | ID | Status | Task and acceptance signal |
 | --- | --- | --- |
 | P2-16 | External | Freeze only candidates that satisfy formal admission; hand unchanged bundles to Prover through the Phase 1 contract. |
-| P2-17 | Next | Build one 20--40-node chapter slice with definitions, examples, counterexamples, reusable lemmas, and terminal theorem/gap coverage. |
+| P2-17 | Next | Build one 20--40-node chapter slice with definitions, examples, counterexamples, reusable lemmas, and terminal theorem/gap coverage. The 25-node/49-edge iFEM candidate-only graph is a planning skeleton and does not satisfy this task because it has no semantic mapping, reviewed contracts, freeze, proofs, or gaps. |
 | P2-18 | Partial | Preserve `Library/` staging, records, and review surfaces as the independent downstream workspace. |
 | P2-19 | Partial | [Dependency Closure V2](dependency-closure-v2-design.md) has locally tested Stage A and implemented Stage B mechanics. A nonempty `accepted_dependencies` closure now fails registration until a gateway-owned `dependency.admitted` record binds the accepted verification to the exact exported module/OLean blob. That admission record, complete declaration inventory observation, and authoritative proof path remain open. |
 | P2-20 | Next | End every cycle with one replayable mathematical feedback artifact: verified proof, mutation-blocked conversion, counterexample, or bounded gap. |
@@ -163,13 +167,14 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 
 | ID | Status | Task and acceptance signal |
 | --- | --- | --- |
-| R-01 | Done | Audit Danus at exact commit `7e244865`; retain its fact-graph/context lessons only for a future isolated research scout. Reject its runtime, Claude dependencies, shared-file authority, and LLM verifier as truth. |
+| R-01 | Done | Audit Danus at exact commit `7e244865`; retain its fact-graph/context lessons only through the isolated, [proposal-only ResearchScout boundary](research/research-scout-adapter-v1.md). Its advisory events now replay append-only into the read-only Dashboard projection without creating a task, graph node, contract, proof, or promotion path. Reject the Danus runtime, Claude dependencies, shared-file authority, and LLM verifier as truth. |
 | R-02 | Next | After at least three connected chapter slices, validate a dependency-leverage atlas against simple/random/degree baselines before it may steer the Open Problem portfolio. |
 
 ## Current parallel waves
 
-1. **Wave A, no external wait:** preserve completed P1-10, P2-04 through P2-06, and R-01
-   evidence; finish P1-12 and P2-07 through P2-13 with focused tests and no authority promotion.
+1. **Wave A, no external wait:** preserve completed P1-10/P1-12, the bounded P2-04 through P2-06
+   evidence, the synthetic P2-11/P2-12 protocols, and R-01; advance P2-07/P2-08/P2-13 with focused
+   tests and no authority promotion.
 2. **Wave B, authority execution:** prepare P1-18/P1-22/P1-26 so each requires one bounded
    operator action rather than an open-ended investigation.
 3. **Wave C, first real closure:** close P1-14/P1-23, then start P2-14 through P2-20 without
@@ -189,10 +194,10 @@ exit condition is never satisfied by a later milestone's evidence.
 | **M1 — Reproducible Phase 1 architecture** | Weeks 1--12: control plane, fake/provider adapters, FATE boundary, dashboard, chaos receipt, release/public scans. | Substantially complete in local scope; PR #26 at `cd42ba7` is CI-green and records the exact candidate tests. | A no-RC/RC decision names every gate. Local/CI evidence alone is not a semantic, kernel, signer, or model result. |
 | **M2 — Authority-bearing vertical** | First rights-cleared statement through unchanged bundle, T6 OCI/Lean, T7 lease/recovery, kernel query, and independent gateway. | Not closed. | Exact source rights, semantic admission, fixed environment, real image execution, gateway verification, and signer custody must all bind the same revision. Synthetic routes do not substitute. |
 | **M3 — Controlled real Prover baseline** | Authorized DeepSeek/Codex/custom endpoint role runs, then regression-48, compare-90, and FATE-350 under frozen experimental contracts. | Harness ready; the ten-call DeepSeek observation settled but saturated its 256-token ceiling and is non-promotable, so no competence conclusion is available. | Provider/evaluator authority, source-egress policy, budget reconciliation, and role-separated reports. Benchmark score never establishes Builder fidelity. |
-| **M4 — Builder calibration factory** | Rights-cleared textbook openings; 50--100 non-frozen candidates; independent extraction/formalization/critique/falsification and calibration measurement. | The eleven-sample synthetic opening corpus covers required mutation families; real textbook calibration has not started. | Measured harmful-negative resistance, abstention behavior, and source-specific rights boundary. Machine output remains `machine_advisory`. |
-| **M5 — First chapter closure** | One 20--40 node slice in downstream `Library/`: definitions, examples, counterexamples, reusable lemmas, terminal theorem/gap ledger. | Planned; Dependency Closure V2 has Stage A plus fail-closed Stage B mechanics. | Reviewed frozen contracts route unchanged to Prover and verifier; every node has reproducible proof/gap/mutation evidence. Isolated FATE passes do not substitute. |
+| **M4 — Builder calibration factory** | Rights-cleared textbook openings; 50--100 non-frozen candidates; independent extraction/formalization/critique/falsification and calibration measurement. | The eleven-sample synthetic opening corpus now has a source-span multi-role fake harness and a deterministic 5/3/3 held-out structural protocol. These are architecture regressions, not real textbook or semantic calibration. | Measured harmful-negative resistance, abstention behavior, and source-specific rights boundary. Machine output remains `machine_advisory`. |
+| **M5 — First chapter closure** | One 20--40 node slice in downstream `Library/`: definitions, examples, counterexamples, reusable lemmas, terminal theorem/gap ledger. | A 25-node/49-edge iFEM candidate-only planning graph exists, and Dependency Closure V2 has Stage A plus fail-closed Stage B mechanics. No node is semantically mapped, reviewed, frozen, proved, or handed to Prover. | Reviewed frozen contracts route unchanged to Prover and verifier; every node has reproducible proof/gap/mutation evidence. Isolated FATE passes do not substitute. |
 | **M6 — Connected downstream library** | Several coherent chapter slices, Dependency Closure V2 Stage B, stable APIs, multi-worker scheduling, and optional small mathlib packets. | Stage B mechanics exist, but nonempty accepted dependencies are blocked pending gateway-owned module/OLean admission binding. | Pinned clean builds, cross-slice dependency and axiom profiles, provenance, migration discipline, and demonstrable closure reduction per budget. |
-| **M7 — Research atlas and untrusted scout** | Dependency-leverage portfolio, Danus-inspired proposal workers, experience retrieval, and blind reproof of held-out known results. | Research queue only; Danus is not a runtime dependency. | Beats simple/random/degree baselines on held-out closure while every accepted artifact still traverses M0--M6 boundaries. Fact count or model agreement does not substitute. |
+| **M7 — Research atlas and untrusted scout** | Dependency-leverage portfolio, Danus-inspired proposal workers, experience retrieval, and blind reproof of held-out known results. | The proposal-only ResearchScout adapter and append-only read-only event projection exist; no scout runtime, atlas result, scheduling authority, or accepted artifact exists. | Beats simple/random/degree baselines on held-out closure while every accepted artifact still traverses M0--M6 boundaries. Fact count or model agreement does not substitute. |
 | **M8 — Conjecture frontier and Open Problem claim** | Quarantined conjectures, diversified reduction/counterexample/lemma portfolios, exact proof-closure and novelty packets. | Long-range only. | Independent semantic, kernel, reproduction, and novelty review for one exact revision; only `AUTH-OPEN-PROBLEM-01` permits a public solution/novelty claim. |
 
 Machine agents may independently choose a conservative operational route—retain a gap, abstain,
@@ -326,10 +331,10 @@ remaining uncertainty stated explicitly.
 
 | Package | Owner style | Next deliverable | Acceptance signal |
 | --- | --- | --- | --- |
-| T3 semantic/admission closure | Machine quorum plus external exception owner | Resolve the local review packet's pending spans and two locator ambiguities; decide the successor profile or retain the gap | Machine work produces an advisory/dissent packet; only `AUTH-T3-01` can admit the old candidate, and choosing a new source is the preferred low-human bypass |
+| T3 semantic/admission closure | Machine quorum plus external exception owner | Preserve the completed machine packet, resolve its nine pending ambiguities if authoritative source evidence permits, and select a successor profile or retain the gap | Packet construction is complete with three controls and three unselected profiles; only `AUTH-T3-01` can admit the old candidate, and choosing a new source is the preferred low-human bypass |
 | T6 real Builder-query replay | Core/root | Run the implemented Builder-only query in the exact OCI/Lean environment and bind its receipt to the signing gateway | Query stays `proof_eligible=false`; real image, environment, and rejection controls replay without changing a theorem. The current session's WSL denial is an execution blocker, not a T6 conclusion. |
 | T7 leased rebuild vertical | Focused subagent with core review | Attach the typed module-receipt path to the image-owned worker and real lease | Focused Python tests passed, but no OCI authority execution occurred. Exact declaration closure and conservative module rebuild remain distinct; the injected cross-job receipt rejection is local coverage, not an execution receipt. |
-| Role benchmark execution | Subagent | Keep `calibration-pairs-v3` fake-only for harness regression; use a separately authorized, unsaturated run for any future competence comparison | The DeepSeek ten-call observation settled but all calls saturated the 256-token ceiling, so it is non-promotable harness evidence rather than a score or competence result. |
+| Role benchmark execution | Subagent | Keep `calibration-pairs-v3` fake-only for harness regression; use a separately authorized, unsaturated run for any future competence comparison | The DeepSeek ten-call observation saturated the 256-token ceiling, while both ablation attempts stopped on a first control-arm `network` failure and skipped the candidate; none is a score or competence result. |
 | Dashboard grid view | Subagent | Preserve the read-only graph-health surface and add only event-projection evidence links | UI keeps FATE, generic verification, and T7 receipt identities separate; browser visual QA and remote access remain separate gates. |
 | Meeting/landscape research | Subagent | Extract Archon-talk and adjacent assistant lessons into scoped architecture proposals | Suggestions are mapped to existing gates instead of treated as benchmark proof |
 | Library/Builder pilot discovery | Core/root with later reviewers | Pick 2-3 synchronized pilot threads only after source/rights and review constraints are explicit | Each candidate has a node graph, missing-library map, and clear rejection condition |
@@ -346,11 +351,11 @@ admission, freeze, verification, substrate, or release gate.
 The active statuses and ordering are the 60-step board above. These notes explain the immediate
 critical path; they do not form a second task list.
 
-1. Finish the T3 machine packet before attempting a first frozen Builder statement.
-   - The local check is intentionally fail-closed at `gap/not_selected/not_frozen`.
-   - Resolve the machine-located spans and two locator ambiguities as far as the source bytes
-     permit, run blinded critics and mutations, then either close `AUTH-T3-01` or retain the gap and
-     choose a different source.
+1. Preserve the completed T3 machine packet before attempting a first frozen Builder statement.
+   - The packet remains intentionally fail-closed at `gap/not_selected/not_frozen`; all nine
+     ambiguities remain unresolved and all three successor profiles remain unselected.
+   - Either close `AUTH-T3-01` with accountable source evidence or retain the gap and choose a
+     different source; no machine result may silently admit the old candidate.
    - T5 remains blocked unless that decision admits one exact boundary with rights readiness.
 
 2. Move the implemented T6/T7 routes across their real execution boundaries.
@@ -384,8 +389,8 @@ critical path; they do not form a second task list.
 - Do not tune against FATE as the main objective; FATE remains a Prover diagnostic.
 - Do not treat Archon, AutoArchon, or any external assistant as the control plane.
 - Do not treat possession of an operator-owned API key as execution authority. The local DeepSeek
-  configuration has a bounded canary, but the failed network call does not make the role harness
-  ready for scoring.
+  configuration has bounded canaries, but the repeated sandbox-route `network` failures and skipped
+  candidate arms do not diagnose the endpoint or make the role harness ready for scoring.
 - Do not use Builder observations, canonical-type canaries, or host-mounted Library diagnostics as
   proof authority.
 - Do not add broad publication gates that slow every small bug fix; use focused gates where they

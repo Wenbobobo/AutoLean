@@ -1,0 +1,446 @@
+{
+  "ambiguity_table": [
+    {
+      "ambiguity_id": "closed-boundary-translation-unadmitted",
+      "ambiguity_kind": "source_to_formal_translation",
+      "decision_effect": "none",
+      "machine_finding": "The level-zero realization bridge is proved, but no admitted translation from every source sequent and rule derivation is retained.",
+      "required_next_evidence": "A source-bound rule translation showing that every selected closed sequent maps to the level-zero theorem boundary.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "formal-profile-successor-unselected",
+      "ambiguity_kind": "execution_and_axiom_policy",
+      "decision_effect": "none",
+      "machine_finding": "The immutable decision profile does not match the exact-image import and axiom observations.",
+      "observed_incompatibilities": {
+        "decision_imports_allowlist_matches_direct_imports": false,
+        "decision_strict_empty_axiom_profile_matches_observation": false,
+        "decision_worker_image_matches_observation": false
+      },
+      "required_next_evidence": "Choose and independently replay one successor profile; issue a new decision revision rather than editing decision.v2.json.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "fragment-scope-name-unselected",
+      "ambiguity_kind": "candidate_scope",
+      "candidate_id": "model-theory-closed-level-indexed-fragment",
+      "decision_effect": "none",
+      "machine_finding": "The current identifier may be read more broadly than the implemented bottom/implication/universal fragment.",
+      "out_of_scope": [
+        "existential rule constructors",
+        "sequent-level structural rules and cut",
+        "connective rules outside bottom, implication, and universal quantification",
+        "full LK",
+        "completeness",
+        "source-fidelity or admission authority"
+      ],
+      "required_next_evidence": "A successor candidate name and scope that cannot be mistaken for full LK.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "implication-left-context-discipline-unverified",
+      "ambiguity_kind": "rule_variant",
+      "decision_effect": "none",
+      "machine_finding": "The candidate shares the same Gamma and Delta between both premises. No source-bound equivalence to another context discipline is recorded.",
+      "matrix_status": "unverified",
+      "required_next_evidence": "A source-bound equivalence or an explicit shared-context fragment exclusion.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "rule-inventory-and-structural-policy-unverified",
+      "ambiguity_kind": "fragment_rule_inventory",
+      "decision_effect": "none",
+      "machine_finding": "Existential rules, structural rules, cut, and other connective rules are missing from the candidate; their source policy is not selected.",
+      "matrix_rows": [
+        "existential-left",
+        "existential-right",
+        "structural-rules-and-cut",
+        "other-connective-rules"
+      ],
+      "matrix_statuses": [
+        "missing",
+        "missing",
+        "missing",
+        "missing"
+      ],
+      "required_next_evidence": "An explicit source-bound inventory classifying each rule as implemented, admissible, or excluded.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "section-7-5-page-pair-unreconciled",
+      "ambiguity_kind": "pdf_printed_page_pair",
+      "claimed_pages": [
+        {
+          "pdf_page_0_based": 146,
+          "pdf_page_1_based": 147,
+          "printed_page_label": "126"
+        },
+        {
+          "pdf_page_0_based": 147,
+          "pdf_page_1_based": 148,
+          "printed_page_label": "127"
+        }
+      ],
+      "decision_effect": "none",
+      "machine_finding": "The digest-only span does not determine which claimed PDF/printed-page pair is visually correct.",
+      "required_next_evidence": "A page-render manifest and visual reconciliation bound to this span.",
+      "source_requirement_id": "sentence-satisfaction-assignment-independence",
+      "source_span": {
+        "end_offset": 207405,
+        "raw_sha256": "ce4d882e1d8278ee026573119d3d8c595a14ca97ca75f27c6c312e6a3e7ed0f2",
+        "span_id": "sentence-satisfaction-assignment-independence",
+        "start_offset": 206573
+      },
+      "status": "unresolved_pending_visual_review"
+    },
+    {
+      "ambiguity_id": "universal-left-term-correspondence-unadmitted",
+      "ambiguity_kind": "quantifier_representation",
+      "decision_effect": "none",
+      "machine_finding": "Capture avoidance is kernel-checked. The correspondence between a source closed term and Term (Fin n) at internal levels is not source-bound.",
+      "matrix_status": "unverified",
+      "required_next_evidence": "A fidelity argument relating source closed/free-for terms to Term (Fin n).",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "universal-right-freshness-correspondence-unadmitted",
+      "ambiguity_kind": "quantifier_representation",
+      "decision_effect": "none",
+      "machine_finding": "Structural freshness and soundness are kernel-checked. Equivalence between the source fresh constant discipline and a new Fin level remains unadmitted.",
+      "matrix_status": "unverified",
+      "required_next_evidence": "A fidelity argument relating a source fresh constant to the new Fin.last level.",
+      "status": "unresolved"
+    },
+    {
+      "ambiguity_id": "universal-right-page-pair-unreconciled",
+      "ambiguity_kind": "pdf_printed_page_pair",
+      "claimed_pages": [
+        {
+          "pdf_page_0_based": 206,
+          "pdf_page_1_based": 207,
+          "printed_page_label": "186"
+        },
+        {
+          "pdf_page_0_based": 207,
+          "pdf_page_1_based": 208,
+          "printed_page_label": "187"
+        }
+      ],
+      "decision_effect": "none",
+      "machine_finding": "The digest-only span does not determine which claimed PDF/printed-page pair is visually correct.",
+      "required_next_evidence": "A page-render manifest and visual reconciliation bound to this span.",
+      "source_requirement_id": "lk-validity-and-soundness",
+      "source_span": {
+        "end_offset": 289391,
+        "raw_sha256": "be527cf613a1ac2d8050440274d1588c14758c07dcb7945d0edda4be98a4dbff",
+        "span_id": "lk-validity-and-soundness-universal-right-case",
+        "start_offset": 287999
+      },
+      "status": "unresolved_pending_visual_review"
+    }
+  ],
+  "artifact_kind": "public_safe_non_authoritative_machine_review_packet",
+  "authority_boundary": {
+    "authenticated_independence_present": false,
+    "builder_admission_authority_present": false,
+    "expert_review_present": false,
+    "human_review_present": false,
+    "may_change_boundary_decision": false,
+    "may_claim_open_problem_progress": false,
+    "may_freeze_statement": false,
+    "may_handoff_to_prover": false,
+    "may_issue_admission_receipt": false,
+    "may_promote": false
+  },
+  "decision_binding": {
+    "candidate_id": "model-theory-closed-level-indexed-fragment",
+    "candidate_revision": "t3-boundary-v2",
+    "candidate_sha256": "9e2b9535414bad0c3c9adf55446d60a70452f9052258dcf4cef3105dbe4b2530",
+    "canonical_sha256": "f55db634b51ef31871fdbd3e1002979d09c610bcf5dc7540ffef9d26c9f0f2a5",
+    "disposition": "gap",
+    "file_sha256": "ac0e66857405f0f948641d8579457ded2fab89b19fc5bd37409b95c3919eba57",
+    "path": "Builder/pilots/model-theory-admission/decision.v2.json",
+    "prover_handoff": "forbidden",
+    "schema_version": "autolean.pilot-boundary-decision.v2",
+    "selection": "not_selected",
+    "size_bytes": 18653,
+    "statement_contract": "not_frozen"
+  },
+  "evidence_bindings": {
+    "fine_source_spans": {
+      "canonical_sha256": "b08144694ed67b64b7753828f1ee0a2988302847bc0f923b7080df0abf5fe2ff",
+      "file_sha256": "a6aa79b8d35bf5695acbecac241cb2a15d102f06c34c5ccb441b16327a2356b7",
+      "path": "Builder/pilots/model-theory-admission/fine-source-spans.v2.json",
+      "schema_version": "autolean.public-t3-fine-source-spans.v2",
+      "size_bytes": 7002
+    },
+    "human_review_packet": {
+      "canonical_sha256": "bb3f7cde259f98b3266dec7037c7ba8cd671b6c4802eaa373bf721ca3e4da446",
+      "file_sha256": "b92ba3f01483ea08dfa011d6e5d9718cfd2fbcd386ef03ad58b3a8d426205c65",
+      "path": "Builder/pilots/model-theory-admission/human-review/packet.v1.json",
+      "schema_version": "autolean.model-theory-t3-human-review-packet.v1",
+      "size_bytes": 14217
+    },
+    "implementation": {
+      "file_sha256": "8788fafb3dde2ae0d2fa574b81984658e76adacf99770508000fd11cad500a3b",
+      "path": "Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean",
+      "size_bytes": 19815
+    },
+    "pending_review": {
+      "file_sha256": "118bcf1c9e01e142cc246d4c8f7366775b632504672ffb686dd49c5b8032179f",
+      "path": "Builder/pilots/model-theory-admission/pending-review.md",
+      "size_bytes": 2482
+    },
+    "source_rule_matrix": {
+      "canonical_sha256": "017805474b8173b3d3166afc54e9bec494dcefb813cc5c80cef60f4f4267b36a",
+      "file_sha256": "261b95e48aba36e3eb04b0f40fbf46eddbe39685b53bc5d8f2e40a9382662c65",
+      "path": "Builder/pilots/model-theory-admission/source-rule-matrix.v2.json",
+      "schema_version": "autolean.public-source-rule-matrix.v2",
+      "size_bytes": 14781
+    },
+    "t4_declaration_query": {
+      "canonical_sha256": "88ba55d2563e8d74a937d499aa5692c0eaa48b0050a728e48953415791550485",
+      "file_sha256": "167d7a1ede245bfa631c46651b5eb0502d758b8d966d6f4c494fdcb2d75df42a",
+      "path": "Builder/pilots/model-theory-admission/t4-declaration-query.v1.json",
+      "schema_version": "autolean.mathlib-declaration-query-evidence.v1",
+      "size_bytes": 158805
+    },
+    "t4_exact_image_attachment": {
+      "canonical_sha256": "85c16eac7ae79e137318aa599e045b3141e39e7cfa379f619452383da53e6c76",
+      "file_sha256": "0891670f7d5651969cd2036cc21e1ebb2255a696934b66192702d13042648b6e",
+      "path": "Builder/pilots/model-theory-admission/t4-exact-image-attachment.v1.json",
+      "schema_version": "autolean.public-t4-exact-image-attachment.v1",
+      "size_bytes": 4933
+    }
+  },
+  "machine_quorum_compatibility": {
+    "compatibility_scope": "role_and_policy_shape_only",
+    "control_plane_receipt_present": false,
+    "declared_failure_domains_attested": false,
+    "execution_state": "not_executed",
+    "machine_quorum_report_present": false,
+    "policy": {
+      "default_critical_mutation_kinds": [
+        "drop_assumption",
+        "drop_finite",
+        "drop_noetherian",
+        "drop_nonempty",
+        "remove_side_condition",
+        "reverse_parameters",
+        "swap_quantifiers",
+        "vacuity",
+        "weaken_relation"
+      ],
+      "extra_critical_mutation_kinds": [],
+      "minimum_declared_failure_domains": 2,
+      "minimum_reviewers": 3,
+      "required_roles": [
+        "formalization_adversary",
+        "mutation_sentinel",
+        "source_fidelity"
+      ]
+    },
+    "provider_request_present": false,
+    "reason": "This deterministic packet reuses the quorum role vocabulary but is not a BlindMachineReviewTask, provider request, or MachineQuorumReport.",
+    "review_roles": [
+      "formalization_adversary",
+      "mutation_sentinel",
+      "source_fidelity"
+    ]
+  },
+  "machine_recommendation": {
+    "admitted": false,
+    "authority": "machine_advisory",
+    "preferred_profile_for_next_replay": "full-candidate-observed-standard-axioms",
+    "reason": "It is the only full-candidate option that matches the retained exact-image import and axiom observations without claiming that those policies are accepted.",
+    "recommendation": "prepare_successor_evidence_only",
+    "requires_new_decision_revision": true,
+    "selected": false
+  },
+  "mutation_results": [
+    {
+      "admission_effect": "none",
+      "declaration_observations": [
+        {
+          "canonical_type_sha256": "be407ebc10d886dc1be765a0ca5670401b8ac28915e74f484f6fc2f9267d3f3f",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.naive_capture_would_be_true",
+          "observed_axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "3b182f641363ce0a871b560b6c34d9d93ef39192efd0410051d3faef85518d55"
+        },
+        {
+          "canonical_type_sha256": "aed9942f663a122027e400c69a5426b7f8ed8e3214fecb61a81fc7d1297e6d77",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.inst0_capture_avoiding_control",
+          "observed_axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "3b182f641363ce0a871b560b6c34d9d93ef39192efd0410051d3faef85518d55"
+        }
+      ],
+      "limitation": "This rejects one concrete capture mutation; it does not prove general source fidelity.",
+      "machine_finding": "The retained Bool witness distinguishes naive capture from the implemented capture-avoiding instance.",
+      "mutant_rejected": true,
+      "mutation_family": "capture_avoidance",
+      "mutation_id": "capture-avoiding-substitution-control",
+      "observation_assurance": "exact_image_declaration_query_bound",
+      "result": "mutant_rejected_by_retained_kernel_control"
+    },
+    {
+      "admission_effect": "none",
+      "declaration_observations": [
+        {
+          "canonical_type_sha256": "54d28295a475a127ae139b10fa25059c92b5fdb1ad93e7463b2e97021c7c5dc2",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_premise_valid",
+          "observed_axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "3b182f641363ce0a871b560b6c34d9d93ef39192efd0410051d3faef85518d55"
+        },
+        {
+          "canonical_type_sha256": "730c7013ea40ce675562f8eb54b993e91ee213859a2f12b0d6b9d6d31a988b01",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_existsLeft_is_unsound",
+          "observed_axioms": [
+            "Classical.choice",
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "5a165fc38836e750f3e25ba05220a115002ed2f67d3487d6b672e2e40952e4d3"
+        }
+      ],
+      "limitation": "Existential-left is not a candidate constructor; this is only a rejection witness.",
+      "machine_finding": "The retained Bool countermodel rejects reusing an old variable in the existential-left pattern.",
+      "mutant_rejected": true,
+      "mutation_family": "eigenvariable_freshness",
+      "mutation_id": "existential-left-old-variable-reuse-control",
+      "observation_assurance": "exact_image_declaration_query_bound",
+      "result": "mutant_rejected_by_retained_kernel_control"
+    },
+    {
+      "admission_effect": "none",
+      "declaration_observations": [
+        {
+          "canonical_type_sha256": "b9dc3509a78a265c35476a2856955763b277757f0e097a3eb513783e358977d3",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_premise_valid",
+          "observed_axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "3b182f641363ce0a871b560b6c34d9d93ef39192efd0410051d3faef85518d55"
+        },
+        {
+          "canonical_type_sha256": "2de515523edbdc224094cf76dd6817b41088b003dd4866dad8640b6fbc78a15d",
+          "declaration": "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.reused_old_variable_allRight_is_unsound",
+          "observed_axioms": [
+            "Quot.sound",
+            "propext"
+          ],
+          "observed_axioms_sha256": "3b182f641363ce0a871b560b6c34d9d93ef39192efd0410051d3faef85518d55"
+        }
+      ],
+      "limitation": "This rejects one concrete freshness mutation; it does not establish equivalence to the source fresh-symbol discipline.",
+      "machine_finding": "The retained Bool countermodel rejects reusing an old variable for universal-right.",
+      "mutant_rejected": true,
+      "mutation_family": "eigenvariable_freshness",
+      "mutation_id": "universal-right-old-variable-reuse-control",
+      "observation_assurance": "exact_image_declaration_query_bound",
+      "result": "mutant_rejected_by_retained_kernel_control"
+    }
+  ],
+  "packet_id": "model-theory-t3-machine-review-v1",
+  "public_safety": {
+    "contains_credentials": false,
+    "contains_local_cache_path": false,
+    "contains_prompt_or_raw_model_output": false,
+    "contains_source_excerpt": false
+  },
+  "residual_authority_gaps": [
+    "machine findings are not human or expert semantic review",
+    "reviewer identity and independence are not authenticated",
+    "no Builder admission authority or admission receipt is present",
+    "no successor formal profile has been selected or independently replayed",
+    "no statement contract is frozen and Prover handoff remains forbidden"
+  ],
+  "review_effect": "advisory_only",
+  "schema_version": "autolean.model-theory-t3-machine-review-packet.v1",
+  "successor_formal_profile_alternatives": [
+    {
+      "admission_effect": "none",
+      "allowed_write_paths": [
+        "Proof.lean"
+      ],
+      "axiom_profile": "explicit_observed_allowlist",
+      "axioms_allowlist": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "current_observation_compatibility": "matches_exact_image_observation",
+      "declaration_scope": "all_46_retained_declarations",
+      "imports_allowlist": [
+        "Init",
+        "Mathlib.ModelTheory.Semantics"
+      ],
+      "lean_toolchain": "leanprover/lean4:v4.28.0",
+      "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+      "profile_id": "full-candidate-observed-standard-axioms",
+      "proof_slot_profile": "lean-exact-declaration-boundary.v1",
+      "required_next_evidence": "Recompute the complete Library input tree, independently replay the exact image query, and obtain a new Builder decision revision.",
+      "selected": false,
+      "successor_revision_required": true,
+      "worker_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6"
+    },
+    {
+      "admission_effect": "none",
+      "allowed_write_paths": [
+        "Proof.lean"
+      ],
+      "axiom_profile": "strict",
+      "axioms_allowlist": [],
+      "current_observation_compatibility": "incompatible",
+      "declaration_scope": "full_candidate",
+      "imports_allowlist": [
+        "Init",
+        "Mathlib.ModelTheory.Semantics"
+      ],
+      "lean_toolchain": "leanprover/lean4:v4.28.0",
+      "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+      "profile_id": "strict-empty-axiom-reproof",
+      "proof_slot_profile": "lean-exact-declaration-boundary.v1",
+      "required_next_evidence": "Remove all observed axiom use, rebuild the exact image, and rerun every declaration query plus the complete Library input-tree receipt.",
+      "selected": false,
+      "successor_revision_required": true,
+      "worker_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6"
+    },
+    {
+      "admission_effect": "none",
+      "allowed_write_paths": [
+        "Proof.lean"
+      ],
+      "axiom_profile": "explicit_target_allowlist",
+      "axioms_allowlist": [
+        "Classical.choice",
+        "Quot.sound",
+        "propext"
+      ],
+      "current_observation_compatibility": "target_observation_matches_but_closure_missing",
+      "declaration_scope": "closed_sound_plus_exact_dependency_closure",
+      "imports_allowlist": [
+        "Init",
+        "Mathlib.ModelTheory.Semantics"
+      ],
+      "lean_toolchain": "leanprover/lean4:v4.28.0",
+      "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+      "profile_id": "target-only-observed-standard-axioms",
+      "proof_slot_profile": "lean-exact-declaration-boundary.v1",
+      "required_next_evidence": "Retain an exact declaration dependency closure, query every dependency, recompute the Library input tree, and obtain a new Builder decision revision.",
+      "selected": false,
+      "successor_revision_required": true,
+      "worker_image": "autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6"
+    }
+  ]
+}

@@ -41,6 +41,7 @@ from autolean_contracts import (
     verification_attestation_payload,
     verification_gateway_attestation_payload,
 )
+from autolean_contracts.research_advisory import ResearchAdvisoryEventV1
 
 from .artifacts import ArtifactRef, ArtifactStore
 from .builder_fidelity import validate_canonical_type_check
@@ -66,6 +67,10 @@ from .events import (
     request_hash,
 )
 from .leases import Lease, LeaseStore
+from .research_advisory import (
+    RESEARCH_ADVISORY_ENTITY_TYPE,
+    validate_research_advisory_event,
+)
 
 _PLACEHOLDER_RE = re.compile(r"\b(?:sorry|admit)\b|sorryAx")
 
@@ -214,6 +219,80 @@ class ControlPlane:
         if len(events) != 1:
             raise InvalidTransition("corrupt idempotency record references multiple command events")
         return events[0]
+
+    def record_research_advisory(
+        self,
+        advisory: ResearchAdvisoryEventV1,
+        *,
+        idempotency_key: str,
+    ) -> StoredEvent:
+        """Append an advisory-only ResearchScout observation with no workflow authority.
+
+        This command does not write an artifact, allocate a lease, register a task, or attach the
+        advisory to a bundle/contract.  The stable proposal digest is both its entity identity and
+        the only duplicate key.  A matching retry is safe; a different record for that digest is
+        rejected rather than overwriting historical research evidence.
+        """
+
+        if not isinstance(advisory, ResearchAdvisoryEventV1):
+            raise InvalidTransition("research advisory requires the typed V1 public envelope")
+        try:
+            # Pydantic's ``model_construct`` can manufacture an instance without validators.
+            # Re-validate at the durable command boundary before any append so a malformed
+            # in-memory object cannot leave a permanently malformed advisory event behind.
+            advisory = ResearchAdvisoryEventV1.model_validate(advisory.model_dump(mode="json"))
+        except ValueError as error:
+            raise InvalidTransition(
+                "research advisory violates the typed V1 public envelope"
+            ) from error
+        idempotency = self._idempotency(
+            scope="record_research_advisory",
+            key=idempotency_key,
+            semantic_request=advisory.model_dump(mode="json"),
+        )
+        replayed = self._replayed_event(idempotency)
+        if replayed is not None:
+            self._assert_research_advisory_event(replayed, advisory)
+            return replayed
+
+        event = NewEvent(
+            advisory.event_kind.value,
+            payload=self._json_object(advisory.model_dump(mode="json")),
+        )
+        try:
+            stored = self.events.append(
+                RESEARCH_ADVISORY_ENTITY_TYPE,
+                advisory.proposal_id,
+                expected_sequence=0,
+                events=(event,),
+                idempotency=idempotency,
+            )
+        except ConcurrencyError as error:
+            existing = self.events.read_stream(RESEARCH_ADVISORY_ENTITY_TYPE, advisory.proposal_id)
+            if len(existing) == 1:
+                self._assert_research_advisory_event(existing[0], advisory)
+                return existing[0]
+            raise InvalidTransition(
+                "research advisory proposal ID is already bound to different immutable evidence"
+            ) from error
+        if len(stored) != 1:
+            raise ProjectionError("research advisory append returned an unexpected event count")
+        self._assert_research_advisory_event(stored[0], advisory)
+        return stored[0]
+
+    @staticmethod
+    def _assert_research_advisory_event(
+        event: StoredEvent,
+        advisory: ResearchAdvisoryEventV1,
+    ) -> None:
+        try:
+            stored = validate_research_advisory_event(event)
+        except ProjectionError as error:
+            raise InvalidTransition("stored research advisory event is malformed") from error
+        if stored != advisory:
+            raise InvalidTransition(
+                "research advisory proposal ID is already bound to different immutable evidence"
+            )
 
     @staticmethod
     def _claim_receipt_from_event(bundle_id: str, event: StoredEvent) -> ClaimReceipt:

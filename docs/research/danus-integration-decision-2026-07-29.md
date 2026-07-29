@@ -100,7 +100,10 @@ AutoLean 已提供足够强的 ContextPack 和 provider seam：`ContextPack` 包
 
 ### 5.1 实验定位
 
-先做一个不依赖 Danus 包的 `ResearchScoutAdapterV1`（建议路径：`Builder/src/autolean_builder/adapters/research_scout.py`；本轮不写实现）。它可以由 DeepSeek 或 fake provider 驱动，也可以未来接入一个单独容器中的 Danus-inspired worker；但 control plane 只看协议，不知道外部 runtime。
+`Builder/src/autolean_builder/adapters/research_scout.py` 已实现不依赖 Danus 包的
+`ResearchScoutAdapterV1`：它只验证并投影 canonical proposal，既不执行 provider I/O，也不写
+control plane、图、合同或 verifier。未来它可以由 DeepSeek 或 fake provider 驱动，也可以接入
+单独容器中的 Danus-inspired worker；control plane 仍只看协议，不知道外部 runtime。
 
 ### 5.2 请求合同（建议）
 
@@ -247,4 +250,4 @@ Adapter 必须：
 | 16-hex IDs / mutable refs | 拒绝 | full SHA-256 + separate provenance revisions |
 | Claude/Anthropic runtime | 拒绝 | Codex/GPT/DeepSeek/custom allowlist |
 
-**风险结论：** 直接集成 Danus runtime 为 P0；按本文件实现隔离 scout 为 P2 研究增强，且不会扩大 AutoLean 的语义、权限或发布边界。下一步不是 fork Danus，而是把上述 `ResearchScoutAdapterV1` 写成最小 typed seam，并用 fake → DeepSeek → Builder → Lean 的闭环证明它只能贡献候选、不能贡献真相。
+**风险结论：** 直接集成 Danus runtime 为 P0；按本文件实现隔离 scout 为 P2 研究增强，且不会扩大 AutoLean 的语义、权限或发布边界。最小 `ResearchScoutAdapterV1` typed seam 已存在；下一步不是 fork Danus，而是在固定 fake/replay 后，用 DeepSeek → Builder → Lean 的闭环验证它只能贡献候选、不能贡献真相。

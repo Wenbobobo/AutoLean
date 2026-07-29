@@ -15,7 +15,18 @@ from collections.abc import Mapping
 from enum import StrEnum
 from typing import Literal
 
-from autolean_contracts import ContractModel, canonical_json_bytes
+from autolean_contracts import (
+    ContractModel,
+    canonical_json_bytes,
+    validate_model_routing_identifier,
+)
+from autolean_contracts.research_advisory import (
+    ResearchAdvisoryEventKindV1,
+    ResearchAdvisoryEventV1,
+    ResearchAdvisoryProposalKindV1,
+    ResearchAdvisoryProviderV1,
+    ResearchAdvisorySourceRefV1,
+)
 from pydantic import Field, ValidationError, field_validator, model_validator
 
 _ID = re.compile(r"^[a-z][a-z0-9._-]{2,127}$")
@@ -27,6 +38,8 @@ _SECRET = re.compile(
 _HOST_PATH = re.compile(
     r"(?:[A-Za-z]:[\\/]|(?:^|[\s\"'])/(?:home|users|var|etc|tmp|mnt|private|workspace)(?:[\\/]|$))"
 )
+_UNC_PATH = re.compile(r"(?:^|[\s\"'])\\\\[^\\/\s]+[\\/]")
+_FILE_URI = re.compile(r"\bfile://", re.IGNORECASE)
 _PROOF_PLACEHOLDER = re.compile(r"\b(?:sorry|admit|sorryAx|axiom|import)\b")
 
 
@@ -79,7 +92,7 @@ def _require_sha256(value: str, label: str) -> str:
 def _reject_sensitive_text(value: str, label: str) -> str:
     if not value or "\x00" in value:
         raise ValueError(f"{label} must be non-empty text without NUL")
-    if _HOST_PATH.search(value):
+    if _HOST_PATH.search(value) or _UNC_PATH.search(value) or _FILE_URI.search(value):
         raise ValueError(f"{label} must not contain a host path")
     if _SECRET.search(value):
         raise ValueError(f"{label} must not contain a secret-like value")
@@ -189,10 +202,17 @@ class ResearchScoutRequestV1(ContractModel):
     egress_class: ResearchScoutEgressClassV1
     provenance: ResearchScoutRequestProvenanceV1
 
-    @field_validator("request_id", "mission_id", "rights_scope_id", "provider_snapshot_id")
+    @field_validator("request_id", "mission_id", "rights_scope_id")
     @classmethod
     def validate_identifiers(cls, value: str) -> str:
         return _require_id(value, "research-scout request identifier")
+
+    @field_validator("provider_snapshot_id")
+    @classmethod
+    def validate_provider_snapshot_id(cls, value: str) -> str:
+        value = _require_id(value, "provider_snapshot_id")
+        validate_model_routing_identifier(value, label="provider_snapshot_id")
+        return value
 
     @field_validator("contract_id")
     @classmethod
@@ -283,7 +303,9 @@ class ResearchScoutProviderV1(ContractModel):
     @classmethod
     def validate_model_id(cls, value: str) -> str:
         _require_id(value, "model_id")
-        return _reject_sensitive_text(value, "model_id")
+        value = _reject_sensitive_text(value, "model_id")
+        validate_model_routing_identifier(value, label="model_id")
+        return value
 
 
 class ResearchScoutUsageV1(ContractModel):
@@ -393,6 +415,39 @@ class ResearchScoutProposalV1(ContractModel):
 
     def canonical_bytes(self) -> bytes:
         return canonical_json_bytes(self)
+
+    def control_plane_event(self) -> ResearchAdvisoryEventV1:
+        """Return the only proposal projection allowed into the append-only event stream.
+
+        The projection deliberately drops statement/evidence text and declared usage.  Those
+        fields remain inside the proposal artifact and are neither Dashboard material nor an
+        authoritative model-accounting record.  It also carries no contract or bundle binding,
+        so recording this advisory cannot freeze a statement, schedule a Prover, or affect a
+        verification/release state.
+        """
+
+        return ResearchAdvisoryEventV1(
+            proposal_id=self.proposal_id,
+            event_kind=ResearchAdvisoryEventKindV1(self.event_kind),
+            proposal_kind=ResearchAdvisoryProposalKindV1(self.kind.value),
+            request_id=self.request_id,
+            context_pack_hash=self.context_pack_hash,
+            output_sha256=self.output_sha256,
+            response_cas_sha256=self.response_cas_sha256,
+            dependency_refs=tuple(item for item in self.dependency_refs if item is not None),
+            source_refs=tuple(
+                ResearchAdvisorySourceRefV1(
+                    source_id=item.source_id,
+                    span_id=item.span_id,
+                    hash=item.hash,
+                )
+                for item in self.source_refs
+            ),
+            provider=ResearchAdvisoryProviderV1(
+                provider_id=self.provider.provider_id,
+                model_id=self.provider.model_id,
+            ),
+        )
 
 
 class ResearchScoutAdapterV1:

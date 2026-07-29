@@ -254,6 +254,7 @@ td strong, .subtle { display: block; }
 .record-verification { background: #e6f3ed; color: #176b50; }
 .record-attempt { background: #e9f1f8; color: #245f95; }
 .record-synthetic_execution, .record-benchmark { background: #f6f1df; color: #735f17; }
+.record-research_advisory { background: #e5f0ef; color: #1d6b68; }
 .artifact-list { display: grid; }
 .artifact-row { min-height: 58px; display: grid; grid-template-columns: 24px minmax(160px, 1fr) minmax(120px, .5fr) auto; gap: 12px; align-items: center; border-bottom: 1px solid #edf0f2; font-size: 12px; }
 .artifact-row div { display: grid; gap: 3px; }

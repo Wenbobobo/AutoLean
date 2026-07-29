@@ -94,6 +94,7 @@ WorkRecordCategory = Literal[
     "verification",
     "synthetic_execution",
     "benchmark",
+    "research_advisory",
     "other",
 ]
 

@@ -14,6 +14,11 @@ from typing import cast
 
 from .errors import ProjectionError
 from .events import JsonObject, JsonValue, StoredEvent, canonical_json
+from .research_advisory import (
+    RESEARCH_ADVISORY_ENTITY_TYPE,
+    RESEARCH_ADVISORY_EVENT_TYPES,
+    validate_research_advisory_event,
+)
 
 _EXACT_TRANSITIVE_LEVERAGE_NODE_LIMIT = 512
 _T7_SYNTHETIC_EVENT_SCHEMA = "autolean.t7-synthetic-node-result.v2"
@@ -83,6 +88,11 @@ class DashboardProjection:
         fate_replays: dict[str, _FateReplayState] = {}
 
         for event in self._events:
+            if (
+                event.entity_type == RESEARCH_ADVISORY_ENTITY_TYPE
+                and event.event_type not in RESEARCH_ADVISORY_EVENT_TYPES
+            ):
+                raise ProjectionError("research advisory stream contains an unknown event type")
             payload = event.payload
             bundle_id = self._event_task_id(event)
             if event.event_type == "task.registered":
@@ -108,6 +118,10 @@ class DashboardProjection:
                 elif existing is None or existing.get("provider") != "fate-execution":
                     raise ProjectionError("FATE terminal run identity lost its started event")
                 runs[fate_run_id] = fate_run
+            elif event.event_type in RESEARCH_ADVISORY_EVENT_TYPES:
+                # Advisory records deliberately create neither graph nodes nor runs.  Validation
+                # here prevents a tainted record from gaining a harmless-looking timeline entry.
+                validate_research_advisory_event(event)
             elif event.event_type == "task.claimed" and bundle_id:
                 active_bundles.add(bundle_id)
                 self._set_task_status(nodes, bundle_id, "running")
@@ -863,6 +877,10 @@ class DashboardProjection:
                 summary = "FATE benchmark verifier accepted"
             elif accepted is False:
                 summary = "FATE benchmark verifier rejected"
+        elif event.event_type in RESEARCH_ADVISORY_EVENT_TYPES:
+            advisory = validate_research_advisory_event(event)
+            label = "hypothesis" if event.event_type == "research_hypothesis" else "observation"
+            summary = f"Research advisory {label}: {advisory.proposal_kind.value}"
         return DashboardProjection._json_object(
             {
                 "sequence": event.global_position,

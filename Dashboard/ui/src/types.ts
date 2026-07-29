@@ -147,6 +147,7 @@ export type WorkRecordCategory =
   | "verification"
   | "synthetic_execution"
   | "benchmark"
+  | "research_advisory"
   | "other";
 
 export interface WorkRecord {

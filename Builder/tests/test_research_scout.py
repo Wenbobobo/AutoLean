@@ -123,6 +123,44 @@ def test_fake_round_trip_is_canonical_and_proposal_only() -> None:
     assert proposal.canonical_bytes() == canonical_json_bytes(proposal)
 
 
+def test_control_plane_event_projection_drops_private_proposal_text_and_authority_paths() -> None:
+    request, artifacts = _request_and_artifacts()
+    proposal = ResearchScoutAdapterV1().accept_response(
+        request,
+        artifacts,
+        _response_bytes(request, artifacts),
+    )
+
+    event = proposal.control_plane_event()
+    payload = event.model_dump(mode="json")
+
+    assert event.proposal_id == proposal.proposal_id
+    assert event.output_sha256 == proposal.output_sha256
+    assert event.response_cas_sha256 == proposal.response_cas_sha256
+    assert event.authority == "machine_advisory"
+    assert event.promotion is False
+    assert set(payload) == {
+        "schema_version",
+        "proposal_id",
+        "event_kind",
+        "proposal_kind",
+        "request_id",
+        "context_pack_hash",
+        "output_sha256",
+        "response_cas_sha256",
+        "dependency_refs",
+        "source_refs",
+        "provider",
+        "authority",
+        "promotion",
+    }
+    public_bytes = canonical_json_bytes(event)
+    assert proposal.statement.encode("utf-8") not in public_bytes
+    assert proposal.evidence.encode("utf-8") not in public_bytes
+    for forbidden in (b"usage", b"contract_id", b"bundle_id", b"proof", b"verification"):
+        assert forbidden not in public_bytes
+
+
 def test_hash_and_context_substitution_fail_closed() -> None:
     request, artifacts = _request_and_artifacts()
     adapter = ResearchScoutAdapterV1()
@@ -232,13 +270,18 @@ def test_authority_escalation_and_unknown_response_fields_are_rejected() -> None
 
 def test_paths_secrets_and_raw_context_egress_are_rejected() -> None:
     request, artifacts = _request_and_artifacts()
-    with pytest.raises(ValidationError, match="host path"):
-        ResearchScoutRequestV1.model_validate(
-            {
-                **request.model_dump(mode="json"),
-                "goal": "C:\\Users\\operator\\private theorem",
-            }
-        )
+    for host_path in (
+        "C:\\Users\\operator\\private theorem",
+        r"\\operator-share\private theorem",
+        "file:///home/operator/private theorem",
+    ):
+        with pytest.raises(ValidationError, match="host path"):
+            ResearchScoutRequestV1.model_validate(
+                {
+                    **request.model_dump(mode="json"),
+                    "goal": host_path,
+                }
+            )
     with pytest.raises(ValidationError, match="secret-like"):
         ResearchScoutRequestV1.model_validate(
             {
@@ -250,6 +293,12 @@ def test_paths_secrets_and_raw_context_egress_are_rejected() -> None:
     request_payload["raw_context"] = "/home/operator/private.txt"
     with pytest.raises(ResearchScoutAdapterError, match="typed schema"):
         ResearchScoutAdapterV1().parse_request(canonical_json_bytes(request_payload), artifacts)
+    with pytest.raises(ResearchScoutAdapterError, match="typed schema"):
+        ResearchScoutAdapterV1().accept_response(
+            request,
+            artifacts,
+            _response_bytes(request, artifacts, evidence=r"Read \\operator-share\private."),
+        )
 
 
 def test_disallowed_provider_non_utf8_and_proof_holes_fail_before_authority_paths() -> None:
@@ -292,6 +341,42 @@ def test_disallowed_provider_non_utf8_and_proof_holes_fail_before_authority_path
         )
 
 
+def test_forbidden_provider_family_cannot_use_the_custom_provider_seam() -> None:
+    request, artifacts = _request_and_artifacts()
+
+    with pytest.raises(ValidationError, match="not permitted"):
+        ResearchScoutRequestV1.model_validate(
+            {
+                **request.model_dump(mode="json"),
+                "provider_snapshot_id": "custom-claude-snapshot-v1",
+            }
+        )
+
+    custom_artifacts = artifacts.model_copy(
+        update={
+            "provider_snapshot": ImmutableArtifactCommitmentV1(
+                artifact_id="custom-snapshot-v1",
+                sha256=artifacts.provider_snapshot.sha256,
+            )
+        }
+    )
+    custom_request = request.model_copy(
+        update={
+            "provider_snapshot_id": "custom-snapshot-v1",
+            "egress_class": ResearchScoutEgressClassV1.APPROVED_CUSTOM,
+            "input_artifacts_sha256": custom_artifacts.computed_sha256(),
+        }
+    )
+    response = _response_bytes(
+        custom_request,
+        custom_artifacts,
+        provider={"provider_id": "custom", "model_id": "anthropic-compatible-v1"},
+    )
+
+    with pytest.raises(ResearchScoutAdapterError, match="typed schema"):
+        ResearchScoutAdapterV1().accept_response(custom_request, custom_artifacts, response)
+
+
 def test_adapter_has_no_runtime_or_authority_import_surface() -> None:
     source = (
         Path(__file__).parents[1] / "src" / "autolean_builder" / "adapters" / "research_scout.py"
@@ -299,6 +384,12 @@ def test_adapter_has_no_runtime_or_authority_import_surface() -> None:
     implementation = source.read_text(encoding="utf-8")
 
     assert "autolean_prover" not in implementation
+    assert "autolean_control_plane" not in implementation
     assert "sqlite" not in implementation
     assert "subprocess" not in implementation
+    assert "verify_submission" not in implementation
+    assert "StatementContract" not in implementation
+    assert "httpx" not in implementation
+    assert "requests" not in implementation
+    assert "socket" not in implementation
     assert "import danus" not in implementation.lower()

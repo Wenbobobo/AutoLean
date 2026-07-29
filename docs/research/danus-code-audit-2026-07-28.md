@@ -16,8 +16,9 @@ Primary records:
 - [arXiv:2607.06447v2](https://arxiv.org/abs/2607.06447), dated 2026-07-08 and
   licensed CC BY 4.0.
 
-The Python package declares version `0.1.0`, but the audit found no evidence for a corresponding
-release or tag. All references in this report therefore use the commit SHA.
+The Python package declares version `0.1.0`. A `v0.1.0` tag exists, but it resolves to an earlier
+commit than this audit's pinned main revision; all source references in this report therefore use
+the full commit SHA rather than the version label.
 
 ## Decision
 

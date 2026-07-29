@@ -110,3 +110,16 @@ SHA-256 `d49f0fe94cfbd7cdc162c5bc9a4a49c6c3b2f3e907dbba6c82b9d6c206654a31`.
 This is a transport interruption record, not evidence for or against DeepSeek capability. A later
 attempt must use a new run identity and fresh roots; it cannot resume, overwrite, or combine this
 partial run with another arm.
+
+## Observed 2026-07-30 independent rerun
+
+A new run identity and fresh state/private roots were used after the operator reported that the
+network had recovered. The control arm again dispatched exactly one request and returned the
+redacted failure class `network`; automatic retry remained disabled and the 512-token arm made zero
+calls. No saturation comparison or competence claim was produced. The public report is
+[`deepseek-output-budget-ablation-2026-07-30.json`](research/deepseek-output-budget-ablation-2026-07-30.json),
+SHA-256 `43196ba6b4a466aea9a353f8e4b4f7aa42402afaed1e8bdebd239e51007ef219`.
+
+The repeated result is evidence about this Codex sandbox route only. It is not an endpoint-outage,
+authentication, billing, or model-quality diagnosis, and it must not be merged with the prior
+partial run as though the two arms of one experiment had completed.

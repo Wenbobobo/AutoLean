@@ -21,6 +21,7 @@ from .authorization import (
     ModelExecutionReservationV1,
     ModelExecutionSubjectKindV1,
     model_execution_authorization_payload,
+    validate_model_routing_identifier,
 )
 from .base import ContractModel, utc_now
 from .dependency_closure import (
@@ -349,6 +350,7 @@ __all__ = [
     "dependency_tree_hash",
     "freeze_evidence_hash",
     "model_execution_authorization_payload",
+    "validate_model_routing_identifier",
     "model_execution_completion_attestation_payload",
     "model_execution_completion_evidence_identity",
     "model_execution_completion_public",
