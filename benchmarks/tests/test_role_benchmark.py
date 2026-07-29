@@ -10,6 +10,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from autolean_contracts import canonical_json_bytes
@@ -682,6 +683,21 @@ def test_private_manifest_write_rejects_linked_parent(tmp_path: Path) -> None:
     with pytest.raises(RoleBenchmarkError, match="symlink, junction, or reparse point"):
         prepare_private_manifest_path(paths)
     assert not (linked_target / paths.manifest_path.name).exists()
+
+
+def test_private_manifest_write_fails_fast_when_parent_is_not_writable(
+    tmp_path: Path,
+) -> None:
+    paths = operator_private_benchmark_paths(
+        "unwritable-manifest-run",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
+
+    with (
+        patch("benchmarks.role_benchmark.os.open", side_effect=PermissionError("denied")),
+        pytest.raises(RoleBenchmarkError, match="parent is not writable"),
+    ):
+        prepare_private_manifest_path(paths)
 
 
 def test_repetition_metrics_expose_output_fluctuation(tmp_path: Path) -> None:

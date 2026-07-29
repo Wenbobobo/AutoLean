@@ -60,6 +60,11 @@ metrics, or receipt while retaining an old commitment.
 
 ## Run the offline protocol smoke
 
+Set `AUTOLEAN_BENCHMARK_PRIVATE_ROOT` to an absolute, writable operator-private directory outside
+every Git checkout before starting. Treat failure of that preflight as a blocker; do not fall back
+to a repository path and do not run trials first. In a restricted agent sandbox, choose a writable
+external state root supplied by the operator or runtime rather than relying on the host default.
+
 Use the bundled forward test rather than reconstructing a long command:
 
 ```powershell

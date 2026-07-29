@@ -182,6 +182,15 @@ global score across Prover, formalizer, reviewer, supervisor, and allocator role
 Use a script or short command file for repeated production runs rather than expanding this into a
 long shell command.
 
+The repository-owned [`run-autolean-benchmarks`](../skills/run-autolean-benchmarks/SKILL.md)
+skill fixes this operating sequence. Its 2026-07-30
+[offline forward-test evidence](research/role-benchmark-skill-forward-test-2026-07-30.json)
+records two byte-identical V3 readiness/report runs across five fake roles and fifteen trials.
+This is replay evidence only: the external backend remained blocked, no real provider ran, and the
+result carries no proof, semantic, competence, or promotion authority. The skill now requires an
+explicit writable operator-private root before trials; an unavailable default state directory
+fails before a database or model call instead of hanging during final manifest creation.
+
 ## External-provider bridge
 
 `benchmarks.authorized_role_bridge` is a separate, non-promotable execution substrate; it does not

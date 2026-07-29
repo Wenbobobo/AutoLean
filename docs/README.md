@@ -56,6 +56,9 @@ runner reports success.
     [2026-07-30 rerun](research/deepseek-output-budget-ablation-2026-07-30.json) did the same and
     skipped the candidate arm. Neither contains a budget comparison or supports an endpoint,
     authentication, billing, or model-quality conclusion.
+    The repository-owned [benchmark skill](../skills/run-autolean-benchmarks/SKILL.md) and its
+    [2026-07-30 offline forward test](research/role-benchmark-skill-forward-test-2026-07-30.json)
+    preserve the repeatable V3 workflow without turning fake results into model evidence.
 11. [FATE compile canary](fate-compile-canary.md), the non-promotable
     [agent-smoke-8 vertical bridge](fate-agent-smoke.md), and the
     [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain,

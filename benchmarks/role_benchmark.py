@@ -17,6 +17,7 @@ import sqlite3
 import time
 import uuid
 from collections.abc import Iterable, Mapping
+from contextlib import suppress
 from dataclasses import dataclass
 from enum import StrEnum
 from pathlib import Path
@@ -1101,6 +1102,17 @@ def prepare_private_manifest_path(paths: RoleBenchmarkPrivatePaths) -> Path:
         raise RoleBenchmarkError("private manifest path escapes the operator-private root")
     _validated_private_artifact_root(resolved_parent)
     _reject_reparse_point(paths.manifest_path, label="private manifest path")
+    probe = manifest_parent / f".autolean-write-probe-{uuid.uuid4().hex}"
+    descriptor: int | None = None
+    try:
+        descriptor = os.open(probe, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+    except OSError as error:
+        raise RoleBenchmarkError("private manifest parent is not writable") from error
+    finally:
+        if descriptor is not None:
+            os.close(descriptor)
+        with suppress(OSError):
+            probe.unlink()
     return paths.manifest_path
 
 
