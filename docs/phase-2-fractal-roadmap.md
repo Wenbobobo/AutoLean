@@ -1,7 +1,7 @@
 # Phase 2 Fractal Roadmap
 
 Status: strategic milestone record, not an execution-order or release authority
-Updated: 2026-07-28
+Updated: 2026-07-29
 
 ## Executive summary
 
@@ -18,6 +18,28 @@ Phase 2 preparation in parallel, while keeping the authority boundary strict:
 
 This document is fractal: every level repeats the same pattern of mission, milestone, task,
 evidence, and stop condition.
+
+The public candidate does not change this boundary: on 2026-07-29, draft
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified at `cd42ba7` with a successful
+GitHub Actions CI run. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
+semantic-admission, kernel, provider, or novelty result for Phase 2.
+
+## M0--M8 alignment
+
+The canonical long-horizon ladder is maintained in [roadmap-next.md](roadmap-next.md). This table
+states where this strategic document fits; it is not a second execution board.
+
+| Canonical milestone | Relation to this roadmap | Gate that prevents false progress |
+| --- | --- | --- |
+| M0 — invariants | The Builder -> frozen contract -> Prover boundary, three graphs, and immutable evidence remain permanent constraints. | No calibration, proof, or agent consensus may alter a contract silently. |
+| M1 — reproducible Phase 1 architecture | The present codebase/candidate supplies the control plane and interfaces. | CI/local validation is not authority-bearing execution. |
+| M2 — authority-bearing vertical | Required before `production_ingestion`. | Rights, semantic admission, real OCI/Lean, gateway, and signer evidence must bind one revision. |
+| M3 — controlled Prover baseline | Supplies role-specific model evidence, not topic selection or statement fidelity. | Frozen experiment/evaluator/egress/budget policy; no aggregate role score. |
+| M4 — Builder calibration factory | This document's opening-textbook and 50--100 candidate work. | Machine results are `machine_advisory`; harmful-negative and abstention behavior must be measured. |
+| M5 — first chapter closure | This document's 20--40-node pilot and feedback artifacts. | Unchanged frozen bundles, verifier receipts, and source-bound gaps/proofs. |
+| M6 — connected downstream library | Later multi-slice `Library/`, Dependency Closure V2 Stage B, and stable APIs. | Pinned builds, migration/provenance, and demonstrated closure reduction. |
+| M7 — research atlas/scout | Danus-inspired proposal workers and blind known-result reproof, never Danus runtime adoption. | Held-out baseline comparison and unchanged M0--M6 acceptance path. |
+| M8 — conjecture frontier | Quarantined Open Problem portfolios and exact claim packets. | Only independent semantic/kernel/reproduction/novelty authority may permit a public claim. |
 
 ## Entry criteria from Phase 1
 
@@ -50,9 +72,11 @@ The content-addressed
 three discovery lanes with source, rights, overlap, stop gates, and `local_only` model egress. The
 iFEM lane also freezes prerequisite denominator revision
 `ifem-coercive-prerequisites-r01-f9d1f2d4717a` before any coverage observation. Its mathlib census
-is still `not_started`, exact bounded source bytes have not been acquired, and the manifest
-explicitly forbids Builder freeze and Prover handoff. This closes discovery-manifest construction,
-not rights clearance, textbook calibration, pilot admission, or a coverage claim.
+is still `not_started`. The exact 13-file source set has now been acquired and replayed as
+`local_only`. Text-free indexes bind 10 notebooks and 161 cells plus three ATX-heading sections in
+`intro.md`; no mathematical claim span has been selected. The manifest explicitly forbids Builder
+freeze and Prover handoff. This closes source-byte acquisition and locator construction, not model
+egress, source interpretation, textbook calibration, pilot admission, or a coverage claim.
 
 ## Machine-first review policy
 
@@ -62,13 +86,14 @@ adversarial falsifier, a library critic, and a cheating supervisor. Consensus is
 not another model vote. Critical mutation survival, a counterexample, unresolved dissent, shared
 model failure domain, or stale calibration forces abstention.
 
-Machine screening remains a non-promotable advisory state. Measured harmful false-accept and
-risk-coverage gates may reduce how often an accountable reviewer must intervene, but they do not
-grant a model semantic-admission authority or permission to transition a real candidate to
-`frozen`. Any future exception requires a separately versioned authority policy and an explicit,
-accountable decision. Machine roles also cannot grant source rights, attest that an authority host
-or signer exists, or make a public novelty claim. Every remaining external decision is maintained
-only in
+Machine screening remains exactly `machine_advisory`: agents may close deterministic software
+checks, preserve dissent, recommend abstention, reject a candidate, or select a lower-risk discovery
+route. They may not convert their own positive recommendation into source rights, semantic
+admission, a `frozen` transition, Lean-kernel verification, authority-host/signer attestation, or a
+public novelty decision. Measured harmful false-accept and risk-coverage gates may reduce how often
+an accountable reviewer must intervene, but they do not alter that authority rule. Any future
+exception requires a separately versioned authority policy and an explicit, accountable decision.
+Every remaining external decision is maintained only in
 [operator-and-authority-worklist.md](operator-and-authority-worklist.md).
 
 | Gate | Required before production ingestion | Can proceed in parallel now |

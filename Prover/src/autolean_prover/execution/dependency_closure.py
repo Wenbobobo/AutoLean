@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import hashlib
 import stat
+from collections.abc import Callable
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path, PurePosixPath
@@ -37,6 +38,20 @@ class DependencyClosureBlobReader(Protocol):
     """Read exactly one content-addressed blob without exposing store enumeration or mutation."""
 
     def read_blob(self, reference: DependencyClosureArtifactRefV1) -> bytes: ...
+
+
+@dataclass(frozen=True, slots=True)
+class ClaimScopedDependencyBlobReader:
+    """Adapter for the control-plane claim capability.
+
+    The callback is intentionally the only operation exposed to the materializer. The control
+    plane implementation must bind it to a current claim and reject arbitrary CAS reads.
+    """
+
+    read_claimed_artifact: Callable[[DependencyClosureArtifactRefV1], bytes]
+
+    def read_blob(self, reference: DependencyClosureArtifactRefV1) -> bytes:
+        return self.read_claimed_artifact(reference)
 
 
 @dataclass(frozen=True, slots=True)

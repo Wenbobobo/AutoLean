@@ -4,7 +4,7 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from autolean_contracts import (
     DigestV1,
@@ -30,6 +30,7 @@ class Capability(StrEnum):
     TEXT_GENERATION = "text_generation"
     USAGE_ACCOUNTING = "usage_accounting"
     REASONING_EFFORT = "reasoning_effort"
+    STRUCTURED_JSON = "structured_json"
     TOOL_CALLING = "tool_calling"
     STREAMING = "streaming"
     LOCAL_EXECUTION = "local_execution"
@@ -102,6 +103,7 @@ class ModelRequest:
     max_output_tokens: int = 4096
     timeout_seconds: float | None = None
     reasoning_effort: str | None = None
+    response_format: Literal["json_object"] | None = None
     tools: tuple[ToolSpec, ...] = ()
     required_capabilities: frozenset[Capability] = field(default_factory=frozenset)
     working_directory: Path | None = None
@@ -128,6 +130,8 @@ class ModelRequest:
                     "model request timeout_seconds exceeds the supported upper bound"
                 )
         validate_reasoning_effort(self.reasoning_effort, label="reasoning_effort")
+        if self.response_format not in {None, "json_object"}:
+            raise ConfigurationError("response_format must be None or 'json_object'")
         if not isinstance(self.required_capabilities, frozenset) or not all(
             isinstance(value, Capability) for value in self.required_capabilities
         ):
@@ -162,6 +166,7 @@ class ModelRequest:
         max_output_tokens: int = 4096,
         timeout_seconds: float | None = None,
         reasoning_effort: str | None = None,
+        response_format: Literal["json_object"] | None = None,
         tools: tuple[ToolSpec, ...] = (),
         required_capabilities: frozenset[Capability] = frozenset(),
         working_directory: Path | None = None,
@@ -179,6 +184,7 @@ class ModelRequest:
             max_output_tokens=max_output_tokens,
             timeout_seconds=timeout_seconds,
             reasoning_effort=reasoning_effort,
+            response_format=response_format,
             tools=tools,
             required_capabilities=required_capabilities,
             working_directory=working_directory,
@@ -192,13 +198,14 @@ class ModelRequest:
             return digest_model(
                 HashKindV1.PROMPT,
                 {
-                    "schema_version": "autolean.model-request.v2",
+                    "schema_version": "autolean.model-request.v3",
                     "prompt": self.prompt,
                     "system_prompt": self.system_prompt,
                     "max_input_tokens": self.max_input_tokens,
                     "max_output_tokens": self.max_output_tokens,
                     "timeout_seconds": self.timeout_seconds,
                     "reasoning_effort": self.reasoning_effort,
+                    "response_format": self.response_format,
                     "tools": [
                         {
                             "name": tool.name,
@@ -229,6 +236,8 @@ class ModelRequest:
         required.add(Capability.TEXT_GENERATION)
         if self.reasoning_effort is not None:
             required.add(Capability.REASONING_EFFORT)
+        if self.response_format is not None:
+            required.add(Capability.STRUCTURED_JSON)
         if self.tools:
             required.add(Capability.TOOL_CALLING)
         if self.working_directory is not None:

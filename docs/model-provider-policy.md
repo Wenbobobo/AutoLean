@@ -129,8 +129,11 @@ exact usage, reconciliation journals, and the authenticated private manifest liv
 operator-owned private root. A provider/network failure produces a stable public failure class; it
 does not authorize automatic retry, model substitution, role-floor admission, or benchmark scoring.
 See [the DeepSeek role operator procedure](deepseek-role-operator.md) for the fixed limits and
-private-output boundary. The bootstrap canary is narrower still: its current observed outcome is a
-redacted network refusal and is not evidence of provider capability.
+private-output boundary. The bootstrap canary is narrower still: its earlier observed outcome was a
+redacted network refusal and is not evidence of provider capability. A separate 2026-07-29 ten-call
+role observation settled every request, but every completion saturated the fixed 256-token output
+ceiling. That local, non-promotable result is [recorded separately](research/deepseek-role-json-contract-calibration-2026-07-29.md)
+and supports no competence, role-floor, proof, or Builder-fidelity conclusion.
 
 ## Capability and provenance policy
 

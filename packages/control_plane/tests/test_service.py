@@ -4067,18 +4067,19 @@ def test_submit_proof_rejects_non_candidate_status_and_missing_provenance(
     assert plane.events.read_stream("proof", submission.proof_id.value) == ()
 
 
-def test_v1_bundle_rejects_line_ranged_edit_regions() -> None:
-    with pytest.raises(ValueError, match="do not support line-ranged editable regions"):
-        _bundle(
-            bundle_key="line-ranged-edit-region",
-            allowed_edit_regions=(
-                EditRegionV1(
-                    artifact_ref="Proof.lean",
-                    start_line=1,
-                    end_line=1,
-                ),
-            ),
-        )
+def test_v1_bundle_keeps_line_ranged_edit_region_payload_compatible() -> None:
+    region = EditRegionV1(
+        artifact_ref="Proof.lean",
+        start_line=1,
+        end_line=1,
+    )
+
+    bundle = _bundle(
+        bundle_key="line-ranged-edit-region",
+        allowed_edit_regions=(region,),
+    )
+
+    assert bundle.contract.policy.allowed_edit_regions == (region,)
 
 
 def test_registration_replay_rejects_an_invalid_mathlib_axiom_policy(

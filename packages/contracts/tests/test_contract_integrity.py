@@ -35,6 +35,7 @@ from autolean_contracts import (
     digest_model,
     digest_text,
     stable_identifier,
+    validate_axiom_policy_v1,
 )
 
 
@@ -412,16 +413,16 @@ def test_mathlib_axiom_profile_accepts_only_baseline_subsets(
 
 
 def test_mathlib_axiom_profile_rejects_nonbaseline_axioms() -> None:
-    with pytest.raises(ValidationError, match="non-baseline axioms: unsafeAxiom"):
-        _contract_with_axiom_policy(
+    with pytest.raises(ValueError, match="non-baseline axioms: unsafeAxiom"):
+        validate_axiom_policy_v1(
             AxiomProfileV1.MATHLIB,
             ("Classical.choice", "unsafeAxiom"),
         )
 
 
 def test_strict_axiom_profile_requires_an_empty_allowlist() -> None:
-    with pytest.raises(ValidationError, match="strict axiom profile requires an empty allowlist"):
-        _contract_with_axiom_policy(
+    with pytest.raises(ValueError, match="strict axiom profile requires an empty allowlist"):
+        validate_axiom_policy_v1(
             AxiomProfileV1.STRICT,
             ("Classical.choice",),
         )
@@ -437,8 +438,14 @@ def test_explicit_axiom_profile_accepts_custom_axioms() -> None:
 
 @pytest.mark.parametrize("profile", tuple(AxiomProfileV1))
 def test_every_axiom_profile_rejects_sorry_ax(profile: AxiomProfileV1) -> None:
-    with pytest.raises(ValidationError, match="sorryAx is prohibited"):
-        _contract_with_axiom_policy(
-            profile,
-            ("sorryAx",),
-        )
+    with pytest.raises(ValueError, match="sorryAx is prohibited"):
+        validate_axiom_policy_v1(profile, ("sorryAx",))
+
+
+def test_v1_contract_keeps_axiom_policy_payload_compatible() -> None:
+    contract = _contract_with_axiom_policy(
+        AxiomProfileV1.MATHLIB,
+        ("Classical.choice", "unsafeAxiom"),
+    )
+
+    assert contract.formal.axioms_allowlist == ("Classical.choice", "unsafeAxiom")

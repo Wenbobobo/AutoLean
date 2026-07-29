@@ -44,7 +44,15 @@ runner reports success.
     comparisons before any paid or external model execution. The
     [DeepSeek five-role operator run](deepseek-role-operator.md) provides a non-promotable
     ten-call path with whole-suite preflight, private reconciliation, and an optional local
-    exact-JSON evaluation API that is forbidden from role-floor admission.
+    exact-JSON evaluation API that is forbidden from role-floor admission. The separate
+    [2026-07-29 role observation](research/deepseek-role-json-contract-calibration-2026-07-29.md)
+    settled ten calls but saturated every fixed 256-token output ceiling, so it supports no
+    competence conclusion. The separately versioned
+    [DeepSeek output-budget ablation](deepseek-output-budget-ablation.md) repeats a fresh 256
+    control with one bounded larger-output arm and reports only receipt-bound saturation, never a
+    score or competence conclusion. Its first tracked
+    [run report](research/deepseek-output-budget-ablation-2026-07-29.json) stopped after one
+    redacted `network` failure and contains no budget comparison.
 11. [FATE compile canary](fate-compile-canary.md), the non-promotable
     [agent-smoke-8 vertical bridge](fate-agent-smoke.md), and the
     [process-chaos Harness](control-plane-process-chaos.md) define the current real-toolchain,
@@ -84,8 +92,9 @@ runner reports success.
      The [Lean 4.28 module-origin API note](lean-module-origin-spike.md) records the imported
      declaration boundary and the narrow image-owned test a successor manifest must implement.
      The [Dependency Closure V2 design](dependency-closure-v2-design.md) records a locally tested,
-     non-authoritative Stage A contract/materializer and the still-unimplemented Stage B
-     claim/OCI/evidence/gateway bindings.
+     non-authoritative Stage A contract/materializer and implemented fail-closed Stage B mechanics:
+     nonempty accepted dependencies remain rejected pending a gateway-owned
+     `dependency.admitted` module/OLean binding.
 18. [Lock-input SPDX SBOM](sbom.md) defines the deterministic, offline SPDX 2.3 generator and its
     deliberately narrow evidence boundary.
 19. [Operations and release](operations-release.md) defines evidence collection and the conditions
@@ -106,6 +115,9 @@ runner reports success.
     The [pinned Danus code audit](research/danus-code-audit-2026-07-28.md) accepts its
     fact-graph/context lessons only for a future untrusted research-scout layer and rejects its
     runtime, LLM truth gate, provider policy, and shared-file authority boundary.
+    The [integration decision](research/danus-integration-decision-2026-07-29.md) and
+    [proposal-only adapter](research/research-scout-adapter-v1.md) implement only that advisory
+    boundary; scout output cannot freeze a contract, mutate a graph, or reach Prover authority.
 24. [Backup pilot audit](research/backup-pilot-audit-2026-07-25.md) keeps a pointwise Cea
     comparison as the first read-only audit lead but records that it misses the size and coverage
     gates; van Kampen remains paused and neither candidate is selected.
@@ -117,7 +129,15 @@ runner reports success.
     and stop gates; neither card authorizes source ingestion or a frozen contract.
     The [Phase 2 open-source selection](research/phase2-open-source-selection-2026-07-26.md)
     records iFEM as a conditional source-preparation and compile-discovery primary, not a selected
-    production pilot.
+    production pilot. The [iFEM source-lock preparation](research/ifem-source-lock-preparation-2026-07-28.md)
+    pins the bounded acquisition protocol, and the
+    [2026-07-29 source-lock evidence](research/ifem-source-lock-evidence-2026-07-29.md) records the
+    exact local hashes and replay while retaining `local_only`, no-freeze, and no-Prover bounds.
+    The [digest-only notebook index](research/ifem-notebook-source-span-index-2026-07-29.md)
+    records the 10-notebook / 161-cell locator replay without source text, while the
+    [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
+    binds the actual 25-node / 21-prerequisite denominator and keeps every mapping `unknown`
+    until the pinned Lean query and semantic classification evidence exist.
 27. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.

@@ -723,9 +723,12 @@ def test_custom_chat_adapter_keeps_secret_as_environment_reference() -> None:
 def test_model_request_timeout_is_bounded_hashed_and_legacy_optional() -> None:
     legacy = ModelRequest(prompt="prove it")
     bounded = ModelRequest(prompt="prove it", timeout_seconds=17.5)
+    structured = ModelRequest(prompt="prove it", response_format="json_object")
 
     assert legacy.timeout_seconds is None
     assert legacy.outbound_request_hash() != bounded.outbound_request_hash()
+    assert legacy.outbound_request_hash() != structured.outbound_request_hash()
+    assert Capability.STRUCTURED_JSON in structured.inferred_capabilities()
     for invalid in (True, 0, -1, float("nan"), float("inf"), 3600.1):
         with pytest.raises(ConfigurationError):
             ModelRequest(prompt="prove it", timeout_seconds=invalid)
@@ -795,6 +798,93 @@ def test_chat_adapter_rejects_mismatched_response_model() -> None:
     )
     with pytest.raises(ProviderResponseError, match="does not match"):
         provider.generate(ModelRequest(prompt="prove it"))
+
+
+def test_chat_adapter_settles_reasoning_only_response_as_empty_candidate() -> None:
+    private_reasoning = "private-reasoning-must-not-become-final-text"
+    transport = RecordingTransport(
+        {
+            "id": "reasoning-only-response",
+            "model": "open-model",
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "reasoning_content": private_reasoning,
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+        }
+    )
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(
+                Capability.TEXT_GENERATION,
+                Capability.USAGE_ACCOUNTING,
+            ),
+        ),
+        transport=transport,
+    )
+
+    response = provider.generate(ModelRequest(prompt="prove it"))
+
+    assert response.text == ""
+    assert private_reasoning not in response.text
+    assert response.usage == TokenUsage(input_tokens=3, output_tokens=2)
+
+
+def test_chat_adapter_binds_structured_json_to_the_hashed_request_and_payload() -> None:
+    transport = RecordingTransport(
+        {
+            "id": "json-response",
+            "model": "open-model",
+            "choices": [{"message": {"content": "{}"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+        }
+    )
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(
+                Capability.TEXT_GENERATION,
+                Capability.USAGE_ACCOUNTING,
+                Capability.STRUCTURED_JSON,
+            ),
+        ),
+        transport=transport,
+    )
+
+    response = provider.generate(ModelRequest(prompt="return JSON", response_format="json_object"))
+
+    assert response.text == "{}"
+    assert transport.calls[0]["payload"]["response_format"] == {"type": "json_object"}
+
+
+def test_chat_adapter_rejects_structured_json_without_declared_capability() -> None:
+    transport = RecordingTransport({"choices": [{"message": {"content": "{}"}}]})
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+        ),
+        transport=transport,
+    )
+
+    with pytest.raises(CapabilityError):
+        provider.generate(ModelRequest(prompt="return JSON", response_format="json_object"))
+
+    assert transport.calls == []
 
 
 def test_chat_adapter_rejects_cached_tokens_above_prompt_tokens() -> None:

@@ -29,6 +29,15 @@ Expiry or review date:
 Never put a credential value, private source excerpt, raw model response, private path, session
 archive, or signing key in this file.
 
+## Autonomous default while authority items remain open
+
+Agents should not pause unrelated work for an unchecked item. They may finish deterministic
+implementation/tests, emit `machine_advisory` review packets, retain a gap, abstain, reject a
+candidate, or choose a lower-risk public-metadata lane. These are operational dispositions, not
+checkbox closures. No agent may check an `AUTH-*` item by treating model agreement, a local test,
+or a self-authored report as source-rights, semantic, kernel, host, signer, provider-evaluator,
+release, or novelty authority.
+
 ## Semantic and source authority
 
 - [ ] **AUTH-T3-01: Dispose of the current model-theory T3 candidate.**
@@ -81,6 +90,10 @@ archive, or signing key in this file.
   - Operator commands: `uv run --frozen python scripts/ifem_source_lock.py acquire
     --operator-acquire`, then `uv run --frozen python scripts/ifem_source_lock.py verify --receipt
     <receipt-path>`.
+  - Current machine record, not a checkbox closure: thirteen selected files were locally acquired
+    and independently replayed as `local_only`; source-lock receipt SHA-256 is
+    `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`.
+    This does not grant rights/egress authority, semantic admission, freeze, or Prover handoff.
 
 - [ ] **AUTH-OPEN-PROBLEM-01: Accept an open-problem research or novelty claim.**
   - Blocking: any public statement that a result is new, advances an open frontier, or solves an
@@ -151,10 +164,19 @@ archive, or signing key in this file.
   - Acceptance effect: establishes only the named model's result under that experiment. It is not a
     proof, a role floor, or Builder fidelity evidence.
   - Owner: provider/evaluator operator.
-  - Current record: operator authorized experimental DeepSeek use. The 2026-07-28 single bounded
+  - Historical record: operator authorized experimental DeepSeek use. The 2026-07-28 single bounded
     attempt returned `blocked` with `provider_response_received=false`, no usage, and no score; a
-    credential-free probe from the same sandbox could not establish an HTTPS connection. This is
-    environment-path evidence, not an endpoint incident or a model result.
+    credential-free probe from that sandbox could not establish an HTTPS connection. This is
+    environment-path evidence, not an endpoint incident or a model result. A newly available
+    network path must still produce a fresh bounded receipt under this item; it does not retroactively
+    turn the failed attempt into a score.
+  - Current machine record, not a checkbox closure: a separate 2026-07-29 ten-call role observation
+    settled all requests, but every accepted completion saturated the fixed 256-token output ceiling.
+    Its local evaluator and report are non-promotable, so this does not establish competence,
+    role-floor admission, an independently administered evaluation, or the acceptance effect above.
+    A separate versioned 512-token ablation passed zero-call preflight, then stopped after one
+    redacted `network` failure in its 256-token control arm. It made no retry, skipped the candidate,
+    and emitted no comparison, so it also does not close this item.
 
 - [ ] **AUTH-SPEND-01: Enforce the external hard-spend ceiling.**
   - Blocking: claims that a large swarm cannot exceed its provider budget.
@@ -189,12 +211,14 @@ archive, or signing key in this file.
   - Evidence to attach: commit SHA, CI run IDs, evidence hashes, gate table, decision, and date.
   - Acceptance effect: applies only to the exact candidate commit.
   - Owner: release owner.
-  - Current remote record, checked 2026-07-28: draft
+  - Current remote record, checked 2026-07-29: public draft
     [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) is open and mergeable at head
-    `979584346a331e52c97b7fe9f1301592be18725c`. Its body records the earlier candidate checks. The
-    present dirty working tree and later changes are not that candidate and require a new exact
-    staged validation. Neither state is an RC because T3/T5, real T6/T7, signer, and real-provider
-    evidence remain open.
+    `cd42ba76473002cfff9eaf4b8710e90fa3877cd4`; GitHub Actions
+    [CI run #64](https://github.com/Wenbobobo/AutoLean/actions/runs/30364517594) completed with
+    `success`. The updated PR description records candidate-local 1,438 passed, 15 explicit skips,
+    0 failures, and a local synthetic 1,000-job recovery receipt. The description is not an
+    independent authority record, and neither the CI result nor a separately dirty/descendant
+    workspace is an RC because T3/T5, real T6/T7, signer, and real-provider evidence remain open.
 
 ## Machine-first reduction policy
 

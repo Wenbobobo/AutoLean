@@ -30,7 +30,7 @@ REPORT_SCHEMA: Final = "autolean.fate-agent-smoke-report.v1"
 REPORT_ENVELOPE_SCHEMA: Final = "autolean.fate-agent-smoke-envelope.v1"
 SUITE: Final = "agent-smoke-8"
 EXPECTED_SOURCE_MANIFEST_SHA256: Final = (
-    "3187bac80d3aeb2dac8f5da878fe21580a4c11540a0c7db3c14a34c2e0bdc748"
+    "dc52f40fdede4c4e2290580d9dfdecb9e017b8cd3ed961e2ad13e9a0accb54a2"
 )
 EXPECTED_SPLIT_MANIFEST_SHA256: Final = (
     "448027aa486d85ef3e45bf5f46bf65e88c60fcc660d7cb6ef708dd85edad49d4"
@@ -43,7 +43,7 @@ TYPE_FORMAT: Final = "autolean.lean-pp-expr.v1"
 EXPECTED_LEAN_VERSION: Final = "v4.28.0"
 EXPECTED_MATHLIB_REVISION: Final = "8f9d9cff6bd728b17a24e163c9402775d9e6a365"
 EXPECTED_M_LAKE_MANIFEST_SHA256: Final = (
-    "8403899ad037e733385ed21746c79c772b918a1ce4a6d291fddadb8899ee9e24"
+    "e6efb741f70db112585a49e84e3d04272a6dcf22549b97af072e0c90b08082b0"
 )
 ALLOWED_AXIOMS: Final[frozenset[str]] = frozenset({"propext", "Classical.choice", "Quot.sound"})
 _TIERS: Final[tuple[Tier, ...]] = ("M", "H", "X")

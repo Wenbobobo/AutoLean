@@ -6,6 +6,7 @@ from autolean_prover.execution.authority import (
 )
 from autolean_prover.execution.base import ExecutionHarness, ProcessRequest, ProcessResult
 from autolean_prover.execution.dependency_closure import (
+    ClaimScopedDependencyBlobReader,
     DependencyClosureBlobReader,
     DependencyClosureIntegrityError,
     DependencyClosureMaterializer,
@@ -28,6 +29,7 @@ from autolean_prover.execution.workspace import (
 )
 
 __all__ = [
+    "ClaimScopedDependencyBlobReader",
     "CleanSubprocessHarness",
     "DependencyClosureBlobReader",
     "DependencyClosureIntegrityError",

@@ -1,10 +1,11 @@
 """Prepare a local-only source lock for the selected iFEM Chapters 1--10 path.
 
-The iFEM repository is large.  This adapter retrieves only the thirteen
-selected source files at one immutable Git commit, plus the upstream LICENSE
-needed to bind rights.  It delegates content-addressed cache installation and
-replay to Builder's existing ``ReferenceCache``; it only owns the bounded
-upstream route, notebook sanity checks, and the safe metadata receipt.
+The iFEM repository is large.  This adapter retrieves or imports only the
+thirteen selected source files at one immutable Git commit, plus the upstream
+LICENSE needed to bind rights.  It delegates content-addressed cache
+installation and replay to Builder's existing ``ReferenceCache``; it only owns
+the bounded upstream route, a connector-safe staged import boundary, notebook
+sanity checks, and the safe metadata receipt.
 
 It never prints source text and does not authorize model egress, contract
 freezing, or Prover handoff.
@@ -199,8 +200,65 @@ def _download_to(url: str, destination: Path) -> None:
         raise IFEMSourceLockError("iFEM source download failed") from error
 
 
+def _is_link_or_junction(path: Path) -> bool:
+    return path.is_symlink() or bool(getattr(path, "is_junction", lambda: False)())
+
+
+def _validated_staging_files(staging_root: Path) -> dict[str, Path]:
+    """Return the exact fixed source set from an untrusted local staging tree."""
+
+    try:
+        root = staging_root.resolve(strict=True)
+    except OSError as error:
+        raise IFEMSourceLockError("staging root is absent or inaccessible") from error
+    if not root.is_dir() or _is_link_or_junction(staging_root):
+        raise IFEMSourceLockError("staging root must be a real directory")
+
+    expected = {"LICENSE", *(spec.path for spec in SOURCE_FILES)}
+    observed: set[str] = set()
+    stack = [root]
+    while stack:
+        directory = stack.pop()
+        try:
+            entries = tuple(os.scandir(directory))
+        except OSError as error:
+            raise IFEMSourceLockError("staging tree is inaccessible") from error
+        for entry in entries:
+            path = Path(entry.path)
+            try:
+                if entry.is_symlink() or _is_link_or_junction(path):
+                    raise IFEMSourceLockError("staging tree contains a link or junction")
+                if entry.is_dir(follow_symlinks=False):
+                    stack.append(path)
+                    continue
+                if not entry.is_file(follow_symlinks=False):
+                    raise IFEMSourceLockError("staging tree contains a non-regular entry")
+                relative = path.relative_to(root).as_posix()
+            except (OSError, ValueError) as error:
+                if isinstance(error, IFEMSourceLockError):
+                    raise
+                raise IFEMSourceLockError("staging tree entry is invalid") from error
+            if relative not in expected or relative in observed:
+                raise IFEMSourceLockError("staging tree contains an unexpected source file")
+            observed.add(relative)
+    if observed != expected:
+        raise IFEMSourceLockError("staging tree does not contain the exact fixed source set")
+    return {relative: root / Path(*relative.split("/")) for relative in expected}
+
+
 def _receipt_path(cache_root: Path) -> Path:
     return cache_root / RECEIPT_DIRECTORY / "source-lock.v1.json"
+
+
+def _reuse_existing_receipt(
+    cache_root: Path,
+) -> tuple[Path, list[dict[str, object]]] | None:
+    receipt = _receipt_path(cache_root)
+    if not receipt.exists():
+        return None
+    document, records = inspect_receipt(cache_root, receipt)
+    retrieval = cast(dict[str, object], document["acquisition"])["retrieved_at"]
+    return receipt, manifest_entries(records, retrieved_at=cast(str, retrieval))
 
 
 def manifest_entries(
@@ -477,40 +535,36 @@ def inspect_receipt(
     return document, records
 
 
-def acquire(
-    cache_root: Path, *, now: datetime | None = None
+def _install_source_paths(
+    cache_root: Path,
+    *,
+    license_path: Path,
+    source_paths: Mapping[str, Path],
+    now: datetime | None = None,
 ) -> tuple[Path, list[dict[str, object]]]:
-    """Retrieve the bounded pinned source path and install it through ReferenceCache."""
-
     cache_root.parent.mkdir(parents=True, exist_ok=True)
+    existing = _reuse_existing_receipt(cache_root)
+    if existing is not None:
+        return existing
     receipt = _receipt_path(cache_root)
-    if receipt.exists():
-        document, existing_records = inspect_receipt(cache_root, receipt)
-        retrieval = cast(dict[str, object], document["acquisition"])["retrieved_at"]
-        return receipt, manifest_entries(existing_records, retrieved_at=cast(str, retrieval))
     retrieved_at = (now or datetime.now(UTC)).astimezone(UTC).isoformat().replace("+00:00", "Z")
     with tempfile.TemporaryDirectory(prefix="autolean-ifem-acquire-", dir=cache_root.parent) as raw:
         work_root = Path(raw)
-        license_path = work_root / "LICENSE"
-        _download_to(f"{RAW_ROOT_URL}/LICENSE", license_path)
         license_sha256 = _validate_license_bytes(license_path.read_bytes())
         source_records: list[SourceFileRecord] = []
-        staged: dict[str, Path] = {}
         total = 0
-        for index, spec in enumerate(SOURCE_FILES):
-            source_path = work_root / f"source-{index}{spec.extension}"
-            _download_to(spec.download_url, source_path)
+        for spec in SOURCE_FILES:
+            source_path = source_paths[spec.path]
             record = _validate_source_bytes(spec, source_path.read_bytes())
             total += record.size_bytes
             if total > MAX_TOTAL_SOURCE_BYTES:
                 raise IFEMSourceLockError("selected iFEM source path exceeds the total byte limit")
             source_records.append(record)
-            staged[spec.reference_id] = source_path
         entries = manifest_entries(source_records, retrieved_at=retrieved_at)
         try:
             cache = _cache_for_entries(entries, cache_root, work_root)
             for spec in SOURCE_FILES:
-                cache.operator_import_local(spec.reference_id, staged[spec.reference_id])
+                cache.operator_import_local(spec.reference_id, source_paths[spec.path])
         except ReferenceCacheError as error:
             raise IFEMSourceLockError("cannot install iFEM source into ReferenceCache") from error
     receipt_document = _receipt_payload(
@@ -522,11 +576,63 @@ def acquire(
     return receipt, entries
 
 
+def acquire(
+    cache_root: Path, *, now: datetime | None = None
+) -> tuple[Path, list[dict[str, object]]]:
+    """Retrieve the bounded pinned source path and install it through ReferenceCache."""
+
+    cache_root.parent.mkdir(parents=True, exist_ok=True)
+    existing = _reuse_existing_receipt(cache_root)
+    if existing is not None:
+        return existing
+    with tempfile.TemporaryDirectory(
+        prefix="autolean-ifem-download-", dir=cache_root.parent
+    ) as raw:
+        work_root = Path(raw)
+        license_path = work_root / "LICENSE"
+        _download_to(f"{RAW_ROOT_URL}/LICENSE", license_path)
+        source_paths: dict[str, Path] = {}
+        for index, spec in enumerate(SOURCE_FILES):
+            source_path = work_root / f"source-{index}{spec.extension}"
+            _download_to(spec.download_url, source_path)
+            source_paths[spec.path] = source_path
+        return _install_source_paths(
+            cache_root,
+            license_path=license_path,
+            source_paths=source_paths,
+            now=now,
+        )
+
+
+def import_staged(
+    cache_root: Path,
+    staging_root: Path,
+    *,
+    now: datetime | None = None,
+) -> tuple[Path, list[dict[str, object]]]:
+    """Import connector-fetched bytes through the same fixed source and rights checks."""
+
+    existing = _reuse_existing_receipt(cache_root)
+    if existing is not None:
+        return existing
+    staged = _validated_staging_files(staging_root)
+    return _install_source_paths(
+        cache_root,
+        license_path=staged["LICENSE"],
+        source_paths={spec.path: staged[spec.path] for spec in SOURCE_FILES},
+        now=now,
+    )
+
+
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("action", choices=("acquire", "verify", "manifest-entries"))
+    parser.add_argument(
+        "action",
+        choices=("acquire", "import-staged", "verify", "manifest-entries"),
+    )
     parser.add_argument("--cache-root", type=Path, default=DEFAULT_CACHE_ROOT)
     parser.add_argument("--receipt", type=Path)
+    parser.add_argument("--staging-root", type=Path)
     parser.add_argument("--operator-acquire", action="store_true")
     return parser
 
@@ -542,22 +648,42 @@ def _safe_summary(receipt_path: Path, entries: Sequence[Mapping[str, object]]) -
 
 def main(argv: Sequence[str] | None = None) -> int:
     args = _build_parser().parse_args(argv)
-    if args.action == "acquire" and not args.operator_acquire:
-        print("ifem-source-lock: acquire requires --operator-acquire", file=sys.stderr)
+    acquisition_action = args.action in {"acquire", "import-staged"}
+    if acquisition_action and not args.operator_acquire:
+        print(
+            f"ifem-source-lock: {args.action} requires --operator-acquire",
+            file=sys.stderr,
+        )
         return 2
-    if args.action != "acquire" and args.operator_acquire:
-        print("ifem-source-lock: --operator-acquire is valid only with acquire", file=sys.stderr)
+    if not acquisition_action and args.operator_acquire:
+        print(
+            "ifem-source-lock: --operator-acquire is valid only with acquisition actions",
+            file=sys.stderr,
+        )
         return 2
-    if args.action == "acquire" and args.receipt is not None:
-        print("ifem-source-lock: acquire does not accept --receipt", file=sys.stderr)
+    if acquisition_action and args.receipt is not None:
+        print(f"ifem-source-lock: {args.action} does not accept --receipt", file=sys.stderr)
         return 2
-    if args.action != "acquire" and args.receipt is None:
+    if not acquisition_action and args.receipt is None:
         print(f"ifem-source-lock: {args.action} requires --receipt", file=sys.stderr)
+        return 2
+    if args.action == "import-staged" and args.staging_root is None:
+        print("ifem-source-lock: import-staged requires --staging-root", file=sys.stderr)
+        return 2
+    if args.action != "import-staged" and args.staging_root is not None:
+        print("ifem-source-lock: --staging-root is valid only with import-staged", file=sys.stderr)
         return 2
     try:
         cache_root = args.cache_root.resolve()
         if args.action == "acquire":
             receipt_path, entries = acquire(cache_root)
+            print(
+                json.dumps(_safe_summary(receipt_path, entries), ensure_ascii=True, sort_keys=True)
+            )
+            return 0
+        if args.action == "import-staged":
+            assert args.staging_root is not None
+            receipt_path, entries = import_staged(cache_root, args.staging_root.resolve())
             print(
                 json.dumps(_safe_summary(receipt_path, entries), ensure_ascii=True, sort_keys=True)
             )

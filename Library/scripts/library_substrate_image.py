@@ -134,7 +134,7 @@ BUILDER_QUERY_EXTRA_DECLARATION_SOURCE: Final = BUILDER_QUERY_SOURCE.replace(
     "\nend Candidate\n", "\naxiom ExtraCarrier : True\n\nend Candidate\n"
 )
 BUILDER_QUERY_FORBIDDEN_IMPORT_SOURCE: Final = """\
-import Mathlib
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude
 
 namespace Candidate
 

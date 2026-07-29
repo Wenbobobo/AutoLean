@@ -16,8 +16,11 @@ from autolean_contracts import (
     AttestationVerifierV1,
     AxiomProfileV1,
     ContractChangeRequestV1,
+    DependencyKindV1,
     DigestV1,
+    FormalDependencySupplyV2,
     FormalizationTaskBundleV1,
+    FormalizationTaskBundleV2,
     GapReportV1,
     HashKindV1,
     ProofStatusV1,
@@ -34,6 +37,7 @@ from autolean_contracts import (
     digest_text,
     proof_dependency_manifest_hash,
     validate_axiom_policy_v1,
+    validate_dependency_closure_ref,
     verification_attestation_payload,
     verification_gateway_attestation_payload,
 )
@@ -127,6 +131,11 @@ class TaskBinding:
     bundle_artifact: ArtifactRef
     fidelity_evidence_artifact: ArtifactRef | None
     graph_nodes: tuple[JsonObject, ...]
+    bundle_schema_version: str = "1.0"
+    dependency_closure_manifest: ArtifactRef | None = None
+    dependency_closure_manifest_hash: str | None = None
+    dependency_tree_hash: str | None = None
+    dependency_artifacts: tuple[ArtifactRef, ...] = ()
 
 
 @dataclass(frozen=True, slots=True)
@@ -136,6 +145,9 @@ class ClaimReceipt:
     bundle_artifact: ArtifactRef
     lease: Lease
     event: StoredEvent
+    dependency_closure_manifest: ArtifactRef | None = None
+    dependency_closure_manifest_hash: str | None = None
+    dependency_tree_hash: str | None = None
 
 
 @dataclass(frozen=True, slots=True)
@@ -225,6 +237,30 @@ class ControlPlane:
             )
         except ValueError as error:
             raise InvalidTransition("corrupt claimed-task bundle artifact") from error
+        closure_payload = payload.get("dependency_closure_manifest")
+        closure_manifest: ArtifactRef | None = None
+        closure_manifest_hash: str | None = None
+        dependency_tree_hash: str | None = None
+        if closure_payload is not None:
+            if not isinstance(closure_payload, dict):
+                raise InvalidTransition("corrupt claimed-task dependency closure artifact")
+            try:
+                closure_manifest = ArtifactRef(
+                    digest=ControlPlane._required_text(closure_payload, "digest"),
+                    size=ControlPlane._required_int(closure_payload, "size"),
+                )
+                closure_manifest_hash = ControlPlane._required_text(
+                    payload,
+                    "dependency_closure_manifest_hash",
+                )
+                dependency_tree_hash = ControlPlane._required_text(
+                    payload,
+                    "dependency_tree_hash",
+                )
+            except (InvalidTransition, ValueError) as error:
+                raise InvalidTransition(
+                    "corrupt claimed-task dependency closure binding"
+                ) from error
         expires_at_text = ControlPlane._required_text(payload, "expires_at")
         try:
             expires_at = datetime.fromisoformat(expires_at_text.replace("Z", "+00:00"))
@@ -241,6 +277,9 @@ class ControlPlane:
                 expires_at=expires_at,
             ),
             event=event,
+            dependency_closure_manifest=closure_manifest,
+            dependency_closure_manifest_hash=closure_manifest_hash,
+            dependency_tree_hash=dependency_tree_hash,
         )
 
     @staticmethod
@@ -275,7 +314,7 @@ class ControlPlane:
 
     def register_bundle(
         self,
-        bundle: FormalizationTaskBundleV1,
+        bundle: FormalizationTaskBundleV1 | FormalizationTaskBundleV2,
         *,
         idempotency_key: str,
     ) -> TaskBinding:
@@ -309,6 +348,7 @@ class ControlPlane:
         builder_attestation = self._verify_builder_attestation(bundle)
         fidelity_artifact, canonical_type_assurance = self._verify_builder_fidelity_artifact(bundle)
         desired = self._binding_from_bundle(bundle)
+        dependency_binding = self._dependency_binding_from_bundle(bundle)
         artifact = self._put_model(bundle)
         binding = TaskBinding(
             bundle_id=desired.bundle_id,
@@ -331,6 +371,11 @@ class ControlPlane:
             bundle_artifact=artifact,
             fidelity_evidence_artifact=fidelity_artifact,
             graph_nodes=desired.graph_nodes,
+            bundle_schema_version=desired.bundle_schema_version,
+            dependency_closure_manifest=dependency_binding[0],
+            dependency_closure_manifest_hash=dependency_binding[1],
+            dependency_tree_hash=dependency_binding[2],
+            dependency_artifacts=dependency_binding[3],
         )
         payload = self._json_object(
             {
@@ -362,6 +407,21 @@ class ControlPlane:
                 ),
                 "builder_attestation": self._attestation_summary(builder_attestation),
                 "graph_nodes": list(binding.graph_nodes),
+                "bundle_schema_version": binding.bundle_schema_version,
+                "dependency_closure_manifest": (
+                    None
+                    if binding.dependency_closure_manifest is None
+                    else self._artifact_payload(
+                        binding.dependency_closure_manifest,
+                        kind="closure_manifest",
+                    )
+                ),
+                "dependency_closure_manifest_hash": binding.dependency_closure_manifest_hash,
+                "dependency_tree_hash": binding.dependency_tree_hash,
+                "dependency_artifacts": [
+                    self._artifact_payload(item, kind="closure_blob")
+                    for item in binding.dependency_artifacts
+                ],
             }
         )
         try:
@@ -389,6 +449,112 @@ class ControlPlane:
                 "canonical registration event disagrees with the requested immutable bundle"
             )
         return stored
+
+    def _dependency_binding_from_bundle(
+        self,
+        bundle: FormalizationTaskBundleV1 | FormalizationTaskBundleV2,
+    ) -> tuple[ArtifactRef | None, str | None, str | None, tuple[ArtifactRef, ...]]:
+        """Validate and index V2 closure blobs before the bundle can be claimed."""
+
+        if not isinstance(bundle, FormalizationTaskBundleV2):
+            return None, None, None, ()
+        closure = bundle.dependency_closure
+        manifest_ref = ArtifactRef(
+            digest=closure.closure_manifest_ref.sha256,
+            size=closure.closure_manifest_ref.size,
+        )
+        try:
+            raw_manifest = self.artifacts.get_bytes(manifest_ref)
+            manifest = validate_dependency_closure_ref(closure, raw_manifest)
+        except (ArtifactCorruption, ArtifactNotFound, ValueError) as error:
+            raise InvalidTransition(
+                "V2 dependency closure manifest is unavailable, corrupt, or mismatched"
+            ) from error
+        expected_target = bundle.contract
+        if (
+            manifest.target_contract_id != expected_target.contract_id
+            or manifest.target_revision != expected_target.revision
+            or manifest.target_contract_hash != expected_target.semantic_hash()
+            or manifest.target_declaration
+            != f"{expected_target.formal.namespace}.{expected_target.formal.declaration_name}"
+            or manifest.target_canonical_type_hash != expected_target.formal.elaborated_type_hash
+        ):
+            raise InvalidTransition("V2 dependency closure targets a different contract revision")
+
+        # A closure reference binds only the accepted dependency IDs.  At admission, bind every
+        # such ID back to the frozen graph node and declaration name as well.  Otherwise an
+        # attacker can preserve an ID while substituting a different accepted declaration in the
+        # manifest, leaving the contract's formal graph with a false provenance edge.
+        closure_bindings = {
+            item.dependency_id.value: item
+            for item in expected_target.formal_dependency_bindings
+            if item.supply is FormalDependencySupplyV2.CLOSURE
+        }
+        formal_body_dependencies = {
+            item.dependency_id.value: item
+            for item in expected_target.dependencies
+            if item.kind is DependencyKindV1.FORMAL_BODY
+        }
+        manifest_dependency_ids = {
+            item.dependency_id.value for item in manifest.accepted_dependencies
+        }
+        if manifest_dependency_ids != set(closure_bindings):
+            raise InvalidTransition(
+                "V2 dependency closure accepted dependencies differ from frozen closure bindings"
+            )
+        for accepted in manifest.accepted_dependencies:
+            binding = closure_bindings[accepted.dependency_id.value]
+            contract_dependency = formal_body_dependencies.get(accepted.dependency_id.value)
+            if contract_dependency is None:
+                raise InvalidTransition(
+                    "V2 dependency closure accepted dependency is absent from the frozen contract"
+                )
+            if accepted.formal_node_id != binding.formal_node_id:
+                raise InvalidTransition(
+                    "V2 dependency closure accepted formal node differs from frozen binding"
+                )
+            if accepted.declaration_name != contract_dependency.target:
+                raise InvalidTransition(
+                    "V2 dependency closure accepted declaration differs from frozen dependency"
+                )
+
+        # ``verification.accepted`` currently proves an exact frozen theorem in an isolated
+        # solver workspace.  It does not identify the exported Lean module containing that
+        # theorem, nor bind the exported OLean blob later placed in this closure.  Consequently
+        # the manifest's module/evidence fields are still Builder assertions even when they point
+        # at an existing verification artifact.  Do not turn those assertions into dependency
+        # admission authority.  A future verifier-gateway event must bind the verified contract,
+        # declaration/type/axioms, exported module and closure blob before this gate can open.
+        if manifest.accepted_dependencies:
+            raise InvalidTransition(
+                "V2 accepted dependencies require a durable module-bound dependency admission; "
+                "verification.accepted does not bind an exported module or closure blob"
+            )
+        runtime_artifacts: list[ArtifactRef] = []
+        try:
+            for file_item in manifest.files:
+                artifact = ArtifactRef(
+                    digest=file_item.artifact.sha256,
+                    size=file_item.artifact.size,
+                )
+                self.artifacts.verify(artifact)
+                runtime_artifacts.append(artifact)
+            for dependency in manifest.accepted_dependencies:
+                evidence = ArtifactRef(
+                    digest=dependency.verification_evidence.sha256,
+                    size=dependency.verification_evidence.size,
+                )
+                self.artifacts.verify(evidence)
+        except (ArtifactCorruption, ArtifactNotFound) as error:
+            raise InvalidTransition(
+                "V2 dependency closure references an unavailable CAS blob"
+            ) from error
+        return (
+            manifest_ref,
+            closure.closure_manifest_hash.value,
+            closure.tree_hash.value,
+            tuple(runtime_artifacts),
+        )
 
     def claim(
         self,
@@ -425,6 +591,16 @@ class ControlPlane:
                 "worker_id": worker_id,
                 "fencing_token": lease.fencing_token,
                 "expires_at": lease.expires_at.isoformat(),
+                "dependency_closure_manifest": (
+                    None
+                    if binding.dependency_closure_manifest is None
+                    else self._artifact_payload(
+                        binding.dependency_closure_manifest,
+                        kind="closure_manifest",
+                    )
+                ),
+                "dependency_closure_manifest_hash": binding.dependency_closure_manifest_hash,
+                "dependency_tree_hash": binding.dependency_tree_hash,
             }
         )
         events = self.events.append(
@@ -436,7 +612,10 @@ class ControlPlane:
         )
         return self._claim_receipt_from_event(bundle_id, events[0])
 
-    def fetch_claimed_bundle(self, receipt: ClaimReceipt) -> FormalizationTaskBundleV1:
+    def fetch_claimed_bundle(
+        self,
+        receipt: ClaimReceipt,
+    ) -> FormalizationTaskBundleV1 | FormalizationTaskBundleV2:
         """Load the exact registered bundle for a still-current claimed-task receipt."""
 
         if receipt.bundle_id != receipt.lease.job_id:
@@ -468,7 +647,15 @@ class ControlPlane:
             raise InvalidTransition("claimed bundle artifact is unavailable or corrupt") from error
         payload = self._decode_canonical_json_object(raw, label="claimed bundle")
         try:
-            bundle = FormalizationTaskBundleV1.model_validate(payload)
+            schema_version = payload.get("schema_version")
+            if schema_version == "2.0":
+                bundle: FormalizationTaskBundleV1 | FormalizationTaskBundleV2 = (
+                    FormalizationTaskBundleV2.model_validate(payload)
+                )
+            elif schema_version == "1.0":
+                bundle = FormalizationTaskBundleV1.model_validate(payload)
+            else:
+                raise ValueError("unsupported bundle schema")
         except ValueError as error:
             raise InvalidTransition("claimed bundle artifact is malformed") from error
         if canonical_json(bundle.model_dump(mode="json")).encode("utf-8") != raw:
@@ -482,8 +669,52 @@ class ControlPlane:
             or bundle.proof_boundary.boundary_hash.value != binding.proof_boundary_hash
         ):
             raise InvalidTransition("claimed bundle does not match its registered binding")
+        if isinstance(bundle, FormalizationTaskBundleV2):
+            if (
+                binding.bundle_schema_version != "2.0"
+                or binding.dependency_closure_manifest_hash
+                != bundle.dependency_closure.closure_manifest_hash.value
+                or binding.dependency_tree_hash != bundle.dependency_closure.tree_hash.value
+            ):
+                raise InvalidTransition("claimed V2 bundle does not match its closure binding")
+        elif binding.bundle_schema_version != "1.0":
+            raise InvalidTransition("claimed V1 bundle does not match its registered schema")
         self._assert_lease(receipt.bundle_id, receipt.lease)
         return bundle
+
+    def read_claimed_dependency_artifact(
+        self,
+        receipt: ClaimReceipt,
+        artifact: ArtifactRef,
+    ) -> bytes:
+        """Read one CAS blob reachable from a current V2 claim, and nothing else."""
+
+        bundle = self.fetch_claimed_bundle(receipt)
+        if not isinstance(bundle, FormalizationTaskBundleV2):
+            raise InvalidTransition("claim-scoped dependency retrieval requires a V2 bundle")
+        binding = self.get_binding(receipt.bundle_id)
+        if (
+            receipt.dependency_closure_manifest != binding.dependency_closure_manifest
+            or receipt.dependency_closure_manifest_hash != binding.dependency_closure_manifest_hash
+            or receipt.dependency_tree_hash != binding.dependency_tree_hash
+        ):
+            raise InvalidTransition("claim receipt does not bind the registered dependency closure")
+        allowed = {
+            *(
+                ()
+                if binding.dependency_closure_manifest is None
+                else (binding.dependency_closure_manifest,)
+            ),
+            *binding.dependency_artifacts,
+        }
+        if artifact not in allowed:
+            raise InvalidTransition("artifact is not reachable from the claimed dependency closure")
+        try:
+            return self.artifacts.get_bytes(artifact)
+        except (ArtifactCorruption, ArtifactNotFound) as error:
+            raise InvalidTransition(
+                "claimed dependency artifact is unavailable or corrupt"
+            ) from error
 
     def submit_proof(
         self,
@@ -759,7 +990,10 @@ class ControlPlane:
             return None
         return self._binding_from_event(registered)
 
-    def _binding_from_bundle(self, bundle: FormalizationTaskBundleV1) -> TaskBinding:
+    def _binding_from_bundle(
+        self,
+        bundle: FormalizationTaskBundleV1 | FormalizationTaskBundleV2,
+    ) -> TaskBinding:
         contract = bundle.contract
         verifier_policy = contract.formal.environment.verifier_execution_policy
         axiom_profile, axioms_allowlist = self._validated_axiom_policy(
@@ -802,6 +1036,7 @@ class ControlPlane:
                 )
             ),
             graph_nodes=graph_nodes,
+            bundle_schema_version=bundle.schema_version,
         )
 
     def _binding_from_event(self, event: StoredEvent) -> TaskBinding:
@@ -828,6 +1063,42 @@ class ControlPlane:
             label="task registration event",
         )
         graph_nodes = self._required_list(payload, "graph_nodes")
+        closure_payload = payload.get("dependency_closure_manifest")
+        if closure_payload is not None and not isinstance(closure_payload, dict):
+            raise InvalidTransition("corrupt control-plane payload: dependency closure artifact")
+        dependency_artifacts_payload = payload.get("dependency_artifacts", [])
+        if not isinstance(dependency_artifacts_payload, list):
+            raise InvalidTransition("corrupt control-plane payload: dependency artifacts")
+        dependency_artifacts: list[ArtifactRef] = []
+        for item in dependency_artifacts_payload:
+            if not isinstance(item, dict):
+                raise InvalidTransition("corrupt control-plane payload: dependency artifact")
+            dependency_artifacts.append(
+                ArtifactRef(
+                    digest=self._required_text(item, "digest"),
+                    size=self._required_int(item, "size"),
+                )
+            )
+        bundle_schema_version = (
+            self._required_text(payload, "bundle_schema_version")
+            if "bundle_schema_version" in payload
+            else "1.0"
+        )
+        if bundle_schema_version == "1.0" and (
+            closure_payload is not None
+            or payload.get("dependency_closure_manifest_hash") is not None
+            or payload.get("dependency_tree_hash") is not None
+            or dependency_artifacts
+        ):
+            raise InvalidTransition("V1 registration cannot claim dependency closure fields")
+        if bundle_schema_version == "2.0" and (
+            closure_payload is None
+            or payload.get("dependency_closure_manifest_hash") is None
+            or payload.get("dependency_tree_hash") is None
+        ):
+            raise InvalidTransition("V2 registration is missing its dependency closure binding")
+        if bundle_schema_version not in {"1.0", "2.0"}:
+            raise InvalidTransition("unsupported registered bundle schema version")
         return TaskBinding(
             bundle_id=self._required_text(payload, "bundle_id"),
             bundle_hash=self._required_text(payload, "bundle_hash"),
@@ -859,6 +1130,26 @@ class ControlPlane:
                 )
             ),
             graph_nodes=tuple(self._json_object(item) for item in graph_nodes),
+            bundle_schema_version=bundle_schema_version,
+            dependency_closure_manifest=(
+                None
+                if closure_payload is None
+                else ArtifactRef(
+                    digest=self._required_text(closure_payload, "digest"),
+                    size=self._required_int(closure_payload, "size"),
+                )
+            ),
+            dependency_closure_manifest_hash=(
+                None
+                if payload.get("dependency_closure_manifest_hash") is None
+                else self._required_text(payload, "dependency_closure_manifest_hash")
+            ),
+            dependency_tree_hash=(
+                None
+                if payload.get("dependency_tree_hash") is None
+                else self._required_text(payload, "dependency_tree_hash")
+            ),
+            dependency_artifacts=tuple(dependency_artifacts),
         )
 
     def _assert_lease(self, bundle_id: str, lease: Lease) -> None:
@@ -1803,6 +2094,11 @@ class ControlPlane:
             left.canonical_type_promotion_authority,
             left.fidelity_evidence_artifact,
             left.graph_nodes,
+            left.bundle_schema_version,
+            left.dependency_closure_manifest,
+            left.dependency_closure_manifest_hash,
+            left.dependency_tree_hash,
+            left.dependency_artifacts,
         ) == (
             right.bundle_id,
             right.bundle_hash,
@@ -1823,6 +2119,11 @@ class ControlPlane:
             right.canonical_type_promotion_authority,
             right.fidelity_evidence_artifact,
             right.graph_nodes,
+            right.bundle_schema_version,
+            right.dependency_closure_manifest,
+            right.dependency_closure_manifest_hash,
+            right.dependency_tree_hash,
+            right.dependency_artifacts,
         )
 
     @staticmethod

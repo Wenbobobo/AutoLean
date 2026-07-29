@@ -115,6 +115,83 @@ class DependencyDeclarationInventoryV1(ContractModel):
         return self
 
 
+class DependencyObservedDeclarationV1(ContractModel):
+    """Verifier observation; it is evidence and never an admission decision."""
+
+    declaration_name: str = Field(min_length=1, max_length=1024)
+    kind: DependencyDeclarationKindV1
+    canonical_type_hash: DigestV1
+    observed_axioms: tuple[str, ...] = ()
+    module_name: str = Field(min_length=1, max_length=512)
+    proposition_bearing: bool
+
+    @model_validator(mode="after")
+    def validate_observation(self) -> DependencyObservedDeclarationV1:
+        _validate_owned_declaration_name(self.declaration_name)
+        _validate_module_name(self.module_name)
+        require_digest_kind(
+            self.canonical_type_hash,
+            HashKindV1.ELABORATED_TYPE,
+            "canonical_type_hash",
+        )
+        _validate_axioms(self.observed_axioms)
+        return self
+
+
+class DependencyClosureObservationEvidenceV1(ContractModel):
+    """Claim-bound loaded-declaration evidence with explicit non-authority semantics."""
+
+    schema_version: Literal["autolean.dependency-closure-observation.v1"] = (
+        "autolean.dependency-closure-observation.v1"
+    )
+    bundle_id: str = Field(min_length=1, max_length=256)
+    claim_event_id: str = Field(min_length=1, max_length=256)
+    bundle_hash: DigestV1
+    contract_hash: DigestV1
+    proof_boundary_hash: DigestV1
+    environment_hash: DigestV1
+    closure_manifest_hash: DigestV1
+    dependency_tree_hash: DigestV1
+    observed_tree_hash: DigestV1
+    loaded_modules: tuple[str, ...] = ()
+    observed_declarations: tuple[DependencyObservedDeclarationV1, ...] = ()
+    authority: Literal["report_only"] = "report_only"
+    acceptance_authority: Literal[False] = False
+
+    @model_validator(mode="after")
+    def validate_evidence(self) -> DependencyClosureObservationEvidenceV1:
+        require_digest_kind(self.bundle_hash, HashKindV1.BUNDLE, "bundle_hash")
+        require_digest_kind(self.contract_hash, HashKindV1.CONTRACT, "contract_hash")
+        require_digest_kind(
+            self.proof_boundary_hash,
+            HashKindV1.PROOF_BOUNDARY,
+            "proof_boundary_hash",
+        )
+        require_digest_kind(self.environment_hash, HashKindV1.ENVIRONMENT, "environment_hash")
+        require_digest_kind(
+            self.closure_manifest_hash,
+            HashKindV1.DEPENDENCY_CLOSURE,
+            "closure_manifest_hash",
+        )
+        require_digest_kind(
+            self.dependency_tree_hash,
+            HashKindV1.DEPENDENCY_TREE,
+            "dependency_tree_hash",
+        )
+        require_digest_kind(
+            self.observed_tree_hash,
+            HashKindV1.DEPENDENCY_TREE,
+            "observed_tree_hash",
+        )
+        _require_sorted_unique(self.loaded_modules, label="observed loaded modules")
+        declaration_names = tuple(item.declaration_name for item in self.observed_declarations)
+        _require_sorted_unique(
+            declaration_names,
+            label="observed dependency declarations",
+        )
+        return self
+
+
 class AcceptedDependencyV1(ContractModel):
     dependency_id: StableIdentifierV1
     formal_node_id: StableIdentifierV1

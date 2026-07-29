@@ -1,7 +1,7 @@
 # Project-Synthetic Pre-calibration Fixture
 
-`project-synthetic-opening-corpus.v1.json` is a ten-statement fixture generated specifically for
-this repository to inspect the future Builder conversion path. It contains five PDE-A and five
+`project-synthetic-opening-corpus.v1.json` is an eleven-statement fixture generated specifically
+for this repository to inspect the future Builder conversion path. It contains five PDE-A and six
 MG-A opening samples. Its provenance class is `project_synthetic_fixture`; its authorship claim is
 `generated_for_repository_pending_human_content_review`. Those labels do not claim a human author,
 legal review, completed content review, or textbook alignment.
@@ -24,7 +24,8 @@ rights-cleared source and independently generated formalization candidates.
 
 The corpus names intended transport-sign and trace distinctions, PDE regularity, uniqueness
 versus existence, strict versus non-strict bounds, infimum versus attainment, length-space versus
-geodesic statements, quantifier order, nonemptiness, vacuity, and endpoint order. These are
+geodesic statements, quantifier order, nonemptiness, finiteness, Noetherian hypotheses, vacuity,
+and endpoint order. These are
 synthetic fixtures for a future checker; this artifact does not claim that a checker executed or
 detected any of them. In particular, changing `<` to `<=` records an exact contract-fidelity
 difference, irrespective of either statement's mathematical truth.

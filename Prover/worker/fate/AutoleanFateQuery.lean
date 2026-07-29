@@ -44,7 +44,7 @@ private def query (declarationText : String) : IO Json := do
     ("lean_version", Json.str "v4.28.0"),
     ("mathlib_revision", Json.str "8f9d9cff6bd728b17a24e163c9402775d9e6a365"),
     ("lake_manifest_hash",
-      Json.str "8403899ad037e733385ed21746c79c772b918a1ce4a6d291fddadb8899ee9e24"),
+      Json.str "e6efb741f70db112585a49e84e3d04272a6dcf22549b97af072e0c90b08082b0"),
     ("observed_axioms", Json.arr <| axioms.map fun name => Json.str name.toString)
   ]
 

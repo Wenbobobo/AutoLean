@@ -129,6 +129,168 @@ class AuthorizedRoleExactJsonEvaluationReportV1(ContractModel):
         return canonical_json_bytes(self) + b"\n"
 
 
+class AuthorizedRoleExactJsonFailureMetricsV1(ContractModel):
+    """Role-local split between output-schema and semantic mismatches.
+
+    This intentionally publishes counts rather than candidate text, parser errors, expected values,
+    or private-output identifiers. It is diagnostic evidence, not a scoring authority.
+    """
+
+    schema_version: Literal["autolean.authorized-role-exact-json-failure-metrics.v1"] = (
+        "autolean.authorized-role-exact-json-failure-metrics.v1"
+    )
+    role: ModelWorkRoleV1
+    trials: Literal[2] = 2
+    passed: int = Field(ge=0, le=2)
+    schema_rejections: int = Field(ge=0, le=2)
+    semantic_mismatches: int = Field(ge=0, le=2)
+
+    @model_validator(mode="after")
+    def validate_partition(self) -> Self:
+        if self.passed + self.schema_rejections + self.semantic_mismatches != self.trials:
+            raise ValueError("failure metrics must partition each role's trials")
+        return self
+
+
+class AuthorizedRoleExactJsonFailureTaxonomyReportV1(ContractModel):
+    """Read-only, role-separated failure taxonomy for a completed exact-JSON suite."""
+
+    schema_version: Literal["autolean.authorized-role-exact-json-failure-taxonomy.v1"] = (
+        "autolean.authorized-role-exact-json-failure-taxonomy.v1"
+    )
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    run_id: AuthorizedRoleRunIdV1
+    provider_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    model_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    model_revision: str = Field(min_length=1, max_length=512)
+    provider_configuration_hash: str = Field(pattern=_SHA256_PATTERN)
+    evaluator_hash: str = Field(pattern=_SHA256_PATTERN)
+    authority: Literal["local_exact_json_nonproduction"] = "local_exact_json_nonproduction"
+    promotion_eligible: Literal[False] = False
+    role_floor_admission: Literal["forbidden"] = "forbidden"
+    cross_role_aggregation_permitted: Literal[False] = False
+    role_metrics: tuple[AuthorizedRoleExactJsonFailureMetricsV1, ...]
+
+    @model_validator(mode="after")
+    def validate_role_metrics(self) -> Self:
+        if (
+            len(self.role_metrics) != len(ModelWorkRoleV1)
+            or self.role_metrics
+            != tuple(sorted(self.role_metrics, key=lambda item: item.role.value))
+            or {item.role for item in self.role_metrics} != set(ModelWorkRoleV1)
+        ):
+            raise ValueError("failure taxonomy requires one canonical metric per role")
+        return self
+
+
+class AuthorizedRoleStructuralJsonTrialResultV1(ContractModel):
+    """Redacted structural-grammar result for one completed role trial.
+
+    A completed V3 receipt proves that this evaluator saw a settled execution, not that it can
+    retrospectively classify failed transport attempts.  The remaining fields form a strict
+    precedence chain: parse, grammar, then exact semantic comparison.
+    """
+
+    schema_version: Literal["autolean.authorized-role-structural-json-trial.v1"] = (
+        "autolean.authorized-role-structural-json-trial.v1"
+    )
+    coordinate_hash: str = Field(pattern=_SHA256_PATTERN)
+    role: ModelWorkRoleV1
+    transport_outcome: Literal["receipt_bound"] = "receipt_bound"
+    strict_json_outcome: Literal["accepted", "rejected"]
+    schema_outcome: Literal["accepted", "rejected", "not_evaluated"]
+    semantic_exact_outcome: Literal["matched", "mismatched", "not_evaluated"]
+    budget_saturation_outcome: Literal["saturated", "not_saturated"]
+    output_commitment: str = Field(pattern=_SHA256_PATTERN)
+
+    @model_validator(mode="after")
+    def validate_outcome_precedence(self) -> Self:
+        if self.strict_json_outcome == "rejected":
+            if (
+                self.schema_outcome != "not_evaluated"
+                or self.semantic_exact_outcome != "not_evaluated"
+            ):
+                raise ValueError("strict JSON rejection cannot have later outcomes")
+        elif self.schema_outcome == "rejected":
+            if self.semantic_exact_outcome != "not_evaluated":
+                raise ValueError("schema rejection cannot have a semantic outcome")
+        elif self.schema_outcome != "accepted" or self.semantic_exact_outcome == "not_evaluated":
+            raise ValueError("accepted JSON requires a terminal schema and semantic outcome")
+        return self
+
+
+class AuthorizedRoleStructuralJsonRoleMetricsV1(ContractModel):
+    """Five-way, role-local structural outcome counts for the fixed two-trial suite."""
+
+    schema_version: Literal["autolean.authorized-role-structural-json-role-metrics.v1"] = (
+        "autolean.authorized-role-structural-json-role-metrics.v1"
+    )
+    role: ModelWorkRoleV1
+    trials: Literal[2] = 2
+    receipt_bound_trials: Literal[2] = 2
+    strict_json_rejections: int = Field(ge=0, le=2)
+    schema_rejections: int = Field(ge=0, le=2)
+    semantic_exact_matches: int = Field(ge=0, le=2)
+    semantic_exact_mismatches: int = Field(ge=0, le=2)
+    budget_saturations: int = Field(ge=0, le=2)
+
+    @model_validator(mode="after")
+    def validate_terminal_partition(self) -> Self:
+        if (
+            self.strict_json_rejections
+            + self.schema_rejections
+            + self.semantic_exact_matches
+            + self.semantic_exact_mismatches
+            != self.trials
+        ):
+            raise ValueError("structural metrics must partition each role's trials")
+        return self
+
+
+class AuthorizedRoleStructuralJsonEvaluationReportV1(ContractModel):
+    """Read-only V3 grammar report with no response text, endpoint, or private locator."""
+
+    schema_version: Literal["autolean.authorized-role-structural-json-evaluation.v1"] = (
+        "autolean.authorized-role-structural-json-evaluation.v1"
+    )
+    model_config = ConfigDict(hide_input_in_errors=True)
+
+    run_id: AuthorizedRoleRunIdV1
+    provider_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    model_id: str = Field(pattern=_IDENTIFIER_PATTERN)
+    model_revision: str = Field(min_length=1, max_length=512)
+    provider_configuration_hash: str = Field(pattern=_SHA256_PATTERN)
+    grammar_version: Literal["autolean.deepseek-role-json-grammar.v1"] = (
+        "autolean.deepseek-role-json-grammar.v1"
+    )
+    evaluator_hash: str = Field(pattern=_SHA256_PATTERN)
+    authority: Literal["local_structural_json_nonproduction"] = (
+        "local_structural_json_nonproduction"
+    )
+    promotion_eligible: Literal[False] = False
+    role_floor_admission: Literal["forbidden"] = "forbidden"
+    cross_role_aggregation_permitted: Literal[False] = False
+    trials: tuple[AuthorizedRoleStructuralJsonTrialResultV1, ...]
+    role_metrics: tuple[AuthorizedRoleStructuralJsonRoleMetricsV1, ...]
+
+    @model_validator(mode="after")
+    def validate_report(self) -> Self:
+        if (
+            len(self.trials) != 10
+            or self.trials != tuple(sorted(self.trials, key=lambda item: item.coordinate_hash))
+            or len({item.coordinate_hash for item in self.trials}) != 10
+        ):
+            raise ValueError("structural report requires ten canonical opaque trials")
+        expected_metrics = _structural_role_metrics(self.trials)
+        if self.role_metrics != expected_metrics:
+            raise ValueError("structural role metrics do not match its trials")
+        return self
+
+    def canonical_json_bytes(self) -> bytes:
+        return canonical_json_bytes(self) + b"\n"
+
+
 def evaluate_authorized_role_suite_exact_json(
     suite: AuthorizedRoleSuiteDefinition,
     sidecar: AuthorizedRoleSuiteSidecarV2,
@@ -159,6 +321,51 @@ def evaluate_completed_authorized_role_suite_exact_json(
 
     try:
         return _evaluate_completed_authorized_role_suite_exact_json(
+            suite,
+            sidecar,
+            evidence_reader=evidence_reader,
+        )
+    except AuthorizedRoleEvaluationError:
+        raise
+    except Exception:
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE) from None
+
+
+def diagnose_completed_authorized_role_suite_exact_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleExactJsonFailureTaxonomyReportV1:
+    """Classify receipt-bound candidate failures without exposing private candidate bytes."""
+
+    try:
+        return _diagnose_completed_authorized_role_suite_exact_json(
+            suite,
+            sidecar,
+            evidence_reader=evidence_reader,
+        )
+    except AuthorizedRoleEvaluationError:
+        raise
+    except Exception:
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE) from None
+
+
+def evaluate_completed_authorized_role_suite_structural_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleStructuralJsonEvaluationReportV1:
+    """Classify completed role responses through the versioned local JSON grammar.
+
+    This consumes the same authenticated V3 completion evidence as the exact evaluator.  It is
+    intentionally unavailable for missing or failed calls: no completed receipt means no trusted
+    candidate text, so transport failures remain outside this receipt-bound report.
+    """
+
+    try:
+        return _evaluate_completed_authorized_role_suite_structural_json(
             suite,
             sidecar,
             evidence_reader=evidence_reader,
@@ -291,6 +498,157 @@ def _evaluate_completed_authorized_role_suite_exact_json(
         evaluator_hash=evaluator_hash,
         trials=canonical_results,
         role_metrics=_role_metrics(canonical_results),
+    )
+
+
+def _evaluate_completed_authorized_role_suite_structural_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleStructuralJsonEvaluationReportV1:
+    if not isinstance(sidecar, AuthorizedRoleSuiteSidecarV3):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    if not isinstance(evidence_reader, AuthorizedRoleCompletionEvidenceReaderV2):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    prepared = prepare_locked_floor_trials(suite, run_id=sidecar.run_id)
+    manifest = evidence_reader.read_manifest(sidecar.private_manifest_handle)
+    joined = _validated_completed_private_join(prepared, sidecar, manifest)
+    cases = {case.case_id: case for case in suite.matrix.cases}
+
+    results: list[AuthorizedRoleStructuralJsonTrialResultV1] = []
+    for trial, public, private in joined:
+        response = evidence_reader.read_response(
+            manifest=manifest,
+            entry=private,
+            expected_bundle_id=trial.work_bundle.bundle_id.value,
+        )
+        if (
+            response.provider_id != public.provider_id
+            or response.model_id != public.model_id
+            or response.tool_calls
+        ):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        expected_output = cases[trial.context.case_id].expected_output
+        if not isinstance(expected_output, Mapping):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        normalized_expected = _strict_json_object(
+            canonical_json_bytes(expected_output).decode("ascii")
+        )
+        if normalized_expected is None or not _matches_role_json_grammar(
+            public.role, normalized_expected
+        ):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        output_limit = trial.cell.budget.max_output_tokens
+        output_tokens = private.receipt.record.actual_usage.output_tokens
+        if output_tokens > output_limit:
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        candidate = _strict_json_object(response.text)
+        strict_json_outcome: Literal["accepted", "rejected"]
+        schema_outcome: Literal["accepted", "rejected", "not_evaluated"]
+        semantic_exact_outcome: Literal["matched", "mismatched", "not_evaluated"]
+        if candidate is None:
+            strict_json_outcome = "rejected"
+            schema_outcome = "not_evaluated"
+            semantic_exact_outcome = "not_evaluated"
+        elif not _matches_role_json_grammar(public.role, candidate):
+            strict_json_outcome = "accepted"
+            schema_outcome = "rejected"
+            semantic_exact_outcome = "not_evaluated"
+        else:
+            strict_json_outcome = "accepted"
+            schema_outcome = "accepted"
+            semantic_exact_outcome = (
+                "matched"
+                if canonical_json_bytes(candidate) == canonical_json_bytes(expected_output)
+                else "mismatched"
+            )
+        results.append(
+            AuthorizedRoleStructuralJsonTrialResultV1(
+                coordinate_hash=_coordinate_hash(public),
+                role=public.role,
+                strict_json_outcome=strict_json_outcome,
+                schema_outcome=schema_outcome,
+                semantic_exact_outcome=semantic_exact_outcome,
+                budget_saturation_outcome=(
+                    "saturated" if output_tokens == output_limit else "not_saturated"
+                ),
+                output_commitment=public.completion.public_output_commitment.value,
+            )
+        )
+
+    canonical_results = tuple(sorted(results, key=lambda item: item.coordinate_hash))
+    first_target = suite.matrix.cells[0].model
+    return AuthorizedRoleStructuralJsonEvaluationReportV1(
+        run_id=sidecar.run_id,
+        provider_id=first_target.provider_id,
+        model_id=first_target.model_id,
+        model_revision=first_target.model_revision,
+        provider_configuration_hash=first_target.provider_configuration_hash,
+        evaluator_hash=_structural_evaluator_hash(suite),
+        trials=canonical_results,
+        role_metrics=_structural_role_metrics(canonical_results),
+    )
+
+
+def _diagnose_completed_authorized_role_suite_exact_json(
+    suite: AuthorizedRoleSuiteDefinition,
+    sidecar: AuthorizedRoleSuiteSidecarV3,
+    *,
+    evidence_reader: AuthorizedRoleCompletionEvidenceReaderV2,
+) -> AuthorizedRoleExactJsonFailureTaxonomyReportV1:
+    if not isinstance(sidecar, AuthorizedRoleSuiteSidecarV3):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    if not isinstance(evidence_reader, AuthorizedRoleCompletionEvidenceReaderV2):
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    prepared = prepare_locked_floor_trials(suite, run_id=sidecar.run_id)
+    manifest = evidence_reader.read_manifest(sidecar.private_manifest_handle)
+    joined = _validated_completed_private_join(prepared, sidecar, manifest)
+    cases = {case.case_id: case for case in suite.matrix.cases}
+    partitions: dict[ModelWorkRoleV1, list[Literal["passed", "schema", "semantic"]]] = {
+        role: [] for role in ModelWorkRoleV1
+    }
+    for trial, public, private in joined:
+        response = evidence_reader.read_response(
+            manifest=manifest,
+            entry=private,
+            expected_bundle_id=trial.work_bundle.bundle_id.value,
+        )
+        if (
+            response.provider_id != public.provider_id
+            or response.model_id != public.model_id
+            or response.tool_calls
+        ):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        expected_output = cases[trial.context.case_id].expected_output
+        if not isinstance(expected_output, Mapping):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        candidate = _strict_json_object(response.text)
+        if candidate is None:
+            outcome: Literal["passed", "schema", "semantic"] = "schema"
+        elif canonical_json_bytes(candidate) == canonical_json_bytes(expected_output):
+            outcome = "passed"
+        else:
+            outcome = "semantic"
+        partitions[public.role].append(outcome)
+    metrics = tuple(
+        AuthorizedRoleExactJsonFailureMetricsV1(
+            role=role,
+            passed=outcomes.count("passed"),
+            schema_rejections=outcomes.count("schema"),
+            semantic_mismatches=outcomes.count("semantic"),
+        )
+        for role, outcomes in sorted(partitions.items(), key=lambda item: item[0].value)
+    )
+    first_target = suite.matrix.cells[0].model
+    return AuthorizedRoleExactJsonFailureTaxonomyReportV1(
+        run_id=sidecar.run_id,
+        provider_id=first_target.provider_id,
+        model_id=first_target.model_id,
+        model_revision=first_target.model_revision,
+        provider_configuration_hash=first_target.provider_configuration_hash,
+        evaluator_hash=_evaluator_hash(suite),
+        role_metrics=metrics,
     )
 
 
@@ -487,6 +845,129 @@ def _evaluator_hash(suite: AuthorizedRoleSuiteDefinition) -> str:
     ).hexdigest()
 
 
+def _structural_evaluator_hash(suite: AuthorizedRoleSuiteDefinition) -> str:
+    cases = tuple(
+        {
+            "case_id": case.case_id,
+            "role": case.role.value,
+            "case_revision": case.case_revision,
+            "scorer": case.scorer,
+            "expected_output": case.expected_output,
+        }
+        for case in sorted(suite.matrix.cases, key=lambda item: item.case_id)
+    )
+    if len(cases) != 10:
+        raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    for case in suite.matrix.cases:
+        if not isinstance(case.expected_output, Mapping):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+        expected = _strict_json_object(canonical_json_bytes(case.expected_output).decode("ascii"))
+        if expected is None or not _matches_role_json_grammar(case.role, expected):
+            raise AuthorizedRoleEvaluationError(_INVALID_EVIDENCE)
+    return hashlib.sha256(
+        canonical_json_bytes(
+            {
+                "schema_version": "autolean.authorized-role-structural-json-evaluator.v1",
+                "grammar_version": "autolean.deepseek-role-json-grammar.v1",
+                "grammar": _deepseek_role_json_grammar_specification(),
+                "matrix_revision": suite.matrix.matrix_revision,
+                "cases": cases,
+            }
+        )
+    ).hexdigest()
+
+
+def _deepseek_role_json_grammar_specification() -> dict[str, object]:
+    """Canonical, evaluator-owned structural grammar; it deliberately contains no case oracle."""
+
+    return {
+        "schema_version": "autolean.deepseek-role-json-grammar.v1",
+        "closed_objects": True,
+        "roles": {
+            "prover": {
+                "one_of": (
+                    {"action": "submit_proof", "proof": "string"},
+                    {"action": "report_gap", "reason_code": "string"},
+                )
+            },
+            "statement_formalizer": {
+                "one_of": (
+                    {"lean_statement": "string"},
+                    {
+                        "action": "request_contract_change",
+                        "reason_code": "string",
+                    },
+                )
+            },
+            "fidelity_reviewer": {"decision": "string", "reason_code": "string"},
+            "cheating_supervisor": {"decision": "string", "reason_code": "string"},
+            "task_allocator": {
+                "assignments": "array<object{node_id:string,worker_id:string}>",
+                "reason_code": "optional-string",
+            },
+        },
+    }
+
+
+def _matches_role_json_grammar(role: str, value: Mapping[str, object]) -> bool:
+    """Validate only the closed, role-local structural contract, never case semantics."""
+
+    if role == ModelWorkRoleV1.PROVER:
+        action = value.get("action")
+        return (
+            action == "submit_proof"
+            and _has_exact_keys(value, "action", "proof")
+            and _is_json_string(value.get("proof"))
+        ) or (
+            action == "report_gap"
+            and _has_exact_keys(value, "action", "reason_code")
+            and _is_json_string(value.get("reason_code"))
+        )
+    if role == ModelWorkRoleV1.STATEMENT_FORMALIZER:
+        action = value.get("action")
+        return (
+            _has_exact_keys(value, "lean_statement")
+            and _is_json_string(value.get("lean_statement"))
+        ) or (
+            action == "request_contract_change"
+            and _has_exact_keys(value, "action", "reason_code")
+            and _is_json_string(value.get("reason_code"))
+        )
+    if role in (ModelWorkRoleV1.FIDELITY_REVIEWER, ModelWorkRoleV1.CHEATING_SUPERVISOR):
+        return (
+            _has_exact_keys(value, "decision", "reason_code")
+            and _is_json_string(value.get("decision"))
+            and _is_json_string(value.get("reason_code"))
+        )
+    if role == ModelWorkRoleV1.TASK_ALLOCATOR:
+        if not set(value).issubset({"assignments", "reason_code"}) or "assignments" not in value:
+            return False
+        assignments = value.get("assignments")
+        return (
+            isinstance(assignments, list)
+            and all(_is_task_assignment(item) for item in assignments)
+            and ("reason_code" not in value or _is_json_string(value.get("reason_code")))
+        )
+    return False
+
+
+def _has_exact_keys(value: Mapping[str, object], *keys: str) -> bool:
+    return set(value) == set(keys)
+
+
+def _is_json_string(value: object) -> bool:
+    return type(value) is str
+
+
+def _is_task_assignment(value: object) -> bool:
+    return (
+        isinstance(value, dict)
+        and _has_exact_keys(value, "node_id", "worker_id")
+        and _is_json_string(value.get("node_id"))
+        and _is_json_string(value.get("worker_id"))
+    )
+
+
 def _coordinate_hash(sidecar: AuthorizedRoleTrialSidecarV2 | AuthorizedRoleTrialSidecarV3) -> str:
     return hashlib.sha256(
         canonical_json_bytes(
@@ -518,6 +999,35 @@ def _role_metrics(
                 passed=passed,
                 pass_rate_ppm=score,
                 mean_score_micros=score,
+            )
+        )
+    return tuple(metrics)
+
+
+def _structural_role_metrics(
+    trials: tuple[AuthorizedRoleStructuralJsonTrialResultV1, ...],
+) -> tuple[AuthorizedRoleStructuralJsonRoleMetricsV1, ...]:
+    metrics: list[AuthorizedRoleStructuralJsonRoleMetricsV1] = []
+    for role in sorted(ModelWorkRoleV1, key=lambda item: item.value):
+        selected = tuple(item for item in trials if item.role is role)
+        if len(selected) != 2:
+            raise ValueError("each authorized role requires exactly two trials")
+        metrics.append(
+            AuthorizedRoleStructuralJsonRoleMetricsV1(
+                role=role,
+                strict_json_rejections=sum(
+                    item.strict_json_outcome == "rejected" for item in selected
+                ),
+                schema_rejections=sum(item.schema_outcome == "rejected" for item in selected),
+                semantic_exact_matches=sum(
+                    item.semantic_exact_outcome == "matched" for item in selected
+                ),
+                semantic_exact_mismatches=sum(
+                    item.semantic_exact_outcome == "mismatched" for item in selected
+                ),
+                budget_saturations=sum(
+                    item.budget_saturation_outcome == "saturated" for item in selected
+                ),
             )
         )
     return tuple(metrics)

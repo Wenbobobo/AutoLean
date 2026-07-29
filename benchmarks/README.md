@@ -63,8 +63,9 @@ language redistribution rights as unresolved even though the repositories are MI
 fixed Git commits in `fate.lock.json`, then uses `uv run python scripts/build_fate_manifest.py
 --checkout ... --output ...` to produce a content-addressed source manifest.  Lean task source is
 read from the locked Git blobs, not the mutable working tree, so Windows line-ending conversion,
-`assume-unchanged`, and working-tree edits cannot redefine a benchmark statement.  The separately
-generated FATE metadata and Lake manifest are accepted only when their pinned SHA-256 values match.
+`assume-unchanged`, and working-tree edits cannot redefine a benchmark statement. The metadata
+digest uses its verified Git object; the ignored Lake manifest allows only CRLF-to-LF presentation
+normalization before its pinned canonical-LF SHA-256 is checked.
 
 The manifest records every original file's SHA-256, target declaration identity, and the byte
 hashes on both sides of its single `sorry` token.  Its reported `manifest_sha256` must be stored in

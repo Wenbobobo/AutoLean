@@ -78,3 +78,12 @@ A separate credential-free HTTPS reachability probe from the same Codex sandbox 
 connection was established. That narrows the observed blocker to this execution environment's
 network path; it does not establish an endpoint outage and does not authorize an automatic retry.
 `AUTH-PROVIDER-01` remains open.
+
+## 2026-07-29 separate role observation
+
+This does not revise the bootstrap-canary observation above. A separate frozen ten-call DeepSeek
+role run settled all requests, but every accepted completion reached the fixed 256-token output
+ceiling. Its redacted local record is explicitly non-promotable and cannot distinguish a poor final
+answer from an answer crowded out by the fixed reasoning/output budget. It therefore supports no
+competence, role-floor, proof, or Builder-fidelity conclusion; see
+[the separate calibration record](research/deepseek-role-json-contract-calibration-2026-07-29.md).

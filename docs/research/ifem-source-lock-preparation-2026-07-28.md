@@ -1,8 +1,9 @@
 # iFEM source-lock preparation receipt
 
-**Status:** `discovery`; source metadata and rights are verified, but no iFEM
-source file has been acquired in this checkout.  This record does not authorize a
-Builder freeze, model egress, Prover handoff, or a claim about Mathlib coverage.
+**Status:** preparation design retained. The fixed source set was acquired and replayed on
+2026-07-29; see [the redacted source-lock evidence](ifem-source-lock-evidence-2026-07-29.md).
+That later record does not authorize a Builder freeze, model egress, Prover handoff, or a claim
+about Mathlib coverage.
 
 ## Fixed source identity
 
@@ -66,11 +67,10 @@ receipt path and selected-file count. To revalidate its local bytes later:
 uv run --frozen python scripts/ifem_source_lock.py verify --receipt <receipt-path>
 ```
 
-The current Codex sandbox cannot directly reach `api.github.com` or raw GitHub,
-so it could verify the public metadata through GitHub's repository connector
-but could not produce the source-file SHA-256 values in this session.  Consequently the
-tracked reference manifest remains unchanged and the state remains
-`discovery`, not `local_calibration`.
+The later acquisition used exact base64 GitHub repository objects at the pinned commit and the
+adapter's `import-staged` boundary because child-process HTTPS remained unavailable. The tracked
+reference manifest remains unchanged: the emitted entries are still a local-only candidate, and
+the state has not advanced to `local_calibration`.
 
 ## Source selection recorded by the receipt
 
@@ -83,17 +83,18 @@ not just Chapter 10:
   `RieszRepresentation.ipynb`, and `Coercive.ipynb`.
 
 It additionally binds `README.md`, `_toc.yml`, and `intro.md`; the separately
-downloaded `LICENSE` is checked for its CC BY notice and hash.  The receipt is
-therefore a source-lock prerequisite for the 27-node Galerkin discovery graph,
-not proof that the notebooks form a mathematical dependency path or a frozen
-theorem slice.
+downloaded `LICENSE` is checked for its CC BY notice and hash. The receipt was originally
+prepared for the historical 27-node Galerkin proposal. The active content-addressed lane now
+retains 25 nodes, of which 21 enter the prerequisite denominator; the older count has no
+authority over that manifest. In either case, the receipt is not proof that the notebooks form
+a mathematical dependency path or a frozen theorem slice.
 
 ## Next machine gates
 
-1. Acquire and reverify the thirteen selected source files with the fixed tool;
-   append its emitted manifest entries to a new reference-manifest revision
-   only after every exact hash is independently replayed.
-2. Send no source text to external agents.  A local-only notebook span selector
+1. Preserve the independently replayed source receipt; append its emitted manifest entries to a
+   new reference-manifest revision only when that revision remains `local_only` and binds the
+   exact hashes in the later evidence record.
+2. Send no source text to external agents. A local-only notebook span selector
    must preserve the existing per-file hashes and add span hashes before any
    Builder candidate exists.
 3. Use the pinned Library environment to query exact Mathlib representations

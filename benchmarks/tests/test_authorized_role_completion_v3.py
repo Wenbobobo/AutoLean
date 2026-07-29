@@ -26,6 +26,8 @@ from autolean_contracts import (
     ModelResponseArtifactV1,
     ModelResponseToolCallV1,
     ModelResponseUsageV1,
+    ModelWorkRoleV1,
+    canonical_json_bytes,
     model_work_admission_evidence_identity,
     model_work_admission_payload,
     stable_identifier,
@@ -52,6 +54,7 @@ from autolean_prover.providers import (
 )
 from pydantic import ValidationError
 
+from benchmarks import authorized_role_evaluation as role_evaluation
 from benchmarks.authorized_role_bridge import (
     AuthorizedRoleCompletionEvidenceReaderV2,
     AuthorizedRoleCompletionManifestStoreV2,
@@ -69,7 +72,9 @@ from benchmarks.authorized_role_bridge import (
 )
 from benchmarks.authorized_role_evaluation import (
     AuthorizedRoleEvaluationError,
+    diagnose_completed_authorized_role_suite_exact_json,
     evaluate_completed_authorized_role_suite_exact_json,
+    evaluate_completed_authorized_role_suite_structural_json,
 )
 from benchmarks.role_benchmark import RoleModelTargetV1
 
@@ -114,6 +119,10 @@ class CountingProvider(FakeProvider):
     def generate(self, request: ModelRequest) -> ModelResponse:
         self.calls += 1
         return super().generate(request)
+
+    def replace_responses(self, responses: list[ModelResponse]) -> None:
+        self._responses = tuple(responses)
+        self._next = 0
 
 
 class CountingOutputStore(LocalPrivateModelOutputStore):
@@ -355,6 +364,72 @@ def _reader(harness: CompletionHarness) -> AuthorizedRoleCompletionEvidenceReade
     )
 
 
+def _structural_outcome_responses(
+    suite: AuthorizedRoleSuiteDefinition,
+) -> list[ModelResponse]:
+    cases = {case.case_id: case for case in suite.matrix.cases}
+    seen_by_role = {role: 0 for role in ModelWorkRoleV1}
+    responses: list[ModelResponse] = []
+    for trial in prepare_locked_floor_trials(suite, run_id="authorized-role-v3-run"):
+        role = trial.work_bundle.role
+        position = seen_by_role[role]
+        seen_by_role[role] += 1
+        expected = cases[trial.context.case_id].expected_output
+        if role is ModelWorkRoleV1.PROVER and position == 0:
+            text = "[]"
+        elif position == 0:
+            text = '{"PRIVATE_STRUCTURAL_FIELD":true}'
+        elif role is ModelWorkRoleV1.PROVER:
+            mutated = cast(dict[str, object], json.loads(canonical_json_bytes(expected)))
+            for key in sorted(mutated):
+                if key != "action" and type(mutated[key]) is str:
+                    mutated[key] = "PRIVATE_STRUCTURAL_RESPONSE"
+                    break
+            else:
+                raise AssertionError("prover structural fixture requires a mutable string field")
+            text = canonical_json_bytes(mutated).decode("ascii")
+        else:
+            text = canonical_json_bytes(expected).decode("ascii")
+        responses.append(
+            ModelResponse(
+                provider_id="fake",
+                model_id="role-v3-model",
+                text=text,
+                usage=TokenUsage(input_tokens=10, cached_input_tokens=2, output_tokens=256),
+            )
+        )
+    return responses
+
+
+@pytest.mark.parametrize(
+    ("role", "candidate"),
+    [
+        (ModelWorkRoleV1.PROVER, {"action": "submit_proof"}),
+        (
+            ModelWorkRoleV1.STATEMENT_FORMALIZER,
+            {"lean_statement": "theorem t : True := by trivial", "extra": "forbidden"},
+        ),
+        (
+            ModelWorkRoleV1.FIDELITY_REVIEWER,
+            {"decision": True, "reason_code": "meaning_preserved"},
+        ),
+        (
+            ModelWorkRoleV1.CHEATING_SUPERVISOR,
+            {"decision": "accept", "reason_code": "proof_slot_only", "extra": "forbidden"},
+        ),
+        (
+            ModelWorkRoleV1.TASK_ALLOCATOR,
+            {"assignments": [{"node_id": "lemma.ready", "worker_id": 1}]},
+        ),
+    ],
+)
+def test_structural_json_grammar_rejects_missing_extra_and_wrong_types(
+    role: ModelWorkRoleV1,
+    candidate: dict[str, object],
+) -> None:
+    assert role_evaluation._matches_role_json_grammar(role, candidate) is False
+
+
 def test_v3_public_sidecar_has_fixed_denominator_and_no_private_response_data(
     tmp_path: Path,
 ) -> None:
@@ -391,6 +466,66 @@ def test_v3_public_sidecar_has_fixed_denominator_and_no_private_response_data(
     )
     with pytest.raises(AuthorizedRoleReconciliationRequired):
         harness.manifest_store.put_manifest(manifest)
+
+
+def test_completed_structural_json_evaluator_separates_outcomes_and_redacts(
+    tmp_path: Path,
+) -> None:
+    harness = _harness(tmp_path)
+    harness.provider.replace_responses(_structural_outcome_responses(harness.suite))
+    sidecar = _run(harness)
+
+    report = evaluate_completed_authorized_role_suite_structural_json(
+        harness.suite,
+        sidecar,
+        evidence_reader=_reader(harness),
+    )
+
+    assert report.grammar_version == "autolean.deepseek-role-json-grammar.v1"
+    assert report.authority == "local_structural_json_nonproduction"
+    assert report.promotion_eligible is False
+    assert report.role_floor_admission == "forbidden"
+    assert report.cross_role_aggregation_permitted is False
+    assert {item.transport_outcome for item in report.trials} == {"receipt_bound"}
+    assert sum(item.strict_json_outcome == "rejected" for item in report.trials) == 1
+    assert sum(item.schema_outcome == "rejected" for item in report.trials) == 4
+    assert sum(item.semantic_exact_outcome == "mismatched" for item in report.trials) == 1
+    assert sum(item.semantic_exact_outcome == "matched" for item in report.trials) == 4
+    assert {item.budget_saturation_outcome for item in report.trials} == {"saturated"}
+    assert sum(item.strict_json_rejections for item in report.role_metrics) == 1
+    assert sum(item.schema_rejections for item in report.role_metrics) == 4
+    assert sum(item.semantic_exact_mismatches for item in report.role_metrics) == 1
+    assert sum(item.semantic_exact_matches for item in report.role_metrics) == 4
+    assert all(item.budget_saturations == 2 for item in report.role_metrics)
+
+    public = report.canonical_json_bytes().decode("ascii")
+    for forbidden in (
+        "PRIVATE_STRUCTURAL_FIELD",
+        "PRIVATE_STRUCTURAL_RESPONSE",
+        "private_manifest_handle",
+        "actual_usage",
+        "endpoint",
+    ):
+        assert forbidden not in public
+
+
+def test_completed_failure_taxonomy_is_role_separated_and_redacted(tmp_path: Path) -> None:
+    harness = _harness(tmp_path)
+    sidecar = _run(harness)
+
+    taxonomy = diagnose_completed_authorized_role_suite_exact_json(
+        harness.suite,
+        sidecar,
+        evidence_reader=_reader(harness),
+    )
+
+    assert all(
+        metric.passed == 0 and metric.schema_rejections == 0 and metric.semantic_mismatches == 2
+        for metric in taxonomy.role_metrics
+    )
+    public = taxonomy.model_dump_json()
+    assert "PRIVATE_V3_RESPONSE_" not in public
+    assert "private_manifest_handle" not in public
 
 
 def test_completed_evaluator_rejects_tampering_and_cross_run_evidence(tmp_path: Path) -> None:

@@ -15,9 +15,11 @@ from autolean_contracts import (
     DependencyClosureFileV1,
     DependencyClosureManifestV1,
     DependencyClosureModuleV1,
+    DependencyClosureObservationEvidenceV1,
     DependencyClosureRefV1,
     DependencyDeclarationInventoryV1,
     DependencyDeclarationKindV1,
+    DependencyObservedDeclarationV1,
     FormalizationTaskBundleV1,
     HashKindV1,
     build_dependency_closure_ref,
@@ -529,3 +531,62 @@ def test_manifest_rejects_file_hash_size_and_tree_tampering() -> None:
     files[0]["artifact"]["size"] += 1
     with pytest.raises(ValidationError, match="tree hash"):
         DependencyClosureManifestV1.model_validate(payload)
+
+
+def test_observed_closure_evidence_is_explicitly_report_only() -> None:
+    evidence = DependencyClosureObservationEvidenceV1(
+        bundle_id="bundle-v2",
+        claim_event_id="event-1",
+        bundle_hash=digest_text(HashKindV1.BUNDLE, "bundle"),
+        contract_hash=digest_text(HashKindV1.CONTRACT, "contract"),
+        proof_boundary_hash=digest_text(HashKindV1.PROOF_BOUNDARY, "boundary"),
+        environment_hash=digest_text(HashKindV1.ENVIRONMENT, "environment"),
+        closure_manifest_hash=digest_text(HashKindV1.DEPENDENCY_CLOSURE, "manifest"),
+        dependency_tree_hash=digest_text(HashKindV1.DEPENDENCY_TREE, "tree"),
+        observed_tree_hash=digest_text(HashKindV1.DEPENDENCY_TREE, "observed-tree"),
+        loaded_modules=(FOUNDATION,),
+        observed_declarations=(
+            DependencyObservedDeclarationV1(
+                declaration_name="AutoLeanLibrary.Fixtures.Dag.helper",
+                kind=DependencyDeclarationKindV1.DEFINITION,
+                canonical_type_hash=digest_text(HashKindV1.ELABORATED_TYPE, "Nat -> Nat"),
+                module_name=FOUNDATION,
+                proposition_bearing=False,
+            ),
+        ),
+    )
+    assert evidence.authority == "report_only"
+    assert evidence.acceptance_authority is False
+
+
+def test_observed_closure_evidence_rejects_noncanonical_declaration_order() -> None:
+    common = {
+        "bundle_id": "bundle-v2",
+        "claim_event_id": "event-1",
+        "bundle_hash": digest_text(HashKindV1.BUNDLE, "bundle"),
+        "contract_hash": digest_text(HashKindV1.CONTRACT, "contract"),
+        "proof_boundary_hash": digest_text(HashKindV1.PROOF_BOUNDARY, "boundary"),
+        "environment_hash": digest_text(HashKindV1.ENVIRONMENT, "environment"),
+        "closure_manifest_hash": digest_text(HashKindV1.DEPENDENCY_CLOSURE, "manifest"),
+        "dependency_tree_hash": digest_text(HashKindV1.DEPENDENCY_TREE, "tree"),
+        "observed_tree_hash": digest_text(HashKindV1.DEPENDENCY_TREE, "observed-tree"),
+        "loaded_modules": (FOUNDATION,),
+    }
+    rows = tuple(
+        DependencyObservedDeclarationV1(
+            declaration_name=name,
+            kind=DependencyDeclarationKindV1.DEFINITION,
+            canonical_type_hash=digest_text(HashKindV1.ELABORATED_TYPE, name),
+            module_name=FOUNDATION,
+            proposition_bearing=False,
+        )
+        for name in (
+            "AutoLeanLibrary.Fixtures.Dag.zeta",
+            "AutoLeanLibrary.Fixtures.Dag.alpha",
+        )
+    )
+    with pytest.raises(ValidationError, match="observed dependency declarations"):
+        DependencyClosureObservationEvidenceV1(
+            **common,
+            observed_declarations=rows,
+        )

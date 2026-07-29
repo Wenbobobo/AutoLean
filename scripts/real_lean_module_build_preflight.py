@@ -13,6 +13,11 @@ import sys
 from collections.abc import Sequence
 from pathlib import Path
 
+if __package__ in {None, ""}:
+    _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+    if str(_REPOSITORY_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPOSITORY_ROOT))
+
 from autolean_control_plane import ArtifactStore
 
 from benchmarks.real_lean_project_dag_module_build import (

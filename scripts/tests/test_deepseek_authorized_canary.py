@@ -10,12 +10,17 @@ from pathlib import Path
 import httpx
 import pytest
 from autolean_contracts import (
+    AttestationError,
+    AttestationPurposeV1,
+    AttestationSignerV1,
+    AttestationV1,
     HashKindV1,
     ModelExecutionAuthorizationError,
     ModelExecutionBudgetV1,
     digest_text,
 )
 from autolean_prover.errors import ConfigurationError, PolicyViolation, ProviderResponseError
+from autolean_prover.providers import ModelExecutionCompletionRecoveryRequired
 
 from scripts import deepseek_authorized_canary as canary
 
@@ -115,6 +120,32 @@ class ReturningTransport:
         return {"safe": True}
 
 
+class FailOnceCompletionSigner:
+    def __init__(self, delegate: AttestationSignerV1) -> None:
+        self._delegate = delegate
+        self.calls = 0
+
+    def issue(
+        self,
+        *,
+        purpose: AttestationPurposeV1,
+        payload: Mapping[str, object],
+        evidence_identity: str,
+        ttl_seconds: float,
+        nonce: str | None = None,
+    ) -> AttestationV1:
+        self.calls += 1
+        if self.calls == 1:
+            raise AttestationError("injected completion signer interruption")
+        return self._delegate.issue(
+            purpose=purpose,
+            payload=payload,
+            evidence_identity=evidence_identity,
+            ttl_seconds=ttl_seconds,
+            nonce=nonce,
+        )
+
+
 def _environment() -> dict[str, str]:
     return {"AUTOLEAN_DEEPSEEK_API_KEY": "x" * 32}
 
@@ -202,6 +233,30 @@ def test_canary_uses_full_authorization_chain_and_redacts_output(tmp_path: Path)
     assert ledger[-1][1:] == (23, 3, 7)
     assert len(approvals) == 1
     assert json.loads(approvals[0][0])["approved_by"] == "operator-declared-bootstrap-canary"
+
+
+def test_canary_recovers_the_same_private_response_without_provider_rerun(tmp_path: Path) -> None:
+    clock = MutableClock(datetime(2026, 7, 27, tzinfo=UTC))
+    transport = CountingTransport()
+    prepared = canary.prepare_canary(
+        state_root=tmp_path,
+        environment=_environment(),
+        transport=transport,
+        operator_approved=True,
+        completion_signer_factory=FailOnceCompletionSigner,
+        clock=clock,
+    )
+    authorization = canary.issue_canary_authorization(prepared)
+
+    with pytest.raises(ModelExecutionCompletionRecoveryRequired) as captured:
+        canary.execute_prepared_canary(prepared, authorization)
+
+    assert transport.calls == 1
+    recovered = canary.recover_prepared_canary(prepared, captured.value.recovery_handle)
+
+    assert transport.calls == 1
+    assert recovered["status"] == "settled"
+    assert recovered["completion"] != {}
 
 
 def test_canary_report_cannot_be_role_floor_capability_evidence(tmp_path: Path) -> None:

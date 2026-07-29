@@ -3,6 +3,12 @@
 **Status:** research-only recommendation; no source bytes acquired, no reference-manifest
 entry added, no rights decision made, no contract frozen, and no Prover handoff authorized.
 
+**Current-state pointer (2026-07-29):** this status is a retained historical snapshot. The bounded
+iFEM source set was later acquired and replayed as `local_only`; the active manifest is the
+25-node / 21-prerequisite revision documented in
+[the census protocol](ifem-prerequisite-census-protocol-2026-07-29.md). No statement has been
+frozen or handed to Prover.
+
 **Access date:** 2026-07-26 (Asia/Shanghai)
 
 **Pinned AutoLean Library baseline:** Mathlib `v4.28.0`,

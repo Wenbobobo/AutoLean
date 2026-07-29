@@ -143,6 +143,8 @@ class ChatCompletionsProvider:
             payload["thinking"] = {"type": "enabled"}
         if request.reasoning_effort is not None:
             payload["reasoning_effort"] = request.reasoning_effort
+        if request.response_format is not None:
+            payload["response_format"] = {"type": request.response_format}
         if request.tools:
             payload["tools"] = [
                 {
@@ -180,7 +182,16 @@ class ChatCompletionsProvider:
             raise ProviderResponseError("Chat Completions message content must be a string")
         tool_calls = self._parse_tool_calls(message.get("tool_calls"))
         if not text and not tool_calls:
-            raise ProviderResponseError("Chat Completions payload contains no text or tool call")
+            # Thinking-capable APIs may exhaust a bounded completion on private reasoning before
+            # they emit a final answer.  Preserve neither that chain-of-thought nor a fabricated
+            # answer: a syntactically valid reasoning-only response becomes an empty candidate
+            # that downstream evaluators can score as zero.  Treating it as a transport failure
+            # would instead obscure a real model outcome and tempt an unauthorized retry.
+            reasoning_content = message.get("reasoning_content")
+            if not isinstance(reasoning_content, str) or not reasoning_content:
+                raise ProviderResponseError(
+                    "Chat Completions payload contains no text or tool call"
+                )
         response_id = raw.get("id")
         if response_id is not None and not isinstance(response_id, str):
             raise ProviderResponseError("Chat Completions id must be a string")

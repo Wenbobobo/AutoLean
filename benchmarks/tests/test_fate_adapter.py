@@ -16,6 +16,7 @@ from benchmarks.fate_adapter import (
     FateFixtureTaskV1,
     FatePatchRejected,
     FateTargetV1,
+    _canonical_lf_bytes,
     _git_commit,
     _verify_tracked_tree,
 )
@@ -136,6 +137,14 @@ def test_adapter_uses_canonical_snapshot_when_worktree_drifts(tmp_path: Path) ->
     candidate = adapter.materialize_proof("FATE-M-1", "trivial")
     assert b": True := by\n  trivial" in candidate.source
     assert b": False :=" not in candidate.source
+
+
+def test_canonical_lf_bytes_accepts_crlf_presentation_but_rejects_bare_cr() -> None:
+    assert _canonical_lf_bytes(b'{\r\n  "fixture": true\r\n}\r\n', "fixture") == (
+        b'{\n  "fixture": true\n}\n'
+    )
+    with pytest.raises(FateFixtureIntegrityError, match="bare carriage return"):
+        _canonical_lf_bytes(b"bad\rbytes", "fixture")
 
 
 def test_task_rejects_path_traversal_and_multiple_proof_slots() -> None:

@@ -23,6 +23,17 @@ The DeepSeek bootstrap canary reached redacted `execution_refused/network`; the 
 not model results. The session cannot invoke WSL (`Wsl/Service/E_ACCESSDENIED`), so no fresh
 Docker/Lean receipt exists for this revision. The `no-RC` decision remains unchanged.
 
+**Working-tree status, 2026-07-29.** Stage B dependency-closure mechanics are present, but every
+nonempty accepted-dependency manifest fails closed pending a gateway-owned `dependency.admitted`
+module/OLean binding. The ten-call DeepSeek role observation settled but every output saturated its
+fixed 256-token ceiling, so it is non-promotable and supports no competence conclusion. Focused T7
+Python tests passed while OCI authority execution remains unrun. The canonical FATE lock remains,
+but the current compile canary has not rerun after `Wsl/Service/E_ACCESSDENIED`; historical canary
+evidence is nonbinding. The iFEM thirteen-file source lock is locally acquired/replayed under
+`local_only` with receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`,
+and the eleven-sample synthetic opening corpus covers required mutation families. None changes the
+`no-RC` decision, rights authority, semantic admission, freeze authority, or proof acceptance.
+
 ## Evidence vocabulary
 
 The labels below are deliberately ordered neither by convenience nor by optimism.  A later label
@@ -60,9 +71,10 @@ evidence does not match the draft.
   uv run --frozen pytest Builder/tests/test_source_harness.py Builder/tests/test_workflow.py Builder/tests/test_pilot_harness.py Builder/tests/test_local_calibration.py
   ```
 
-- The committed local-calibration material is explicitly a project-synthetic fixture in
-  [`Builder/pilots/local-calibration/`](../Builder/pilots/local-calibration/), with its public
-  boundary checked by [`scripts/tests/test_public_readiness.py`](../scripts/tests/test_public_readiness.py).
+- The committed local-calibration material is an eleven-sample project-synthetic fixture in
+  [`Builder/pilots/local-calibration/`](../Builder/pilots/local-calibration/) that covers every
+  required mutation family, with its public boundary checked by
+  [`scripts/tests/test_public_readiness.py`](../scripts/tests/test_public_readiness.py).
 
 **Evidence class.** `unit` plus `synthetic` fixture coverage.
 
@@ -180,11 +192,11 @@ the repository policy excludes Anthropic and Claude rather than providing them a
   uv run --frozen pytest Prover/tests/test_providers.py Prover/tests/test_operator_profiles.py Prover/tests/test_model_execution_authorization.py scripts/tests/test_deepseek_authorized_canary.py scripts/tests/test_deepseek_role_baseline.py
   ```
 
-**Evidence class.** `unit` and `synthetic` policy coverage. The operator-local canary returned
-redacted `execution_refused/network`. The five-role V2 runner completed credential-free `plan` and
-authorization-aware `preflight`, while its single permitted live attempt reached
-`reconciliation_required/network`. No invocation returned a model response or created a benchmark
-result. The operator sequence is:
+**Evidence class.** `unit` and `synthetic` policy coverage. The earlier operator-local canary
+returned redacted `execution_refused/network`. A later ten-call role observation settled every
+request, but every accepted completion reached the fixed 256-token output ceiling; its locally
+evaluated report is explicitly non-promotable and cannot support a competence conclusion. The
+operator sequence is:
 
 ```text
 uv run --frozen python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id <RUN_ID> --max-cost-microusd-per-trial <LIMIT>
@@ -193,8 +205,8 @@ uv run --frozen python -m scripts.deepseek_role_baseline run --operator-approved
 ```
 
 **Non-claim.** No provider capability, availability, cost, or model-quality result follows from
-the static profile, fake provider tests, or the observed network refusal. A bootstrap canary is
-explicitly neither a role-floor admission nor a benchmark score.
+the static profile, fake provider tests, network refusal, or the saturated ten-call observation. A
+bootstrap canary is explicitly neither a role-floor admission nor a benchmark score.
 
 **Remaining acceptance gate.** Replay the bounded request only when the authority environment has
 deliberate egress, with operator-owned environment credentials, independent admission and
@@ -259,8 +271,9 @@ of accepting a self-declared success state.
 - The current module-receipt verifier also checks that the typed frozen specification and leased
   request name the same job; an injected cross-job receipt is rejected before public verification.
 
-**Evidence class.** `synthetic` fixture and typed-control-plane coverage.  The real-Lean
-preflight is an `operator-local` diagnostic until its WSL/OCI receipt is retained and authenticated.
+**Evidence class.** Focused Python tests passed for the `synthetic` fixture and typed-control-plane
+coverage. The real-Lean preflight is an `operator-local` diagnostic until an OCI authority receipt
+is retained and authenticated; no such execution has run.
 
 **Non-claim.** This fixture is not cross-file theorem-library construction, an authoritative Lean
 module build, a model-driven integration run, or evidence that an arbitrary declaration change is
@@ -294,7 +307,9 @@ path.  Regression, comparison, and full-suite selections are distinct by constru
   ```
 
 **Evidence class.** `unit` and `synthetic` fake-provider/fake-verifier coverage; the preflight is
-an `operator-local` configuration check. The common executor has distinct `regression-48`,
+an `operator-local` configuration check. `benchmarks/fate.lock.json` remains canonical, but the
+current compile canary has not rerun after `Wsl/Service/E_ACCESSDENIED`; any earlier canary report
+is historical and nonbinding. The common executor has distinct `regression-48`,
 `model-compare-90`, and `FATE-350` selections, preflights authorization before ModelWork state
 mutation, and carries a deterministic attempt seed across restart projections.
 

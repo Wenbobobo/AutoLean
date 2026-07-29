@@ -27,7 +27,7 @@ PROJECT_SYNTHETIC_FIXTURE_LICENSE_SHA256 = (
     "5c9817c129b98e7bb966bca028c43c19107102ef8e03fe799bffb4354f4ef015"
 )
 PROJECT_SYNTHETIC_FIXTURE_SHA256 = (
-    "0a6b8f3332559c4547fc5f23de3a1221e775a8c0c9835645a41885b40d1e8bfb"
+    "a8d9ae4faf4d376686e7e209c0ab8bce4c23d0647b81d142244feea9abcd30d7"
 )
 PROJECT_SYNTHETIC_FIXTURE_SAMPLE_IDS = frozenset(
     {
@@ -40,6 +40,7 @@ PROJECT_SYNTHETIC_FIXTURE_SAMPLE_IDS = frozenset(
         "mg-a-length-geodesic",
         "mg-a-quantifier-order",
         "mg-a-nonempty-vacuity",
+        "mg-a-finite-noetherian-compactness",
         "mg-a-endpoint-order",
     }
 )

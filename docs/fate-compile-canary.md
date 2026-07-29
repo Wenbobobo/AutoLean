@@ -38,19 +38,19 @@ concurrent drift but is not a substitute for an immutable mount against a hostil
 
 ## Reproducible ext4 runtime
 
-Windows and ext4 checkouts do not materialize this fixture identically. The 350 task sources and
-other tracked Lean inputs are bound to LF Git blobs, while the repository lock intentionally
-binds each split's metadata JSON and `lake-manifest.json` to CRLF worktree bytes. A plain WSL
-checkout therefore cannot satisfy both boundaries.
+Windows and ext4 checkouts may materialize text differently, so every FATE lock digest now denotes
+canonical LF bytes. Task sources and metadata JSON are read from verified Git objects; the ignored
+`lake-manifest.json` accepts only CRLF-to-LF presentation normalization and rejects bare carriage
+returns. A plain LF WSL checkout therefore satisfies the same fixture lock as Windows.
 
 `scripts/fate_wsl_runtime.py` provides three bounded commands:
 
-- `prepare` creates an isolated local object database and detached worktrees below an explicit
+- `prepare` creates an isolated local object database and detached LF worktrees below an explicit
   ext4 cache root. It uses `git clone --local --no-hardlinks`; it neither fetches nor retains a
-  remote. Split-specific Git `info/attributes` name only the two CRLF paths.
-- `audit` is read-only. It verifies all commits, all 350 task hashes, both locked JSON hashes per
-  split, LF source policy, clean tracked worktrees, nine dependency commits, and every symbolic
-  link boundary.
+  remote.
+- `audit` is read-only. It verifies all commits, all 350 task hashes, both locked canonical-input
+  hashes per split, LF source policy, clean tracked worktrees, nine dependency commits, and every
+  symbolic-link boundary.
 - `run` performs the same audit and only then invokes the canary runner natively in WSL.
 
 The shared packages directory must already exist and must be a real directory below the explicit

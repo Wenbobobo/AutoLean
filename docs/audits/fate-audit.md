@@ -37,8 +37,8 @@ Results must remain split-specific. A combined score is at most a secondary diag
 | Task source | 150 M, 100 H, and 100 X Lean task files. Every one of the 350 source files contains exactly one sorry and has a named theorem target. |
 | Lean toolchain | Every pinned submodule has leanprover/lean4:v4.28.0. |
 | Mathlib | Every pinned submodule's lake manifest pins mathlib to 8f9d9cff6bd728b17a24e163c9402775d9e6a365 (inputRev: v4.28.0), e.g. [FATE-M manifest lines 4-11](https://github.com/frenzymath/FATE-M/blob/4eb33c8ccd0ff058b461cd763cc406509129743f/lake-manifest.json#L4-L11). |
-| JSON SHA-256 | M 6edf623256539cf955f939fbe40098ad0c6bd17a86060d8cded51c57de62e11e; H 7f130106dbb9e574bd4f4d87aba8065a66f74c69a8c6b468b3986865654b2a2f; X a322932a23a534fbbb5129f927a3d4359bd10c70841fd2ab6e40c294b394ce3b. |
-| Lake manifest SHA-256 | M 8403899ad037e733385ed21746c79c772b918a1ce4a6d291fddadb8899ee9e24; H e6cec32cb305c7cb9e4de6ef7e0c1c1411b23bb92183d5b2c8759b38b62e54c5; X 3e26eab2f55368e8a32d6315d022078c1f3136b48f67eff04a993d412ea61005. |
+| JSON SHA-256 (canonical Git/LF bytes) | M 39c13a39f82bb2f39fc42d0a0efb41c6b0ef16b8194c8c8e0ae281c5cf0276fb; H 21fb5ab61c037858a3b267509d492a98194eb996581662e5e7d2ed461bfead90; X 021ecd8b4cd1c79666d7e64efe4f347d9ef36fa7f6b542fc60a370a4b916daea. |
+| Lake manifest SHA-256 (canonical LF bytes) | M e6efb741f70db112585a49e84e3d04272a6dcf22549b97af072e0c90b08082b0; H ceef049390de26dee9aa9502397d18cc8442dbe067c3c3f30880323459c47c59; X 444540e9d26548e4007674373ad297c052b66d0deff1a0febc23536bcf3b3186. |
 
 The v4.28.0 changelog is semantically relevant, not cosmetic. It records statement repairs
 for M-15, M-134, H-93, X-11, X-77, and X-86, plus unique X namespaces

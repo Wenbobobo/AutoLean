@@ -1812,6 +1812,223 @@
     {
       "schema_version": "autolean.builder-pre-calibration-fixture.v1",
       "record_kind": "pre_calibration_fixture",
+      "sample_id": "mg-a-finite-noetherian-compactness",
+      "domain": "mg-a",
+      "production_ingestion": false,
+      "freeze_allowed": false,
+      "prover_handoff_allowed": false,
+      "production_rights_cleared": false,
+      "promotion_allowed": false,
+      "source_text": "Every finite metric space is compact, and every Noetherian topological space is quasi-compact.",
+      "source": {
+        "schema_version": "1.0",
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:888c9bf2-e1a4-5185-83dc-17aabdcff981"
+        },
+        "work_id": "mg-a-finite-noetherian-compactness",
+        "title": "AutoLean project-synthetic pre-calibration fixture: mg-a-finite-noetherian-compactness",
+        "version": "project-synthetic-fixture-v1",
+        "locator": "autolean://builder/pre-calibration-fixture/mg-a-finite-noetherian-compactness",
+        "content_hash": {
+          "schema_version": "1.0",
+          "kind": "source_bytes",
+          "algorithm": "sha256",
+          "value": "112b851b9606786772260279ac420123f4eabcd78af32fbd54e8b0eb805a8577"
+        },
+        "snapshot_ref": "project-synthetic-fixture:mg-a-finite-noetherian-compactness:v1",
+        "retrieved_at": "2026-07-27T00:00:00Z",
+        "spans": [
+          {
+            "span_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-span",
+              "value": "urn:autolean:v1:pre-calibration-fixture-span:71cd605f-87a7-5d4f-a2ae-f9322c357d70"
+            },
+            "locator": "autolean://builder/pre-calibration-fixture/mg-a-finite-noetherian-compactness#statement",
+            "content_hash": {
+              "schema_version": "1.0",
+              "kind": "source_span",
+              "algorithm": "sha256",
+              "value": "112b851b9606786772260279ac420123f4eabcd78af32fbd54e8b0eb805a8577"
+            },
+            "start_offset": 0,
+            "end_offset": 94,
+            "permitted_excerpt": "Every finite metric space is compact, and every Noetherian topological space is quasi-compact."
+          }
+        ],
+        "metadata": {
+          "provenance_class": "project_synthetic_fixture",
+          "authorship_claim": "generated_for_repository_pending_human_content_review",
+          "human_content_review_completed": false,
+          "purpose": "pre_calibration_fixture"
+        }
+      },
+      "rights": {
+        "schema_version": "1.0",
+        "rights_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-rights",
+          "value": "urn:autolean:v1:pre-calibration-fixture-rights:43571c11-ea61-5a78-8d4e-c532fcb09487"
+        },
+        "source_id": {
+          "schema_version": "1.0",
+          "namespace": "pre-calibration-fixture-source",
+          "value": "urn:autolean:v1:pre-calibration-fixture-source:888c9bf2-e1a4-5185-83dc-17aabdcff981"
+        },
+        "source_license": "Apache-2.0",
+        "generated_code_license": "Apache-2.0",
+        "overall_decision": "restricted",
+        "redistribution": "allow",
+        "model_egress": "deny",
+        "training": "deny",
+        "embedding": "deny",
+        "allowed_endpoint_classes": [],
+        "attribution": null,
+        "restrictions": [
+          "pre-calibration-fixture-only",
+          "redistribution-only-exact-project-synthetic-fixture-bytes",
+          "source-bytes-sha256:112b851b9606786772260279ac420123f4eabcd78af32fbd54e8b0eb805a8577",
+          "not-production-rights-cleared",
+          "no-production-ingestion",
+          "no-model-egress",
+          "no-prover-handoff",
+          "no-promotion",
+          "human-content-review-pending"
+        ],
+        "reviewed_by": null,
+        "reviewed_at": null
+      },
+      "normalized": {
+        "normalized_statement": "For every finite metric space X, conclude X is compact; and for every Noetherian topological space Y, conclude Y is quasi-compact.",
+        "quantifiers": [
+          "for every finite metric space X",
+          "for every Noetherian topological space Y"
+        ],
+        "assumptions": [
+          "X is a metric space with finitely many points",
+          "Y is a Noetherian topological space"
+        ],
+        "conclusion": "X is compact and Y is quasi-compact",
+        "definitions": [],
+        "edge_cases": []
+      },
+      "ambiguities": [
+        {
+          "ambiguity_id": {
+            "schema_version": "1.0",
+            "namespace": "pre-calibration-fixture-ambiguity",
+            "value": "urn:autolean:v1:pre-calibration-fixture-ambiguity:4c3ed8e7-1c2c-5fe1-92e0-1a47f729f737"
+          },
+          "description": "Compactness is used for the metric-space clause and quasi-compactness for the topological-space clause; this synthetic sample does not identify either notion with a Lean definition.",
+          "severity": "informational",
+          "resolution": "The synthetic fixture declares this convention for testing; it is not a domain-expert signoff.",
+          "resolved_by": "project-synthetic fixture declaration, not human review"
+        }
+      ],
+      "illustrative_lean_snippets": [
+        {
+          "snippet_id": "mg-a-finite-noetherian-compactness-snippet-a",
+          "authoring_path": "project-synthetic:pre-calibration-path-a",
+          "declared_independence_label": "project-synthetic-path-a",
+          "illustrative_lean_snippet": "theorem mg_a_finite_noetherian_compactness (X Y : Type) [MetricSpace X] [TopologicalSpace Y] : Finite X -> IsNoetherianTopology Y -> IsCompact (Set.univ : Set X) /\\ IsQuasiCompact (Set.univ : Set Y) := by exact finite_and_noetherian_compactness",
+          "reverse_rendering": "Finiteness is the stated route to compactness for X, while the Noetherian condition is the stated route to quasi-compactness for Y; neither clause asserts a converse.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "snippet_id": "mg-a-finite-noetherian-compactness-snippet-b",
+          "authoring_path": "project-synthetic:pre-calibration-path-b",
+          "declared_independence_label": "project-synthetic-path-b",
+          "illustrative_lean_snippet": "example (X Y : Type) [MetricSpace X] [TopologicalSpace Y] : Finite X -> IsNoetherianTopology Y -> CompactSpace X /\\ QuasiCompactSpace Y := by exact finite_noetherian_compactness",
+          "reverse_rendering": "Finiteness is the stated route to compactness for X, while the Noetherian condition is the stated route to quasi-compactness for Y; neither clause asserts a converse.",
+          "evidence_class": "illustrative_unparsed_text",
+          "lean_parsed": false,
+          "semantic_binding_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "positive_examples": [
+        {
+          "example_id": "mg-a-finite-noetherian-compactness-positive",
+          "description": "A finite metric space has a finite subcover for every open cover, and a Noetherian space has no infinite strictly ascending chain of open subsets, which yields quasi-compactness.",
+          "expected_outcome": "Declared positive fixture for later independent semantic review."
+        }
+      ],
+      "negative_examples": [
+        {
+          "example_id": "mg-a-finite-noetherian-compactness-negative",
+          "description": "The real line is a metric space that is not compact, and an infinite discrete topological space is not quasi-compact.",
+          "expected_outcome": "Declared negative fixture for later independent semantic review."
+        }
+      ],
+      "mutation_fixtures": [
+        {
+          "difference_kind": "drop_finite",
+          "baseline_fragment": "For every finite metric space X",
+          "mutated_fragment": "For every metric space X",
+          "blocker_code": "DROP_FINITE_METRIC_COMPACTNESS",
+          "blocker_reason": "Removing finiteness upgrades the compactness claim to all metric spaces; the real line is a counterexample.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:ea70ad96-efca-5f93-b565-2875be60a9e5"
+            },
+            "kind": "drop_finite",
+            "target_path": "normalized_statement",
+            "expected_failure": "Removing finiteness upgrades the compactness claim to all metric spaces; the real line is a counterexample.",
+            "mutated_statement_source": "For every metric space X; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        },
+        {
+          "difference_kind": "drop_noetherian",
+          "baseline_fragment": "for every Noetherian topological space Y",
+          "mutated_fragment": "for every topological space Y",
+          "blocker_code": "DROP_NOETHERIAN_QUASICOMPACTNESS",
+          "blocker_reason": "Removing the Noetherian condition upgrades the quasi-compactness claim to all topological spaces; an infinite discrete space is a counterexample.",
+          "probe": {
+            "probe_id": {
+              "schema_version": "1.0",
+              "namespace": "pre-calibration-fixture-probe",
+              "value": "urn:autolean:v1:pre-calibration-fixture-probe:f2f8fcf6-a16a-5ace-8652-94a1b319faaf"
+            },
+            "kind": "drop_noetherian",
+            "target_path": "normalized_statement",
+            "expected_failure": "Removing the Noetherian condition upgrades the quasi-compactness claim to all topological spaces; an infinite discrete space is a counterexample.",
+            "mutated_statement_source": "for every topological space Y; this is an adversarial pre-calibration synthetic mutation."
+          },
+          "status": "declared_synthetic_mutation_fixture",
+          "evidence_class": "synthetic_fixture_not_semantic_evidence",
+          "semantic_detection_claimed": false,
+          "promotion_allowed": false
+        }
+      ],
+      "review": {
+        "state": "synthetic_fixtures_recorded_pending_independent_review",
+        "record_label": "project-synthetic pre-calibration fixture",
+        "independent_semantic_review_completed": false,
+        "notes": "Two illustrative unparsed text snapshots and declared synthetic mutation fixtures are recorded; independent semantic review remains required."
+      },
+      "authority": {
+        "production_ingestion": false,
+        "freeze_allowed": false,
+        "prover_handoff_allowed": false,
+        "model_egress_allowed": false,
+        "production_rights_cleared": false,
+        "promotion_allowed": false
+      }
+    },
+    {
+      "schema_version": "autolean.builder-pre-calibration-fixture.v1",
+      "record_kind": "pre_calibration_fixture",
       "sample_id": "mg-a-endpoint-order",
       "domain": "mg-a",
       "production_ingestion": false,

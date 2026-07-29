@@ -193,3 +193,25 @@ different key fails closed. This
 test-only HMAC boundary is not a substitute for KMS, remote attestation, Lean
 verification, semantic fidelity review, or the role-specific production
 evaluators.
+
+## Local structural JSON grammar (V1)
+
+`evaluate_completed_authorized_role_suite_structural_json` is a separate, receipt-bound,
+read-only evaluator for the same settled V3 suite. It never sends a provider request or changes
+provider behavior. Its fixed grammar version is `autolean.deepseek-role-json-grammar.v1` and
+defines closed objects for all five roles: Prover, statement formalizer, fidelity reviewer,
+cheating supervisor, and task allocator. Missing fields, extra fields, and wrong JSON types are
+schema rejections; only a grammar-valid object proceeds to canonical exact-value comparison.
+
+Each sanitized trial reports a completed `receipt_bound` transport outcome, strict-JSON outcome,
+schema outcome, semantic-exact outcome, and whether its receipt-bound output-token count exactly
+reached the frozen per-cell output ceiling. It publishes only the existing public output commitment
+and role-local counts. It never publishes response text, parser diagnostics, endpoint data, a
+private handle/path, receipt body, exact token count, or the evaluator-owned expected value.
+
+A completed V3 receipt can establish only that a completion was bound and settled. It cannot
+classify an absent, timed-out, or failed transport attempt because such an attempt has no
+receipt-bound candidate artifact. Those states remain outside this evaluator rather than being
+silently counted as JSON or schema failures. The structural report is local non-production
+evidence, remains ineligible for promotion and role-floor admission, and must not be aggregated
+across roles.

@@ -51,12 +51,26 @@ def test_active_discovery_manifest_is_pre_admission_and_unscored() -> None:
         "mg-a-intrinsic-distance",
     }
     for lane in manifest.lanes:
-        assert lane.source.source_bytes_state == "metadata_only"
+        expected_state = (
+            "acquired_local_only" if lane.lane_id == "ifem-coercive-galerkin" else "metadata_only"
+        )
+        assert lane.source.source_bytes_state == expected_state
         assert lane.source.model_egress_ceiling == "local_only"
         assert lane.source.external_model_source_text == "forbidden"
         assert lane.mathlib_overlap.state == "not_queried"
         assert lane.mathlib_overlap.observed_coverage == "not_observed"
         assert lane.prerequisite_denominator is None or lane.lane_id == "ifem-coercive-galerkin"
+
+    ifem = next(lane for lane in manifest.lanes if lane.lane_id == "ifem-coercive-galerkin")
+    assert (
+        ifem.source.source_lock_receipt_sha256
+        == "74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239"
+    )
+    assert (
+        ifem.source.reference_manifest_candidate_sha256
+        == "4a5d859d77b606d6e485d98bd3e4afc41f6c566c6fb09f5e3dc2b2a539f18398"
+    )
+    assert "ifem-source-receipt" not in {gate.gate_id for gate in ifem.stop_gates}
 
 
 def test_ifem_denominator_starts_at_opening_and_excludes_easy_nodes() -> None:
@@ -84,6 +98,21 @@ def test_ifem_denominator_starts_at_opening_and_excludes_easy_nodes() -> None:
         if node.kind in {DiscoveryNodeKindV1.EXAMPLE, DiscoveryNodeKindV1.TERMINAL_TARGET}
     )
     plan.assert_binds(denominator)
+
+
+def test_acquired_source_state_requires_both_content_bindings(tmp_path: Path) -> None:
+    payload = _payload()
+    lanes = payload["lanes"]
+    assert isinstance(lanes, list)
+    lane = next(item for item in lanes if item["lane_id"] == "ifem-coercive-galerkin")
+    source = lane["source"]
+    assert isinstance(source, dict)
+    source["source_lock_receipt_sha256"] = None
+    candidate = tmp_path / "discovery.json"
+    candidate.write_text(json.dumps(payload), encoding="utf-8")
+
+    with pytest.raises(DiscoveryManifestError, match="receipt, and manifest hashes"):
+        load_discovery_lane_manifest(candidate)
 
 
 def test_changed_denominator_needs_new_hash_revision_and_census_plan() -> None:

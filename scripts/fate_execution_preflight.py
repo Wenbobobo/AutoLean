@@ -17,6 +17,11 @@ from collections.abc import Mapping, Sequence
 from pathlib import Path
 from typing import Final, cast
 
+if __package__ in {None, ""}:
+    _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
+    if str(_REPOSITORY_ROOT) not in sys.path:
+        sys.path.insert(0, str(_REPOSITORY_ROOT))
+
 from autolean_prover.providers.operator_profile import (
     ChatCompletionsOperatorProfileV1,
 )

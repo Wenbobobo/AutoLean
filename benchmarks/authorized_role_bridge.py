@@ -92,6 +92,28 @@ _BASE_CAPABILITIES = frozenset(
         Capability.USAGE_ACCOUNTING,
     }
 )
+_ROLE_JSON_V1_CONTRACTS: Mapping[BenchmarkRoleV1, str] = {
+    BenchmarkRoleV1.PROVER: (
+        'Return exactly one object with either {"action":"submit_proof","proof":"<Lean proof '
+        'body>"} or {"action":"report_gap","reason_code":"<lower_snake_case>"}.'
+    ),
+    BenchmarkRoleV1.STATEMENT_FORMALIZER: (
+        'Return exactly one object with either {"lean_statement":"<Lean declaration>"} or '
+        '{"action":"request_contract_change","reason_code":"<lower_snake_case>"}.'
+    ),
+    BenchmarkRoleV1.FIDELITY_REVIEWER: (
+        'Return exactly one object {"decision":"accept"|"reject",'
+        '"reason_code":"<lower_snake_case>"}.'
+    ),
+    BenchmarkRoleV1.CHEATING_SUPERVISOR: (
+        'Return exactly one object {"decision":"accept"|"reject",'
+        '"reason_code":"<lower_snake_case>"}.'
+    ),
+    BenchmarkRoleV1.TASK_ALLOCATOR: (
+        'Return exactly one object {"assignments":[{"node_id":"<id>","worker_id":"<id>"}],'
+        '"reason_code":"<lower_snake_case>"}. Omit reason_code when assignments is non-empty.'
+    ),
+}
 _PRIVATE_HANDLE_PATTERN = r"^private_[0-9a-f]{64}$"
 _PRIVATE_AUTHENTICATION_TAG_PATTERN = r"^[A-Za-z0-9_-]{32,1024}$"
 _TOKEN_BUCKET_PATTERN = r"^(zero|1_255|256_1023|1024_4095|4096_16383|16384_plus)$"
@@ -102,6 +124,10 @@ _ROLE_AUTHORIZATION_HARD_CAP_SECONDS = 60.0 * 60.0
 _ROLE_LEASE_HARD_CAP_SECONDS = (
     _ROLE_AUTHORIZATION_HARD_CAP_SECONDS + _ROLE_CLAIM_TO_ISSUE_MARGIN_SECONDS
 )
+# The fixed role fixture permits this narrow family only.  The value is bound into the
+# locked cell budget, request hash, authorization, and completion receipt; it is not a
+# provider-side default that can change after planning.
+_LOCKED_ROLE_OUTPUT_TOKEN_LIMITS = frozenset({256, 512, 1024})
 _REPOSITORY_ROOT = Path(__file__).resolve().parents[1]
 _CALIBRATION_FIXTURE_PATH = _REPOSITORY_ROOT / "benchmarks" / "roles" / "calibration-pairs.v3.json"
 _CALIBRATION_FIXTURE_SHA256 = "367b6cad7ca259798b20fd1710f29b06c64f2fbdbea58687588e450ab88761d8"
@@ -246,10 +272,18 @@ class AuthorizedRoleGenerationPolicyV1(ContractModel):
         default=None,
         pattern=r"^[a-z][a-z0-9_-]{0,63}$",
     )
+    response_format: Literal["json_object"] | None = None
+    output_contract: Literal["none", "role_json_v1"] = "none"
     timeout_seconds: int = Field(
         ge=1,
         le=int(MAX_MODEL_REQUEST_TIMEOUT_SECONDS),
     )
+
+    @model_validator(mode="after")
+    def validate_output_contract(self) -> Self:
+        if self.output_contract == "role_json_v1" and self.response_format != "json_object":
+            raise ValueError("role_json_v1 requires response_format=json_object")
+        return self
 
     def content_hash(self) -> str:
         return _content_hash(self)
@@ -261,7 +295,35 @@ def _required_generation_capabilities(
     required = set(_BASE_CAPABILITIES)
     if policy.reasoning_effort is not None:
         required.add(Capability.REASONING_EFFORT)
+    if policy.response_format is not None:
+        required.add(Capability.STRUCTURED_JSON)
     return frozenset(required)
+
+
+def _prompt_with_output_contract(
+    *,
+    role: BenchmarkRoleV1,
+    prompt: Mapping[str, object],
+    policy: AuthorizedRoleGenerationPolicyV1,
+) -> dict[str, object]:
+    """Attach an interface grammar, never a case answer or evaluator oracle."""
+
+    rendered = dict(prompt)
+    if policy.output_contract == "none":
+        return rendered
+    contract = _ROLE_JSON_V1_CONTRACTS.get(role)
+    if contract is None:
+        raise AuthorizedRoleBridgeError("role JSON contract is unavailable")
+    system_prompt = rendered.get("system_prompt")
+    if not isinstance(system_prompt, str):
+        raise AuthorizedRoleBridgeError("role prompt lacks a canonical system prompt")
+    rendered["system_prompt"] = (
+        f"{system_prompt.rstrip()}\n\n"
+        "OUTPUT_JSON_CONTRACT_V1\n"
+        "Return JSON only: no markdown, explanation, or extra keys.\n"
+        f"{contract}"
+    )
+    return rendered
 
 
 class AuthorizedRoleTrialUsageSummaryV1(ContractModel):
@@ -1712,6 +1774,7 @@ def build_locked_calibration_floor_suite(
     generation_policy: AuthorizedRoleGenerationPolicyV1,
     repetitions: int = 1,
     max_cost_microusd_per_trial: int,
+    max_output_tokens: int = 256,
 ) -> AuthorizedRoleSuiteDefinition:
     """Build the one five-role matrix from pinned bytes and a frozen provider target."""
 
@@ -1719,6 +1782,13 @@ def build_locked_calibration_floor_suite(
         raise AuthorizedRoleBridgeError("floor-suite repetitions must be between 1 and 100")
     if max_cost_microusd_per_trial < 0:
         raise AuthorizedRoleBridgeError("floor-suite cost budget must be non-negative")
+    if (
+        isinstance(max_output_tokens, bool)
+        or max_output_tokens not in _LOCKED_ROLE_OUTPUT_TOKEN_LIMITS
+    ):
+        raise AuthorizedRoleBridgeError(
+            "locked role output limit is not an approved ablation value"
+        )
     if target.generation_parameters_hash != generation_policy.content_hash():
         raise AuthorizedRoleBridgeError(
             "role target generation_parameters_hash must equal the frozen generation policy"
@@ -1755,6 +1825,11 @@ def build_locked_calibration_floor_suite(
                     **template.model_dump(mode="json"),
                     "cell_id": f"authorized.{target.provider_id}.{role.value.replace('_', '-')}",
                     "model": target.model_dump(mode="json"),
+                    "prompt": _prompt_with_output_contract(
+                        role=role,
+                        prompt=template.prompt.model_dump(mode="json"),
+                        policy=generation_policy,
+                    ),
                     "required_capabilities": tuple(
                         sorted(
                             _required_generation_capabilities(generation_policy),
@@ -1764,6 +1839,7 @@ def build_locked_calibration_floor_suite(
                     "budget": {
                         **template.budget.model_dump(mode="json"),
                         "repetitions": repetitions,
+                        "max_output_tokens": max_output_tokens,
                         "timeout_ms": generation_policy.timeout_seconds * 1000,
                         "max_cost_microusd": max_cost_microusd_per_trial,
                     },
@@ -1926,6 +2002,7 @@ def prepare_authorized_role_trial(
         max_output_tokens=cell.budget.max_output_tokens,
         timeout_seconds=suite.generation_policy.timeout_seconds,
         reasoning_effort=suite.generation_policy.reasoning_effort,
+        response_format=suite.generation_policy.response_format,
         required_capabilities=expected_capabilities,
         context_pack_hash=context.content_hash(),
     )
@@ -2849,6 +2926,7 @@ def _assert_locked_suite(suite: AuthorizedRoleSuiteDefinition) -> None:
         generation_policy=suite.generation_policy,
         repetitions=first_cell.budget.repetitions,
         max_cost_microusd_per_trial=first_cell.budget.max_cost_microusd,
+        max_output_tokens=first_cell.budget.max_output_tokens,
     )
     if suite != expected:
         raise AuthorizedRoleBridgeError(
@@ -2908,6 +2986,7 @@ def _assert_prepared_trial(prepared: PreparedAuthorizedRoleTrial) -> None:
         generation_policy=prepared.generation_policy,
         repetitions=cell.budget.repetitions,
         max_cost_microusd_per_trial=cell.budget.max_cost_microusd,
+        max_output_tokens=cell.budget.max_output_tokens,
     )
     expected_cells = {
         expected_cell.cell_id: expected_cell for expected_cell in expected_suite.matrix.cells

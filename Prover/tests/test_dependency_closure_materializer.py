@@ -23,6 +23,7 @@ from autolean_contracts import (
     stable_identifier,
 )
 from autolean_prover.execution import (
+    ClaimScopedDependencyBlobReader,
     DependencyClosureIntegrityError,
     DependencyClosureMaterializer,
 )
@@ -203,6 +204,22 @@ def test_materializes_three_module_fixture_from_only_manifest_selected_blobs(
     for relative_path, expected in runtime_blobs.items():
         assert (materialized.root / Path(relative_path)).read_bytes() == expected
     materialized.validate_integrity()
+
+
+def test_claim_scoped_reader_adapter_preserves_narrow_materializer_capability(
+    tmp_path: Path,
+) -> None:
+    manifest, reference, reader, runtime_blobs = _fixture()
+    scoped = ClaimScopedDependencyBlobReader(read_claimed_artifact=reader.read_blob)
+    materialized = DependencyClosureMaterializer().materialize(
+        reference,
+        tmp_path / "claim-scoped-deps",
+        reader=scoped,
+    )
+
+    assert materialized.manifest == manifest
+    for relative_path, expected in runtime_blobs.items():
+        assert (materialized.root / Path(relative_path)).read_bytes() == expected
 
 
 def test_missing_or_changed_blob_fails_before_a_complete_tree_is_returned(tmp_path: Path) -> None:

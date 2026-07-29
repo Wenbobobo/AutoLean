@@ -36,6 +36,7 @@ _REQUIRED_CAPABILITIES = frozenset(
         Capability.TEXT_GENERATION,
         Capability.USAGE_ACCOUNTING,
         Capability.REASONING_EFFORT,
+        Capability.STRUCTURED_JSON,
     }
 )
 _REQUIRED_FIELDS = frozenset(

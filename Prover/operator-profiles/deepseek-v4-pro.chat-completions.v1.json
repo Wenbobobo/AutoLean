@@ -9,7 +9,8 @@
   "capabilities": [
     "text_generation",
     "usage_accounting",
-    "reasoning_effort"
+    "reasoning_effort",
+    "structured_json"
   ],
   "timeout_seconds": 120,
   "thinking_enabled": true,

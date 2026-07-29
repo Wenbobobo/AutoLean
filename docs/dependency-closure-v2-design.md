@@ -1,6 +1,6 @@
 # Dependency Closure V2 Design
 
-Status: **Stage A implemented and locally tested / Stage B not implemented / no acceptance authority**
+Status: **Stage A implemented and locally tested / Stage B mechanics implemented but nonempty accepted dependencies fail closed pending a gateway-owned `dependency.admitted` module/OLean binding / no acceptance authority**
 
 This document specifies the smallest contract and execution change needed for a Phase 2
 multi-file Library task to consume previously verified AutoLean assets without relying on a
@@ -42,9 +42,12 @@ Stage A is deliberately local and non-authoritative. It is not connected to cont
 registration or claims, leases, OCI execution, verification evidence, the verifier gateway, or
 proof admission.
 
-Stage B remains unimplemented. It must introduce the V2 bundle and proof boundary, claim-scoped
-artifact access, a successor OCI policy, observed-closure evidence, and gateway checks before a
-dependency closure can participate in an accepted proof. V1 task bundles remain unchanged.
+Stage B mechanics now exist, including the V2 registration path and its rejection controls. They
+are deliberately fail closed: every manifest with nonempty `accepted_dependencies` is rejected
+until a durable, gateway-owned `dependency.admitted` record binds the earlier accepted verification
+to the exact exported module and OLean blob supplied by the closure. That record and its gateway
+load/query route do not yet exist. Empty-accepted-dependency V2 fixtures remain local mechanics
+evidence only; they do not make a runtime closure authoritative. V1 task bundles remain unchanged.
 
 ## Current findings
 

@@ -25,9 +25,23 @@ closures. All near-term milestones must therefore preserve the public protocol b
 The repository has a substantial Phase 1 skeleton: contracts, control-plane events, ModelWork V2,
 an authorized ten-trial role bridge, a FATE common executor, a read-only Dashboard projection,
 source/fidelity harnesses, typed T7 module receipts, synthetic chaos coverage, and downstream
-Library workspace documentation. A local DeepSeek official-profile canary reached only a redacted
-network refusal; it is not a model result. The current task session cannot invoke WSL
-(`Wsl/Service/E_ACCESSDENIED`), so it cannot create fresh Docker/Lean evidence.
+Library workspace documentation. Remote facts checked on 2026-07-29: public draft
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) is open and mergeable at
+`cd42ba76473002cfff9eaf4b8710e90fa3877cd4`, and GitHub Actions
+[CI run #64](https://github.com/Wenbobobo/AutoLean/actions/runs/30364517594) succeeded. Its updated
+PR description records candidate-local validation of 1,438 passed, 15 explicit environment/cache/
+OCI/WSL skips, and 0 failures, plus a retained local synthetic 1,000-job replay. CI success and a
+project-authored PR description do not independently establish semantic fidelity, a Lean result, or
+production authority.
+
+An earlier local DeepSeek official-profile canary reached only a redacted network refusal. A later
+ten-call role observation settled every request, but every completion saturated the fixed 256-token
+output ceiling and remains non-promotable. A versioned 512-token ablation then passed zero-call
+preflight but stopped after its first 256-token control request returned redacted `network`; it made
+no retry and no comparison. None of these observations supports a competence conclusion.
+Earlier session-local WSL denial is historical environment-path evidence, not a claim about the
+present operator host. Fresh host, Lean, gateway, and provider results must be retained under their
+own exact execution identities.
 
 The remaining work is not to invent another runtime. It is to close a narrow vertical path in which
 one admitted Builder statement moves through the exact same interfaces that future textbook and
@@ -81,13 +95,13 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 
 | ID | Status | Task and acceptance signal |
 | --- | --- | --- |
-| P1-21 | Partial | Preserve the typed T7 module process receipt, complete source binding, atomic fanout, and injected-runner adversarial tests. |
+| P1-21 | Partial | Preserve the typed T7 module process receipt, complete source binding, atomic fanout, and injected-runner adversarial tests. Focused Python tests passed, but no OCI authority execution has run. |
 | P1-22 | External | Close `AUTH-T7-01`: run a real leased image-owned build, stale-fence rejection, crash/restart, clean integration, and per-node verification. |
 | P1-23 | External | Retain one real rights-cleared frozen contract through unchanged bundle, Prover, OCI, kernel query, and independent verifier. |
 | P1-24 | Done | Preserve Fake, Codex CLI, OpenAI Responses, and custom-compatible providers; keep Claude/Anthropic absent and prohibit automatic fallback. |
-| P1-25 | Partial | Preserve the DeepSeek official profile, redacted canary, authorized ten-trial role route, budget, and reconciliation boundary. |
+| P1-25 | Partial | Preserve the DeepSeek official profile, redacted canary, authorized ten-trial role route, and output-budget ablation protocol. The ten-call observation settled at the fixed 256-token ceiling; the separate 512-token ablation passed zero-call preflight but stopped on its first redacted `network` failure, skipped the candidate arm, and emitted no comparison. Neither is promotable or supports a competence conclusion. |
 | P1-26 | External | Close `AUTH-PROVIDER-01`: retain one successful real-provider run and independent evaluation without turning it into proof or fidelity evidence. |
-| P1-27 | Partial | Preserve the FATE common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. |
+| P1-27 | Partial | Preserve the canonical FATE lock, common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. The current compile canary has not rerun because WSL returned `Wsl/Service/E_ACCESSDENIED`; any earlier canary is historical and nonbinding. |
 | P1-28 | Next | After P1-26, run `regression-48` pass@1 under one frozen model/tool/retrieval/budget contract. |
 
 ### Phase 1: Weeks 7--8, comparison and observation
@@ -98,7 +112,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P1-30 | Next | Run FATE-350 only after the smaller frozen routes are stable; report M/H/X and failures separately. |
 | P1-31 | Partial | Preserve the loopback read-only Dashboard, three graph lanes, evidence-state health semantics, sanitization, and event identity separation. |
 | P1-32 | Next | Link real Builder revisions, proof/gap attempts, T7 receipts, and verifier evidence in the Dashboard projection without adding control actions. |
-| P1-33 | Partial | V2 provenance receipts bind bounded synthetic recovery runs to an exact candidate, `uv.lock`, runtime, canonical argv, and retained manifest. The verifier now read-only replays the exact SQLite schema, event/lease/fence history and terminal projection, parses and cross-binds canonical typed CAS artifacts, and rejects unreferenced artifacts. A historical V1 1,000-job summary is not a provenance-bound result. Run and independently verify a fresh V2 1,000-job receipt before closing this row. Even a successful receipt remains synthetic recovery evidence and cannot close P1-16, T6/T7, or the release gate. |
+| P1-33 | Done | A fresh V2 1,000-job local synthetic receipt is bound to candidate `cd42ba76473002cfff9eaf4b8710e90fa3877cd4`, `uv.lock`, runtime, canonical argv, retained manifest, exact SQLite schema/event/lease/fence history, terminal projection, and typed cross-bound CAS artifacts. Its independent read-only replay verified 1,000 completed jobs, 5,000 contiguous events, 4,000 artifacts, and 4,000 duplicate deliveries with no loss or duplicate terminal verdict. This closes provenance-bound synthetic recovery only; it cannot close P1-16, T6/T7, production signer custody, or the release gate. |
 
 ### Phase 1: Weeks 9--12, authority stress and phase decision
 
@@ -117,7 +131,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-01 | Partial | Maintain two or three discovery lanes without presenting any as an admitted pilot. |
 | P2-02 | Partial | Keep iFEM Chapters 1--10 as the conditional primary for source preparation and compile discovery only. |
 | P2-03 | Partial | Retain PDE and metric/algebraic-geometry lane cards with explicit stop conditions and no production-ingestion claim. |
-| P2-04 | Partial | The bounded adapter pins the iFEM revision, thirteen paths, reviewed CC BY 4.0 LICENSE digests, local-only policy, and manifest commitment; exact source bytes remain absent until `AUTH-IFEM-SOURCE-01` runs in a network-capable environment. |
+| P2-04 | Partial | Thirteen pinned iFEM source files are locally locked and independently replayed under `local_only`, with source-lock receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`. Digest-only indexes now bind 161 notebook cells and three `intro.md` heading sections. This closes locator construction only: no mathematical claim span is selected, and rights/egress authority, semantic admission, freeze, and Prover handoff remain open. |
 | P2-05 | Done | Preserve the [active discovery-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) with source, rights, overlap, and stop gates for every active lane. This is discovery metadata only; egress remains `local_only` until `AUTH-RIGHTS-01` closes. |
 | P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. The bound coverage census remains `not_started`; no coverage result is claimed. |
 | P2-07 | Next | Compile exact pinned-mathlib type/import queries and classify direct mappings, thin adapters, and missing nodes separately. |
@@ -127,8 +141,8 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 
 | ID | Status | Task and acceptance signal |
 | --- | --- | --- |
-| P2-09 | Partial | Preserve the ten-statement repository-synthetic pre-calibration corpus as a schema fixture, never as real textbook calibration. |
-| P2-10 | Next | Extend the machine quorum with omission, `iff`, existence/uniqueness, maximum/upper-bound, equality, totalization, and coercion mutations. |
+| P2-09 | Done | Preserve the eleven-sample repository-synthetic opening corpus as a schema fixture. It covers every required mutation family, but is not textbook calibration or semantic evidence. |
+| P2-10 | Done | Keep the required mutation-family coverage locked to the eleven-sample synthetic corpus; source-specific calibration and measured detection performance remain separate next gates. |
 | P2-11 | Next | Build a held-out calibration set with harmful negatives and known formal references; report false acceptance, mutation recall, abstention, and correlated double faults. |
 | P2-12 | Next | For each real candidate, run two blinded semantic-atom extractions, two blinded formalizations, de-correlated critics, and one adversarial falsifier. |
 | P2-13 | Next | Treat any critical dissent, surviving mutation, counterexample, shared lineage, or stale calibration as abstention, not a majority-vote pass. |
@@ -142,7 +156,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-16 | External | Freeze only candidates that satisfy formal admission; hand unchanged bundles to Prover through the Phase 1 contract. |
 | P2-17 | Next | Build one 20--40-node chapter slice with definitions, examples, counterexamples, reusable lemmas, and terminal theorem/gap coverage. |
 | P2-18 | Partial | Preserve `Library/` staging, records, and review surfaces as the independent downstream workspace. |
-| P2-19 | Partial | Stage A of [Dependency Closure V2](dependency-closure-v2-design.md) now has locally tested canonical contracts and a pure blob materializer, covered by [contract](../packages/contracts/tests/test_dependency_closure.py) and [materializer](../Prover/tests/test_dependency_closure_materializer.py) adversarial tests. Stage B must still bind the closure into Bundle V2, claim-scoped artifact reads, OCI execution, observed verification evidence, and the verifier gateway before any proof can be accepted. |
+| P2-19 | Partial | [Dependency Closure V2](dependency-closure-v2-design.md) has locally tested Stage A and implemented Stage B mechanics. A nonempty `accepted_dependencies` closure now fails registration until a gateway-owned `dependency.admitted` record binds the accepted verification to the exact exported module/OLean blob. That admission record, complete declaration inventory observation, and authoritative proof path remain open. |
 | P2-20 | Next | End every cycle with one replayable mathematical feedback artifact: verified proof, mutation-blocked conversion, counterexample, or bounded gap. |
 
 ### Post-Phase 2 research queue
@@ -163,20 +177,42 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 4. **Wave D, scale:** run P1-28 through P1-30 and later multi-chapter work only after the
    production-shaped vertical is retained.
 
-## Layered milestone map
+## Canonical M0--M8 milestone ladder
 
-The detailed Phase 2 plan remains in [the fractal roadmap](phase-2-fractal-roadmap.md). This
-shorter map fixes the dependency order and acceptance boundary for the next several horizons.
+The detailed Phase 2 design remains in [the fractal roadmap](phase-2-fractal-roadmap.md). This
+ladder is the canonical long-horizon order. A milestone may contain many parallel tasks, but its
+exit condition is never satisfied by a later milestone's evidence.
+
+| Milestone | Horizon and task frontier | Current truth | Exit condition and non-substitutes |
+| --- | --- | --- | --- |
+| **M0 — Invariants and evidence hygiene** | Continuous: Contract V1, three graphs, immutable artifacts, source/rights policies, provider deny-list, and read-only Dashboard. | Maintained locally. | These are permanent constraints, not a one-time promotion. A passing test or agent consensus cannot weaken Builder -> frozen contract -> Prover. |
+| **M1 — Reproducible Phase 1 architecture** | Weeks 1--12: control plane, fake/provider adapters, FATE boundary, dashboard, chaos receipt, release/public scans. | Substantially complete in local scope; PR #26 at `cd42ba7` is CI-green and records the exact candidate tests. | A no-RC/RC decision names every gate. Local/CI evidence alone is not a semantic, kernel, signer, or model result. |
+| **M2 — Authority-bearing vertical** | First rights-cleared statement through unchanged bundle, T6 OCI/Lean, T7 lease/recovery, kernel query, and independent gateway. | Not closed. | Exact source rights, semantic admission, fixed environment, real image execution, gateway verification, and signer custody must all bind the same revision. Synthetic routes do not substitute. |
+| **M3 — Controlled real Prover baseline** | Authorized DeepSeek/Codex/custom endpoint role runs, then regression-48, compare-90, and FATE-350 under frozen experimental contracts. | Harness ready; the ten-call DeepSeek observation settled but saturated its 256-token ceiling and is non-promotable, so no competence conclusion is available. | Provider/evaluator authority, source-egress policy, budget reconciliation, and role-separated reports. Benchmark score never establishes Builder fidelity. |
+| **M4 — Builder calibration factory** | Rights-cleared textbook openings; 50--100 non-frozen candidates; independent extraction/formalization/critique/falsification and calibration measurement. | The eleven-sample synthetic opening corpus covers required mutation families; real textbook calibration has not started. | Measured harmful-negative resistance, abstention behavior, and source-specific rights boundary. Machine output remains `machine_advisory`. |
+| **M5 — First chapter closure** | One 20--40 node slice in downstream `Library/`: definitions, examples, counterexamples, reusable lemmas, terminal theorem/gap ledger. | Planned; Dependency Closure V2 has Stage A plus fail-closed Stage B mechanics. | Reviewed frozen contracts route unchanged to Prover and verifier; every node has reproducible proof/gap/mutation evidence. Isolated FATE passes do not substitute. |
+| **M6 — Connected downstream library** | Several coherent chapter slices, Dependency Closure V2 Stage B, stable APIs, multi-worker scheduling, and optional small mathlib packets. | Stage B mechanics exist, but nonempty accepted dependencies are blocked pending gateway-owned module/OLean admission binding. | Pinned clean builds, cross-slice dependency and axiom profiles, provenance, migration discipline, and demonstrable closure reduction per budget. |
+| **M7 — Research atlas and untrusted scout** | Dependency-leverage portfolio, Danus-inspired proposal workers, experience retrieval, and blind reproof of held-out known results. | Research queue only; Danus is not a runtime dependency. | Beats simple/random/degree baselines on held-out closure while every accepted artifact still traverses M0--M6 boundaries. Fact count or model agreement does not substitute. |
+| **M8 — Conjecture frontier and Open Problem claim** | Quarantined conjectures, diversified reduction/counterexample/lemma portfolios, exact proof-closure and novelty packets. | Long-range only. | Independent semantic, kernel, reproduction, and novelty review for one exact revision; only `AUTH-OPEN-PROBLEM-01` permits a public solution/novelty claim. |
+
+Machine agents may independently choose a conservative operational route—retain a gap, abstain,
+switch to public-metadata discovery, or reject a candidate—but cannot mark an authority exit as
+complete. Their positive output is evidence for a later review or verifier, never the review or
+verifier itself.
+
+## Phase decomposition by horizon
+
+The following detailed sections unpack the canonical ladder without replacing its exit conditions.
 
 ### Phase 1: architecture proof
 
-**M1. Frozen contract path.** Complete one rights-cleared, independently reviewed Builder contract
+**P1.a — Frozen contract path.** Complete one rights-cleared, independently reviewed Builder contract
 without statement mutation; route the immutable bundle through independent Lean verification.
 
-**M2. Real execution path.** Run T6 and T7 on the authority Linux/WSL OCI route with retained
+**P1.b — Real execution path.** Run T6 and T7 on the authority Linux/WSL OCI route with retained
 image, lease, receipt, clean-integration, and failure/restart evidence.
 
-**M3. Measured Prover path.** Run an authorized real provider through the frozen role protocol and
+**P1.c — Measured Prover path.** Run an authorized real provider through the frozen role protocol and
 FATE executor. Report M/H/X separately, preserving unsuccessful and refused attempts. Do not use
 the result as Builder fidelity evidence.
 
@@ -186,16 +222,16 @@ the remaining controlled-browser/operations evidence.
 
 ### Phase 2: chapter-scale Builder--Prover closure
 
-**M1. Discovery and calibration.** For two or three candidate domains, build public-metadata
+**P2.a — Discovery and calibration.** For two or three candidate domains, build public-metadata
 dependency maps. For an explicitly rights-cleared lane, start at the textbook opening to calibrate
 notation, retain independent conversion candidates, and use mutation, examples, and reverse
 rendering to reject bad conversions. McKay is currently only a non-freezing opening discovery.
 
-**M2. First chapter slice.** Select one 20--40 node slice with roughly 70--80 percent prerequisites
+**P2.b — First chapter slice.** Select one 20--40 node slice with roughly 70--80 percent prerequisites
 already present. Freeze only the reviewed contracts; send the unchanged bundles to Prover and keep
 proof gaps distinct from contract-change requests.
 
-**M3. Feedback loop.** Each cycle must yield one replayable artifact: a verified proof, a rejected
+**P2.c — Feedback loop.** Each cycle must yield one replayable artifact: a verified proof, a rejected
 conversion with its mutation witness, or a bounded gap report. The downstream `Library/` tree is
 the reviewable record; upstream mathlib contribution remains optional and later.
 
@@ -205,15 +241,15 @@ passes is insufficient.
 
 ### Phase 3: library scaling
 
-**M1. Reusable substrate.** Promote only reviewed definitions and lemmas from several coherent
+**P3.a — Reusable substrate.** Promote only reviewed definitions and lemmas from several coherent
 chapter slices into a downstream library namespace, with stable APIs, dependency/axiom profiles,
 and migration notes.
 
-**M2. Throughput with evidence.** Schedule frozen bundles across specialized Prover roles using
+**P3.b — Throughput with evidence.** Schedule frozen bundles across specialized Prover roles using
 bounded ContextPacks; compare providers by role, fixed inputs, and cost/time budgets rather than a
 single aggregate score.
 
-**M3. Upstream readiness.** Prepare small, independently buildable mathlib-facing change packets
+**P3.c — Upstream readiness.** Prepare small, independently buildable mathlib-facing change packets
 only after downstream stability and maintainability review. The project remains valuable even when
 the correct outcome is to keep a result downstream.
 
@@ -223,15 +259,15 @@ the theorem count.
 
 ### Phase 4: dependency-leverage atlas
 
-**M1. Portfolio graph.** Rank conjecture families by verified missing dependency closure, source
+**P4.a — Portfolio graph.** Rank conjecture families by verified missing dependency closure, source
 clarity, active-project overlap, and independently reproducible evidence. Keep conjecture nodes
 separate from theorem nodes.
 
-**M2. Scheduling validation.** Compare dependency-leverage scheduling against simple, random, and
+**P4.b — Scheduling validation.** Compare dependency-leverage scheduling against simple, random, and
 degree-based baselines on held-out known-theorem closures. Promote it only when it improves
 kernel-verified closure per budget without increasing semantic false accepts.
 
-**M3. Experience retrieval.** Compress successful and failed routes into provenance-bound,
+**P4.c — Experience retrieval.** Compress successful and failed routes into provenance-bound,
 revisioned guidance artifacts. Retrieved experience may steer search but never become a proof
 premise or statement authority.
 
@@ -240,14 +276,14 @@ decision remains replayable to its graph and evidence revisions.
 
 ### Phase 5: automated research scout and blind reproof
 
-**M1. Untrusted scout.** Add Danus-inspired fact-sized constructive, refutational, toy-example, and
+**P5.a — Untrusted scout.** Add Danus-inspired fact-sized constructive, refutational, toy-example, and
 literature workers as proposal generators only. Their outputs enter MathematicalGraph candidate
 space, never FormalGraph truth.
 
-**M2. Closure and invalidation.** Track exploration graph versus final supporting closure, and
+**P5.b — Closure and invalidation.** Track exploration graph versus final supporting closure, and
 propagate source or lemma invalidation through immutable revisions rather than shared-file edits.
 
-**M3. Blind reproof.** Reprove held-out established results with original proofs excluded, exact
+**P5.c — Blind reproof.** Reprove held-out established results with original proofs excluded, exact
 budgets, contamination caveats, and independent kernel replay. Measure closure gain, not generated
 fact count.
 
@@ -256,14 +292,14 @@ nodes still pass the unchanged Builder--Prover contract and verifier path.
 
 ### Phase 6: conjecture frontier sandbox
 
-**M1. Quarantined conjecture track.** Admit a conjecture only after its definitions and prerequisite
+**P6.a — Quarantined conjecture track.** Admit a conjecture only after its definitions and prerequisite
 lemmas have the same evidence standard as theorem nodes. Proof failure may create gaps or change
 requests, never weaken the conjecture.
 
-**M2. Route portfolio.** Run diversified reduction, counterexample, lemma-discovery, and proof
+**P6.b — Route portfolio.** Run diversified reduction, counterexample, lemma-discovery, and proof
 search portfolios with correlated-failure accounting and explicit abstention.
 
-**M3. Research artifact boundary.** Keep promising reductions, conditional lemmas, and negative
+**P6.c — Research artifact boundary.** Keep promising reductions, conditional lemmas, and negative
 results publishable as exact, reproducible artifacts without calling the conjecture solved.
 
 **Phase exit.** At least one frontier portfolio produces independently replayed new dependency
@@ -271,14 +307,14 @@ assets or a materially sharper gap, with no promotion based on model consensus a
 
 ### Phase 7: Open Problem research and claim validation
 
-**M1. Exact claim closure.** Bind the conjecture revision, complete proof dependency closure, axiom
+**P7.a — Exact claim closure.** Bind the conjecture revision, complete proof dependency closure, axiom
 profile, source provenance, and clean verifier replay.
 
-**M2. Adversarial reproduction.** Use fresh environments and independent model families to attack
+**P7.b — Adversarial reproduction.** Use fresh environments and independent model families to attack
 the statement, proof, novelty search, and hidden assumptions. Dissent is retained, not averaged
 away.
 
-**M3. Public research decision.** Only the external accountability item
+**P7.c — Public research decision.** Only the external accountability item
 `AUTH-OPEN-PROBLEM-01` can authorize a novelty or solution claim for the exact artifact. The
 automated system prepares the evidence packet; it does not award itself authority.
 
@@ -292,8 +328,8 @@ remaining uncertainty stated explicitly.
 | --- | --- | --- | --- |
 | T3 semantic/admission closure | Machine quorum plus external exception owner | Resolve the local review packet's pending spans and two locator ambiguities; decide the successor profile or retain the gap | Machine work produces an advisory/dissent packet; only `AUTH-T3-01` can admit the old candidate, and choosing a new source is the preferred low-human bypass |
 | T6 real Builder-query replay | Core/root | Run the implemented Builder-only query in the exact OCI/Lean environment and bind its receipt to the signing gateway | Query stays `proof_eligible=false`; real image, environment, and rejection controls replay without changing a theorem. The current session's WSL denial is an execution blocker, not a T6 conclusion. |
-| T7 leased rebuild vertical | Focused subagent with core review | Attach the typed module-receipt path to the image-owned worker and real lease | Exact declaration closure and conservative module rebuild remain distinct; the injected cross-job receipt rejection is local coverage, not an execution receipt. |
-| Role benchmark execution | Subagent | Keep `calibration-pairs-v3` fake-only for harness regression; rerun the ten-trial suite only when a real provider and evaluator are independently authorized | The DeepSeek canary's network refusal proves only a classified failure path. A real run uses frozen prompts, evaluator, source-egress scope, budget, and timeout. |
+| T7 leased rebuild vertical | Focused subagent with core review | Attach the typed module-receipt path to the image-owned worker and real lease | Focused Python tests passed, but no OCI authority execution occurred. Exact declaration closure and conservative module rebuild remain distinct; the injected cross-job receipt rejection is local coverage, not an execution receipt. |
+| Role benchmark execution | Subagent | Keep `calibration-pairs-v3` fake-only for harness regression; use a separately authorized, unsaturated run for any future competence comparison | The DeepSeek ten-call observation settled but all calls saturated the 256-token ceiling, so it is non-promotable harness evidence rather than a score or competence result. |
 | Dashboard grid view | Subagent | Preserve the read-only graph-health surface and add only event-projection evidence links | UI keeps FATE, generic verification, and T7 receipt identities separate; browser visual QA and remote access remain separate gates. |
 | Meeting/landscape research | Subagent | Extract Archon-talk and adjacent assistant lessons into scoped architecture proposals | Suggestions are mapped to existing gates instead of treated as benchmark proof |
 | Library/Builder pilot discovery | Core/root with later reviewers | Pick 2-3 synchronized pilot threads only after source/rights and review constraints are explicit | Each candidate has a node graph, missing-library map, and clear rejection condition |
@@ -340,8 +376,8 @@ critical path; they do not form a second task list.
      and Riemannian or metric/algebraic-geometry substrate leads.
    - Start from textbook openings when the goal is calibration and feedback; start from middle
      nodes only when they expose a known Library blind spot with enough existing prerequisites.
-    - Record machine abstention and the exact external fact needed rather than blocking mechanical
-      preparation behind a generic “expert required” label.
+   - Record machine abstention and the exact external fact needed rather than blocking mechanical
+     preparation behind a generic “expert required” label.
 
 ## What not to optimize yet
 

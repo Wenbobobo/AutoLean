@@ -782,6 +782,60 @@ def test_generation_policy_hash_timeout_and_reasoning_capability_are_frozen() ->
     )
 
 
+def test_role_json_contract_is_frozen_without_outbound_oracle_values() -> None:
+    policy = AuthorizedRoleGenerationPolicyV1(
+        reasoning_effort="high",
+        response_format="json_object",
+        output_contract="role_json_v1",
+        timeout_seconds=37,
+    )
+    provider = FakeProvider(
+        [],
+        model_id="role-floor-model",
+        capabilities=ProviderCapabilities.of(
+            Capability.TEXT_GENERATION,
+            Capability.USAGE_ACCOUNTING,
+            Capability.REASONING_EFFORT,
+            Capability.STRUCTURED_JSON,
+        ),
+    )
+    suite = build_locked_calibration_floor_suite(
+        _target(provider, generation_policy=policy),
+        generation_policy=policy,
+        repetitions=1,
+        max_cost_microusd_per_trial=0,
+    )
+    prepared = prepare_locked_floor_trials(suite, run_id="authorized-role-json-contract-v1")
+    expected_outputs = {
+        case.case_id: json.dumps(
+            case.expected_output,
+            ensure_ascii=True,
+            allow_nan=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        for case in suite.matrix.cases
+    }
+
+    assert all(
+        Capability.STRUCTURED_JSON in cell.required_capabilities for cell in suite.matrix.cells
+    )
+    assert all(
+        "OUTPUT_JSON_CONTRACT_V1" in cell.prompt.system_prompt for cell in suite.matrix.cells
+    )
+    for trial in prepared:
+        outbound = f"{trial.request.system_prompt}\n{trial.request.prompt}"
+        assert trial.request.response_format == "json_object"
+        assert Capability.STRUCTURED_JSON in trial.request.required_capabilities
+        assert expected_outputs[trial.context.case_id] not in outbound
+        assert '"expected_output"' not in outbound
+
+
+def test_role_json_contract_requires_structured_json_response_format() -> None:
+    with pytest.raises(ValueError, match="requires response_format"):
+        AuthorizedRoleGenerationPolicyV1(output_contract="role_json_v1", timeout_seconds=37)
+
+
 def test_provider_effective_timeout_must_equal_frozen_policy_before_state_or_io(
     tmp_path: Path,
 ) -> None:

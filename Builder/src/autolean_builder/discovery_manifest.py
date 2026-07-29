@@ -30,6 +30,7 @@ class DiscoveryManifestError(ValueError):
 
 class DiscoverySourceByteStateV1(StrEnum):
     METADATA_ONLY = "metadata_only"
+    ACQUIRED_LOCAL_ONLY = "acquired_local_only"
 
 
 class DiscoveryRightsStateV1(StrEnum):
@@ -59,15 +60,34 @@ class DiscoverySourceIdentityV1(ContractModel):
     official_record_url: str = Field(min_length=1)
     source_path: tuple[str, ...] = Field(min_length=1)
     resolved_revision: str | None = Field(default=None, min_length=1)
-    source_bytes_state: Literal[DiscoverySourceByteStateV1.METADATA_ONLY] = (
-        DiscoverySourceByteStateV1.METADATA_ONLY
-    )
+    source_bytes_state: DiscoverySourceByteStateV1 = DiscoverySourceByteStateV1.METADATA_ONLY
+    source_lock_receipt_sha256: str | None = Field(default=None, pattern=_SHA256)
+    reference_manifest_candidate_sha256: str | None = Field(default=None, pattern=_SHA256)
     rights_state: DiscoveryRightsStateV1
     license_expression: str = Field(min_length=1)
     license_evidence_url: str = Field(min_length=1)
     model_egress_ceiling: Literal["local_only"] = "local_only"
     external_model_source_text: Literal["forbidden"] = "forbidden"
     discovery_evidence_refs: tuple[str, ...] = Field(min_length=1)
+
+    @model_validator(mode="after")
+    def validate_source_byte_state(self) -> DiscoverySourceIdentityV1:
+        bound_hashes = (
+            self.source_lock_receipt_sha256,
+            self.reference_manifest_candidate_sha256,
+        )
+        if self.source_bytes_state is DiscoverySourceByteStateV1.METADATA_ONLY:
+            if any(value is not None for value in bound_hashes):
+                raise ValueError("metadata-only discovery source cannot bind acquired bytes")
+        elif (
+            self.resolved_revision is None
+            or any(value is None for value in bound_hashes)
+            or self.model_egress_ceiling != "local_only"
+        ):
+            raise ValueError(
+                "acquired local-only source requires revision, receipt, and manifest hashes"
+            )
+        return self
 
 
 class DiscoveryMathlibOverlapV1(ContractModel):

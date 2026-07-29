@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import UTC, datetime
 from http.client import HTTPMessage
 from pathlib import Path
 from urllib.request import Request
@@ -51,6 +52,15 @@ def _materialize_receipt(tmp_path: Path) -> tuple[Path, dict[str, object]]:
     receipt_path.parent.mkdir(parents=True, exist_ok=True)
     receipt_path.write_bytes(json.dumps(receipt_document, sort_keys=True).encode() + b"\n")
     return receipt_path, receipt_document
+
+
+def _materialize_staging(root: Path) -> None:
+    (root / "LICENSE").parent.mkdir(parents=True, exist_ok=True)
+    (root / "LICENSE").write_bytes(_LICENSE)
+    for spec in lock.SOURCE_FILES:
+        target = root / Path(*spec.path.split("/"))
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(_source_bytes(spec))
 
 
 def test_selected_source_path_is_bounded_and_commit_pinned() -> None:
@@ -210,3 +220,53 @@ def test_acquire_uses_only_the_fixed_raw_urls_and_replays(
     replayed_receipt, replayed_entries = lock.acquire(cache_root)
     assert replayed_receipt == receipt_path
     assert replayed_entries == entries
+
+
+def test_import_staged_uses_the_same_receipt_and_cache_boundary(tmp_path: Path) -> None:
+    cache_root = tmp_path / "references"
+    staging_root = tmp_path / "connector-staging"
+    _materialize_staging(staging_root)
+
+    receipt_path, entries = lock.import_staged(
+        cache_root,
+        staging_root,
+        now=datetime(2026, 7, 29, 1, 2, 3, tzinfo=UTC),
+    )
+    receipt, records = lock.inspect_receipt(cache_root, receipt_path)
+
+    assert receipt["state"] == "acquired_local_only"
+    assert len(records) == len(lock.SOURCE_FILES)
+    assert len(entries) == len(lock.SOURCE_FILES)
+    assert {entry["model_egress_policy"] for entry in entries} == {"local_only"}
+
+    replayed_receipt, replayed_entries = lock.import_staged(
+        cache_root,
+        tmp_path / "staging-no-longer-needed",
+    )
+    assert replayed_receipt == receipt_path
+    assert replayed_entries == entries
+
+
+def test_import_staged_rejects_missing_and_unexpected_files(tmp_path: Path) -> None:
+    staging_root = tmp_path / "connector-staging"
+    _materialize_staging(staging_root)
+    missing = staging_root / Path(*lock.SOURCE_FILES[-1].path.split("/"))
+    missing.unlink()
+
+    with pytest.raises(lock.IFEMSourceLockError, match="exact fixed source set"):
+        lock.import_staged(tmp_path / "missing-cache", staging_root)
+
+    missing.write_bytes(_source_bytes(lock.SOURCE_FILES[-1]))
+    (staging_root / "unexpected.txt").write_text("not selected", encoding="utf-8")
+    with pytest.raises(lock.IFEMSourceLockError, match="unexpected source file"):
+        lock.import_staged(tmp_path / "extra-cache", staging_root)
+
+
+def test_import_staged_cli_requires_explicit_operator_acknowledgement(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    staging_root = tmp_path / "connector-staging"
+    _materialize_staging(staging_root)
+
+    assert lock.main(["import-staged", "--staging-root", str(staging_root)]) == 2
+    assert "requires --operator-acquire" in capsys.readouterr().err

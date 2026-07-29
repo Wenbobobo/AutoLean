@@ -29,6 +29,7 @@ import httpx
 from autolean_contracts import (
     AlignmentTargetV1,
     AttestationPurposeV1,
+    AttestationSignerV1,
     EndpointClassV1,
     ExecutionGraphV1,
     FidelityRiskV1,
@@ -337,6 +338,9 @@ def prepare_canary(
     profile_path: Path = _PROFILE_PATH,
     reasoning_effort: Literal["high", "max"] = "high",
     external_egress: bool = True,
+    completion_signer_factory: (
+        Callable[[HmacAttestationSignerV1], AttestationSignerV1] | None
+    ) = None,
     clock: Callable[[], datetime] = _now,
 ) -> PreparedCanary:
     """Prepare every public authority input without contacting the provider endpoint."""
@@ -384,11 +388,17 @@ def prepare_canary(
         allow_test_only_unreviewed_bundles=True,
     )
     output_store = LocalPrivateModelOutputStore((state_root / "private-model-output-v1").resolve())
+    completion_delegate = HmacAttestationSignerV1(completion_key, clock=clock)
+    completion_signer = (
+        completion_delegate
+        if completion_signer_factory is None
+        else completion_signer_factory(completion_delegate)
+    )
     authorization_service = ModelExecutionAuthorizationService(
         control_plane=control_plane,
         signer=HmacAttestationSignerV1(model_key, clock=clock),
         verifier=verifier,
-        completion_signer=HmacAttestationSignerV1(completion_key, clock=clock),
+        completion_signer=completion_signer,
         completion_verifier=completion_verifier,
         private_output_verifier=output_store,
         clock=clock,

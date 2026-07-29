@@ -11,7 +11,6 @@ from scripts.fate_wsl_runtime import (
     HOST_RESULT_SCHEMA,
     ProcessResult,
     RuntimePreparationError,
-    _attributes_payload,
     _host_dispatch,
     _load_locked_dependencies,
     _pure_absolute_posix,
@@ -107,14 +106,6 @@ def test_host_dispatch_rejects_absolute_path_in_native_result(
     monkeypatch.setattr("scripts.fate_wsl_runtime.platform.system", lambda: "Windows")
     with pytest.raises(RuntimePreparationError, match="native_wsl_runtime_result_leaked_path"):
         _host_dispatch(_audit_args(tmp_path), FakeHostRunner(leaked_result=True))
-
-
-def test_eol_policy_is_path_specific_and_deterministic() -> None:
-    assert _attributes_payload("M") == (
-        b"FATE-M.json text eol=crlf\nlake-manifest.json text eol=crlf\n"
-    )
-    assert b"*.lean" not in _attributes_payload("M")
-    assert b"*" not in _attributes_payload("X")
 
 
 def test_posix_boundaries_and_deterministic_layout_reject_escape(tmp_path: Path) -> None:

@@ -47,7 +47,7 @@ _PROJECT_SYNTHETIC_FIXTURE_LICENSE_SHA256 = (
     "5c9817c129b98e7bb966bca028c43c19107102ef8e03fe799bffb4354f4ef015"
 )
 _PROJECT_SYNTHETIC_FIXTURE_CORPUS_SHA256 = (
-    "0a6b8f3332559c4547fc5f23de3a1221e775a8c0c9835645a41885b40d1e8bfb"
+    "a8d9ae4faf4d376686e7e209c0ab8bce4c23d0647b81d142244feea9abcd30d7"
 )
 _PROJECT_SYNTHETIC_FIXTURE_CORPUS_NAME = "project-synthetic-opening-corpus.v1.json"
 _PROJECT_SYNTHETIC_FIXTURE_MANIFEST_NAME = (
@@ -84,6 +84,8 @@ class LocalCalibrationDifferenceKindV1(StrEnum):
     LENGTH_TO_GEODESIC = "length_to_geodesic"
     REVERSE_PARAMETERS = "reverse_parameters"
     VACUITY = "vacuity"
+    DROP_FINITE = "drop_finite"
+    DROP_NOETHERIAN = "drop_noetherian"
 
 
 class LocalCalibrationAuthorityBoundaryV1(ContractModel):
@@ -564,17 +566,20 @@ class LocalCalibrationFixtureCorpusV1(ContractModel):
             "mg-a-length-geodesic",
             "mg-a-quantifier-order",
             "mg-a-nonempty-vacuity",
+            "mg-a-finite-noetherian-compactness",
             "mg-a-endpoint-order",
         }
         actual = {item.sample_id for item in self.samples}
         if actual != expected:
-            raise LocalCalibrationError("opening corpus does not contain the required ten samples")
+            raise LocalCalibrationError(
+                "opening corpus does not contain the required eleven samples"
+            )
         by_domain = {domain: 0 for domain in LocalCalibrationDomainV1}
         for sample in self.samples:
             by_domain[sample.domain] += 1
-        if by_domain != {LocalCalibrationDomainV1.PDE_A: 5, LocalCalibrationDomainV1.MG_A: 5}:
+        if by_domain != {LocalCalibrationDomainV1.PDE_A: 5, LocalCalibrationDomainV1.MG_A: 6}:
             raise LocalCalibrationError(
-                "opening corpus must contain five PDE-A and five MG-A samples"
+                "opening corpus must contain five PDE-A and six MG-A samples"
             )
         difference_kinds = {
             outcome.difference_kind
@@ -589,6 +594,8 @@ class LocalCalibrationFixtureCorpusV1(ContractModel):
             LocalCalibrationDifferenceKindV1.DROP_REGULARITY,
             LocalCalibrationDifferenceKindV1.INFIMUM_TO_ATTAINMENT,
             LocalCalibrationDifferenceKindV1.UNIQUENESS_TO_EXISTENCE,
+            LocalCalibrationDifferenceKindV1.DROP_FINITE,
+            LocalCalibrationDifferenceKindV1.DROP_NOETHERIAN,
         }
         if not required <= difference_kinds:
             raise LocalCalibrationError(

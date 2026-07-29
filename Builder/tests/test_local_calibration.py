@@ -41,12 +41,12 @@ def _payload() -> dict[str, object]:
     return value
 
 
-def test_opening_corpus_has_exactly_five_pde_and_five_metric_geometry_samples() -> None:
+def test_opening_corpus_has_exactly_five_pde_and_six_metric_geometry_samples() -> None:
     corpus = _corpus()
 
-    assert len(corpus.samples) == 10
+    assert len(corpus.samples) == 11
     assert sum(sample.domain.value == "pde-a" for sample in corpus.samples) == 5
-    assert sum(sample.domain.value == "mg-a" for sample in corpus.samples) == 5
+    assert sum(sample.domain.value == "mg-a" for sample in corpus.samples) == 6
     assert corpus.record_kind == "local_calibration_fixture"
     assert corpus.provenance_class == "project_synthetic_fixture"
     assert corpus.authorship_claim == "generated_for_repository_pending_human_content_review"
@@ -163,7 +163,7 @@ def test_loader_rejects_rehashed_alternate_corpus_bytes(tmp_path: Path) -> None:
 def test_machine_readable_report_exposes_differences_but_never_a_routable_handoff() -> None:
     report = _corpus().machine_readable_report()
 
-    assert report["sample_count"] == 10
+    assert report["sample_count"] == 11
     assert report["record_kind"] == "local_calibration_fixture"
     assert report["provenance_class"] == "project_synthetic_fixture"
     assert report["authorship_claim"] == ("generated_for_repository_pending_human_content_review")
@@ -171,7 +171,7 @@ def test_machine_readable_report_exposes_differences_but_never_a_routable_handof
     assert report["promotion_allowed"] is False
     reports = report["reports"]
     assert isinstance(reports, list)
-    assert len(reports) == 10
+    assert len(reports) == 11
     for entry in reports:
         assert isinstance(entry, dict)
         assert entry["production_ingestion"] is False
@@ -208,6 +208,8 @@ def test_required_synthetic_mutation_fixtures_are_declared_without_semantic_auth
         "DROP_WEAK_REGULARITY",
         "INFIMUM_TO_ATTAINMENT",
         "UNIQUENESS_TO_EXISTENCE",
+        "DROP_FINITE_METRIC_COMPACTNESS",
+        "DROP_NOETHERIAN_QUASICOMPACTNESS",
     }
     seen_codes: set[str] = set()
 

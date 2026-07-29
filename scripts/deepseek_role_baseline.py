@@ -179,7 +179,7 @@ class DeepSeekRolePerTrialBudgetV1(ContractModel):
     )
     max_attempts: Literal[1] = 1
     max_input_tokens: Literal[512] = 512
-    max_output_tokens: Literal[256] = 256
+    max_output_tokens: Literal[256, 512, 1024] = 256
     model_timeout_seconds: Literal[120] = 120
     settlement_margin_seconds: Literal[30] = 30
     authorization_ttl_seconds: Literal[150] = 150
@@ -309,6 +309,7 @@ class DeepSeekRoleOperatorConfig:
     private_root: Path
     max_cost_microusd_per_trial: int
     operator_approved: bool
+    max_output_tokens: Literal[256, 512, 1024] = 256
     state_parent: _OperatorParentSnapshot = field(init=False, repr=False)
     private_parent: _OperatorParentSnapshot = field(init=False, repr=False)
 
@@ -325,6 +326,8 @@ class DeepSeekRoleOperatorConfig:
             raise DeepSeekRoleOperatorError(
                 "max_cost_microusd_per_trial must be a non-negative integer"
             )
+        if self.max_output_tokens not in (256, 512, 1024):
+            raise DeepSeekRoleOperatorError("max_output_tokens is not an approved ablation value")
         state_root, state_parent = _validated_operator_root(self.state_root, label="state")
         private_root, private_parent = _validated_operator_root(self.private_root, label="private")
         if (
@@ -363,6 +366,19 @@ class PreparedDeepSeekRoleOperator:
     completion_manifest_store: AuthorizedRoleCompletionManifestStoreV2
     diagnostic_transport: RedactingDiagnosticTransport
     state_database: Path
+
+
+@dataclass(frozen=True, slots=True)
+class DeepSeekRolePrivateRun:
+    """A public report plus a same-process-only suite sidecar for trusted local evaluation.
+
+    ``suite_sidecar`` carries an opaque private manifest handle.  It must never reach CLI stdout,
+    a public artifact, or a restart boundary.  The optional exact evaluator uses it only while the
+    matching private authenticator and output store still live in this process.
+    """
+
+    report: DeepSeekRolePublicReportV2
+    suite_sidecar: AuthorizedRoleSuiteSidecarV3 | None
 
 
 @dataclass(frozen=True, slots=True)
@@ -709,8 +725,14 @@ def _content_hash(value: object) -> str:
     return hashlib.sha256(canonical_json_bytes(value)).hexdigest()
 
 
-def _budget_sidecar(max_cost_microusd: int) -> DeepSeekRolePerTrialBudgetV1:
-    return DeepSeekRolePerTrialBudgetV1(max_cost_microusd=max_cost_microusd)
+def _budget_sidecar(
+    max_cost_microusd: int,
+    max_output_tokens: Literal[256, 512, 1024] = 256,
+) -> DeepSeekRolePerTrialBudgetV1:
+    return DeepSeekRolePerTrialBudgetV1(
+        max_cost_microusd=max_cost_microusd,
+        max_output_tokens=max_output_tokens,
+    )
 
 
 def _unavailable_usage() -> DeepSeekRoleUsageBucketsV1:
@@ -734,6 +756,8 @@ def build_deepseek_role_plan(
     provider = provider_profile.create_provider(transport=_NoIoTransport(), environment={})
     generation_policy = AuthorizedRoleGenerationPolicyV1(
         reasoning_effort=profile.default_reasoning_effort,
+        response_format="json_object",
+        output_contract="role_json_v1",
         timeout_seconds=int(profile.timeout_seconds),
     )
     target = RoleModelTargetV1(
@@ -748,6 +772,7 @@ def build_deepseek_role_plan(
         generation_policy=generation_policy,
         repetitions=1,
         max_cost_microusd_per_trial=config.max_cost_microusd_per_trial,
+        max_output_tokens=config.max_output_tokens,
     )
     trials = prepare_locked_floor_trials(suite, run_id=config.run_id)
     budgets_by_cell = {
@@ -783,9 +808,10 @@ def build_deepseek_role_plan(
             "model_revision": _MODEL_REVISION,
             "suite_definition_hash": suite.work_evidence.suite_definition_hash,
             "generation_policy_hash": generation_policy.content_hash(),
-            "per_trial_budget": _budget_sidecar(config.max_cost_microusd_per_trial).model_dump(
-                mode="json"
-            ),
+            "per_trial_budget": _budget_sidecar(
+                config.max_cost_microusd_per_trial,
+                config.max_output_tokens,
+            ).model_dump(mode="json"),
             "role_plan_hashes": {
                 role.value: digest
                 for role, digest in sorted(
@@ -835,7 +861,10 @@ def _report_from_plan(
         status=status,
         run_id=plan.config.run_id,
         plan_hash=plan.plan_hash,
-        per_trial_budget=_budget_sidecar(plan.config.max_cost_microusd_per_trial),
+        per_trial_budget=_budget_sidecar(
+            plan.config.max_cost_microusd_per_trial,
+            plan.config.max_output_tokens,
+        ),
         roles=_base_role_sidecars(plan),
         failure_class=failure_class,
     )
@@ -1264,13 +1293,24 @@ def _failure_class(error: BaseException, diagnostic: RedactingDiagnosticTranspor
 def run_preflighted_deepseek_role_operator(
     prepared: PreparedDeepSeekRoleOperator,
 ) -> DeepSeekRolePublicReportV2:
-    """Execute exactly once; any failed dispatch remains reconciliation-only."""
+    """Execute exactly once and return only the redacted public report."""
+
+    return run_preflighted_deepseek_role_operator_with_private_sidecar(prepared).report
+
+
+def run_preflighted_deepseek_role_operator_with_private_sidecar(
+    prepared: PreparedDeepSeekRoleOperator,
+) -> DeepSeekRolePrivateRun:
+    """Execute once; retain the V3 sidecar only for a same-process trusted evaluator."""
 
     if _has_private_reconciliation(prepared):
-        return _report_from_plan(
-            prepared.plan,
-            status="reconciliation_required",
-            failure_class="private_reconciliation_required",
+        return DeepSeekRolePrivateRun(
+            report=_report_from_plan(
+                prepared.plan,
+                status="reconciliation_required",
+                failure_class="private_reconciliation_required",
+            ),
+            suite_sidecar=None,
         )
     prepared.diagnostic_transport.reset_failure()
     try:
@@ -1294,19 +1334,28 @@ def run_preflighted_deepseek_role_operator(
         if isinstance(error, (KeyboardInterrupt, SystemExit)):
             raise
         reconciliation = _has_private_reconciliation(prepared)
-        return _report_from_plan(
-            prepared.plan,
-            status=("reconciliation_required" if reconciliation else "execution_refused"),
-            failure_class=_failure_class(error, prepared.diagnostic_transport),
+        return DeepSeekRolePrivateRun(
+            report=_report_from_plan(
+                prepared.plan,
+                status=("reconciliation_required" if reconciliation else "execution_refused"),
+                failure_class=_failure_class(error, prepared.diagnostic_transport),
+            ),
+            suite_sidecar=None,
         )
-    return DeepSeekRolePublicReportV2(
-        mode="run",
-        status="settled",
-        run_id=prepared.plan.config.run_id,
-        plan_hash=prepared.plan.plan_hash,
-        per_trial_budget=_budget_sidecar(prepared.plan.config.max_cost_microusd_per_trial),
-        roles=role_sidecars,
-        private_evidence_committed=True,
+    return DeepSeekRolePrivateRun(
+        report=DeepSeekRolePublicReportV2(
+            mode="run",
+            status="settled",
+            run_id=prepared.plan.config.run_id,
+            plan_hash=prepared.plan.plan_hash,
+            per_trial_budget=_budget_sidecar(
+                prepared.plan.config.max_cost_microusd_per_trial,
+                prepared.plan.config.max_output_tokens,
+            ),
+            roles=role_sidecars,
+            private_evidence_committed=True,
+        ),
+        suite_sidecar=suite_sidecar,
     )
 
 
