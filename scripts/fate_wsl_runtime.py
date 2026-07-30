@@ -50,7 +50,10 @@ from scripts.fate_compile_canary import (
 RUNTIME_STATE_SCHEMA: Final = "autolean.fate-wsl-runtime-state.v1"
 RUNTIME_AUDIT_SCHEMA: Final = "autolean.fate-wsl-runtime-audit.v1"
 HOST_RESULT_SCHEMA: Final = "autolean.fate-wsl-runtime-result.v1"
-LAYOUT_VERSION: Final = "fate-runtime-v1"
+# V2 changes the persisted runtime's text policy from the historical CRLF
+# presentation to the canonical LF bytes pinned by the fixture lock.  A new
+# namespace prevents a valid V1 state file from being reinterpreted in place.
+LAYOUT_VERSION: Final = "fate-runtime-v2"
 _TIERS: Final[tuple[Tier, ...]] = ("M", "H", "X")
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")

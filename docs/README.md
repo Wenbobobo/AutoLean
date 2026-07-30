@@ -96,6 +96,8 @@ runner reports success.
     [deterministic 5/3/3 held-out protocol](builder-held-out-calibration.md) exercise proposal,
     review, mutation, abstention, split, and replay structure over eleven project-synthetic samples.
     They are fake-provider architecture regressions, not real-model or semantic calibration.
+    The [iFEM structural calibration](builder-ifem-structural-calibration.md) separately freezes a
+    source-free risk registry; it is evaluator metadata, not a textbook statement or model input.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused

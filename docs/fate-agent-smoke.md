@@ -2,10 +2,9 @@
 
 ## Current result
 
-The first real `agent-smoke-8` execution completed on 2026-07-23 under the now-retired single-
-container wrapper V1. It is retained as historical, non-promotable evidence and is not evidence
-for the current V2 execution path. The V2 code has unit coverage but has not yet rerun all eight
-FATE cases. The historical run is a transparent,
+The current `agent-smoke-8` execution completed on 2026-07-30 against the audited LF
+`fate-runtime-v2-bb646ecb` layout and the split compile/query OCI wrapper V2. The earlier
+2026-07-23 single-container V1 report remains historical only. The current run is a transparent,
 task-independent `aesop` baseline, not a model comparison and not evidence that an Agent ran.
 Lean proof search did execute inside each candidate; the report therefore records
 `proof_search_executed=true` and `model_or_agent_executed=false`.
@@ -20,19 +19,22 @@ Lean proof search did execute inside each candidate; the report therefore record
 code 20 because the fixed tactic did not close the goal. No case timed out. Failure diagnostics
 are retained only as byte counts and SHA-256 commitments.
 
-The ignored local evidence file is
-`release-evidence/fate-agent-smoke-static-aesop.v1.json`:
+The operator-local evidence file is
+`benchmarks/results/fate-agent-smoke-8-static-wsl-v2-2026-07-30.json`:
 
 - report SHA-256:
-  `c8c32f150562a9f4de9d6be84c812a6e7c6b760d624d43a1ad03b280144e5bb2`;
+  `820fe89baaecfa4d0deedbe841c052662f754618b292db2016ba88b97071c6ee`;
 - envelope file SHA-256:
-  `10b2745d56f3b7c5935b3528f343d3d04c17781eaefbaaf9c6b7d72ab3ae046b`;
+  `5a07f4b239b29b7e68d0a88765e8858907d0a8f78ad2043d1920f9d3880254ae`;
 - observed dependency build-tree SHA-256:
   `096a51f662104eca6ce73c6c9c7d436fe0e6d467e766c2736ab20c20a65539c7`;
 - observed build-tree file count: 88,140.
 
-The report contains no proof body, source text, diagnostic text, absolute path, environment
-value, or credential.
+The report binds runtime-state SHA-256
+`7f1ce2ef67c150a04d146d562facca5f8c52b2fdd4bbfb0b27ed076a6739492f` and runtime-audit
+SHA-256 `12fbd86dae4c0067df0602a90c0fe2c5217482371475024e1cc5311a79892dd0`.
+It contains no proof body, source text, diagnostic text, absolute path, environment value, or
+credential.
 
 ## What the bridge proves
 

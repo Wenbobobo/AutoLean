@@ -6,6 +6,14 @@ contain their benchmark `sorry`; therefore exit code zero means only that the lo
 and its pre-declarations elaborate in the selected Lean environment. It is not a proof, a model
 score, or evidence that any FATE task was solved.
 
+Current operator-local observation (2026-07-30): the fresh LF `fate-runtime-v2-bb646ecb`
+completed M 3/3, H 3/3, and X 6/6 with zero compile failures. The canonical report SHA-256 is
+`efb35d307728444a0a1e13e2882bf9eba6e1370d616d605c89219c87a34a0d06`; the operator-local envelope file
+SHA-256 is `ec995478b9e986ca1a0003107f3f5eaf00f14a1f418deab3d177bfc88f8d30c1`. Runtime state SHA-256
+is `7f1ce2ef67c150a04d146d562facca5f8c52b2fdd4bbfb0b27ed076a6739492f`, and the independent audit
+SHA-256 is `12fbd86dae4c0067df0602a90c0fe2c5217482371475024e1cc5311a79892dd0`. This is a compatibility
+canary only and remains non-promotable.
+
 The runner fails closed before Lean starts when any of these inputs drift:
 
 - `fate.lock.json`, the root FATE commit, or any of its three submodule commits;
@@ -62,16 +70,18 @@ Example audit of an existing runtime:
 ```powershell
 uv run python scripts/fate_wsl_runtime.py audit `
   --cache-root /home/operator/.cache/autolean `
-  --packages-root /home/operator/.cache/autolean/fate-cache/FATE-M/.lake/packages `
-  --runtime-root /home/operator/.cache/autolean/fate-runtime-v1-bb646ecb/runtime
+  --packages-root /home/operator/.cache/autolean/fate-bb646ecb/FATE-M/.lake/packages `
+  --runtime-root /home/operator/.cache/autolean/fate-runtime-v2-bb646ecb/runtime
 ```
 
 For a new managed layout, replace `audit` with `prepare` and omit `--runtime-root`. The layout
 name is derived from the locked root commit. A second `prepare` reuses it only when its canonical,
 path-free state file and complete audit still match. Existing partial layouts, unknown targets,
 state drift, or output files are never deleted or overwritten. The prepare result returns a
-`runtime_path_relative_to_cache` such as `fate-runtime-v1-bb646ecb/runtime`; pass the cache root
-joined to that relative path as `--runtime-root`. The enclosing deterministic layout directory is
+`runtime_path_relative_to_cache` such as `fate-runtime-v2-bb646ecb/runtime`; pass the cache root
+joined to that relative path as `--runtime-root`. The current LF policy uses a
+`fate-runtime-v2-<commit>` namespace; V1 directories remain immutable historical layouts and must
+not be reused or rewritten. The enclosing deterministic layout directory is
 not itself a Git worktree and must not be passed as the runtime root.
 
 Run with a new output path:
@@ -79,8 +89,8 @@ Run with a new output path:
 ```powershell
 uv run python scripts/fate_wsl_runtime.py run `
   --cache-root /home/operator/.cache/autolean `
-  --packages-root /home/operator/.cache/autolean/fate-cache/FATE-M/.lake/packages `
-  --runtime-root /home/operator/.cache/autolean/fate-runtime-v1-bb646ecb/runtime `
+  --packages-root /home/operator/.cache/autolean/fate-bb646ecb/FATE-M/.lake/packages `
+  --runtime-root /home/operator/.cache/autolean/fate-runtime-v2-bb646ecb/runtime `
   --output benchmarks/results/fate-compile-canary-ext4.v1.json
 ```
 

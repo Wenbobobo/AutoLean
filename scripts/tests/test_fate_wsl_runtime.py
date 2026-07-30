@@ -123,9 +123,9 @@ def test_posix_boundaries_and_deterministic_layout_reject_escape(tmp_path: Path)
     with pytest.raises(RuntimePreparationError, match="packages_outside_cache_root"):
         _require_descendant(root, tmp_path / "outside", "packages")
     paths = _runtime_paths(root, root / "packages", "b" * 40)
-    assert paths.layout_root.name == "fate-runtime-v1-bbbbbbbb"
+    assert paths.layout_root.name == "fate-runtime-v2-bbbbbbbb"
     assert paths.runtime_root.relative_to(paths.cache_root).as_posix() == (
-        "fate-runtime-v1-bbbbbbbb/runtime"
+        "fate-runtime-v2-bbbbbbbb/runtime"
     )
 
 
