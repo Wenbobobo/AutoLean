@@ -214,6 +214,50 @@ class VerifiedHeldOutCalibrationCorpus:
         return matches[0]
 
 
+def _complete_corpus_capability_binding(
+    corpus: VerifiedHeldOutCalibrationCorpus,
+) -> str:
+    """Hash every canonical datum carried by an issued corpus capability."""
+
+    if type(corpus) is not VerifiedHeldOutCalibrationCorpus:
+        raise HeldOutCalibrationError(
+            "provided held-out corpus is not an issued manifest-verified capability"
+        )
+    if getattr(corpus, "_token", None) is not _VERIFIED_CORPUS_TOKEN:
+        raise HeldOutCalibrationError(
+            "provided held-out corpus is not an issued manifest-verified capability"
+        )
+    try:
+        return _sha256_json(
+            {
+                "schema_version": "autolean.held-out-calibration-corpus-capability-binding.v1",
+                "corpus": corpus.corpus,
+                "binding": corpus.binding,
+                "sample_bindings": corpus.sample_bindings,
+            }
+        )
+    except (AttributeError, TypeError, ValueError) as error:
+        raise HeldOutCalibrationError(
+            "provided held-out corpus is not an issued manifest-verified capability"
+        ) from error
+
+
+def _reload_and_verify_canonical_corpus_capability(
+    corpus: VerifiedHeldOutCalibrationCorpus,
+) -> VerifiedHeldOutCalibrationCorpus:
+    """Reload canonical bytes before accepting a caller-supplied capability object."""
+
+    trusted_corpus = load_held_out_calibration_corpus(_canonical_corpus_path())
+    if _complete_corpus_capability_binding(corpus) != _complete_corpus_capability_binding(
+        trusted_corpus
+    ):
+        raise HeldOutCalibrationError(
+            "provided held-out corpus capability differs from the canonical "
+            "manifest-verified corpus"
+        )
+    return trusted_corpus
+
+
 class HeldOutCalibrationPartitionV1(ContractModel):
     """One named, disjoint partition in a deterministic split."""
 
@@ -761,16 +805,7 @@ def build_held_out_calibration_split(
 
     if not split_seed.strip():
         raise HeldOutCalibrationError("held-out calibration split seed cannot be blank")
-    trusted_corpus = load_held_out_calibration_corpus(_canonical_corpus_path())
-    if (
-        corpus.binding != trusted_corpus.binding
-        or corpus.sample_bindings != trusted_corpus.sample_bindings
-    ):
-        raise HeldOutCalibrationError(
-            "provided held-out corpus capability differs from the canonical "
-            "manifest-verified corpus"
-        )
-    corpus = trusted_corpus
+    corpus = _reload_and_verify_canonical_corpus_capability(corpus)
     ranked = tuple(
         sorted(
             corpus.sample_bindings,
@@ -828,15 +863,7 @@ def verify_held_out_calibration_split(
 ) -> None:
     """Reject a syntactically valid split when it does not match the capability allocation."""
 
-    trusted_corpus = load_held_out_calibration_corpus(_canonical_corpus_path())
-    if (
-        corpus.binding != trusted_corpus.binding
-        or corpus.sample_bindings != trusted_corpus.sample_bindings
-    ):
-        raise HeldOutCalibrationError(
-            "provided held-out corpus capability differs from the canonical "
-            "manifest-verified corpus"
-        )
+    trusted_corpus = _reload_and_verify_canonical_corpus_capability(corpus)
     if split.corpus != trusted_corpus.binding:
         raise HeldOutCalibrationError("held-out split corpus binding differs from verified corpus")
     expected = build_held_out_calibration_split(trusted_corpus, split_seed=split.split_seed)

@@ -104,21 +104,23 @@ production approval record, or spend limit.
 
 `llm.txt` is an ignored, operator-local temporary input. It is not a configuration format for the
 repository: do not commit it, migrate its values into `.env`/YAML, copy it into an artifact, or
-teach a runner to read it. The operator may use it only to place
-`AUTOLEAN_DEEPSEEK_API_KEY` and a distinct `AUTOLEAN_ROLE_MANIFEST_HMAC_KEY` into the current
-process environment. The runner reads environment references only; public files retain the fixed
-official profile, never a credential or an alternate endpoint.
+teach the base role runner to read it. The audited live-baseline and output-budget wrappers may
+parse only the supported key-assignment forms through their explicit `--secret-file` option and
+keep the value process-local. The base runner still reads environment references only. Public
+files retain the fixed official profile, never a credential or an alternate endpoint.
 
 Use the existing role-runner in this order, with fresh, checkout-external empty state and private
 roots, a safe run identifier, and an explicit per-trial cost ceiling:
 
 ```text
-uv run python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
-uv run python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
-uv run python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+uv run --frozen python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_PLAN_STATE> --private-root <ABS_PLAN_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+uv run --frozen python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_PREFLIGHT_STATE> --private-root <ABS_PREFLIGHT_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
+uv run --frozen python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_RUN_STATE> --private-root <ABS_RUN_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial <LIMIT>
 ```
 
-`plan` is credential-free and performs neither filesystem nor provider I/O. `preflight` validates
+All six root placeholders must be different checkout-external paths. A root pair is consumed by
+one mode and cannot be resumed or reinterpreted by another mode. `plan` is credential-free and
+performs neither filesystem nor provider I/O. `preflight` validates
 the frozen ten-trial suite, effective provider timeout, source/rights and admission bindings,
 budgets, lifetimes, and empty-root boundary before a provider request; it must leave ModelWork
 trial state at zero. Run `run` only when the host network is deliberately available and preflight
@@ -129,8 +131,9 @@ exact usage, reconciliation journals, and the authenticated private manifest liv
 operator-owned private root. A provider/network failure produces a stable public failure class; it
 does not authorize automatic retry, model substitution, role-floor admission, or benchmark scoring.
 See [the DeepSeek role operator procedure](deepseek-role-operator.md) for the fixed limits and
-private-output boundary. The bootstrap canary is narrower still: its earlier observed outcome was a
-redacted network refusal and is not evidence of provider capability. A separate 2026-07-29 ten-call
+private-output boundary. The bootstrap canary is narrower still: its historical observed outcome
+was a redacted network refusal; a later settled canary established one bounded request/receipt
+path, not provider capability. A separate 2026-07-29 ten-call
 role observation settled every request, but every completion saturated the fixed 256-token output
 ceiling. That local, non-promotable result is [recorded separately](research/deepseek-role-json-contract-calibration-2026-07-29.md)
 and supports no competence, role-floor, proof, or Builder-fidelity conclusion.

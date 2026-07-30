@@ -164,19 +164,17 @@ release, or novelty authority.
   - Acceptance effect: establishes only the named model's result under that experiment. It is not a
     proof, a role floor, or Builder fidelity evidence.
   - Owner: provider/evaluator operator.
-  - Historical record: operator authorized experimental DeepSeek use. The 2026-07-28 single bounded
-    attempt returned `blocked` with `provider_response_received=false`, no usage, and no score; a
-    credential-free probe from that sandbox could not establish an HTTPS connection. This is
-    environment-path evidence, not an endpoint incident or a model result. A newly available
-    network path must still produce a fresh bounded receipt under this item; it does not retroactively
-    turn the failed attempt into a score.
-  - Current machine record, not a checkbox closure: a separate 2026-07-29 ten-call role observation
-    settled all requests, but every accepted completion saturated the fixed 256-token output ceiling.
-    Its local evaluator and report are non-promotable, so this does not establish competence,
-    role-floor admission, an independently administered evaluation, or the acceptance effect above.
-    A separate versioned 512-token ablation passed zero-call preflight, then stopped after one
-    redacted `network` failure in its 256-token control arm. It made no retry, skipped the candidate,
-    and emitted no comparison, so it also does not close this item.
+  - Historical record: the first bounded canary and two budget attempts retained redacted network
+    outcomes. They remain environment-path evidence, not endpoint incidents or model results.
+  - Current machine record, not a checkbox closure: a later canary settled one bounded request; a
+    fresh 20-call 256/512 run observed ceiling saturation of 4/10 and 1/10; legacy 512a and strict
+    V2 512b each settled ten no-retry calls and produced the same local role-separated 2/10 result,
+    both passes in task allocation. These records already close the need for another bootstrap
+    network receipt. They remain tiny, alias-unpinned, locally evaluated, and non-promotable.
+  - Remaining external work: independently administer the evaluator and production admission,
+    complete an actual capability probe, bind the applicable source-egress decision, and pin the
+    endpoint/model revision as far as the provider permits. Do not repeat a paid run merely to
+    replace the retained transport or settlement observations.
 
 - [ ] **AUTH-SPEND-01: Enforce the external hard-spend ceiling.**
   - Blocking: claims that a large swarm cannot exceed its provider budget.

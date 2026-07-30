@@ -54,8 +54,13 @@ runner reports success.
     [2026-07-29 run report](research/deepseek-output-budget-ablation-2026-07-29.json) stopped after
     one redacted `network` failure. A fresh
     [2026-07-30 rerun](research/deepseek-output-budget-ablation-2026-07-30.json) did the same and
-    skipped the candidate arm. Neither contains a budget comparison or supports an endpoint,
-    authentication, billing, or model-quality conclusion.
+    skipped the candidate arm. A third, separately rooted
+    [settled run](research/deepseek-output-budget-ablation-2026-07-30-settled-a.json) completed all
+    20 calls: saturation fell from 4/10 at 256 tokens to 1/10 at 512. A subsequent
+    [strict V2 512-token scored observation](research/deepseek-live-baseline-2026-07-30-512-b-v2.json) settled
+    ten calls and passed 2/10 exact-JSON cases, both task-allocation cases. These observations select
+    a less-truncated local budget but remain non-promotable and support no general competence,
+    billing, proof, or Builder-fidelity conclusion.
     The repository-owned [benchmark skill](../skills/run-autolean-benchmarks/SKILL.md) and its
     [2026-07-30 offline forward test](research/role-benchmark-skill-forward-test-2026-07-30.json)
     preserve the repeatable V3 workflow without turning fake results into model evidence.

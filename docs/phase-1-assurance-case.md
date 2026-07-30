@@ -34,6 +34,18 @@ evidence is nonbinding. The iFEM thirteen-file source lock is locally acquired/r
 and the eleven-sample synthetic opening corpus covers required mutation families. None changes the
 `no-RC` decision, rights authority, semantic admission, freeze authority, or proof acceptance.
 
+**Working-tree status, 2026-07-30.** A later operator-approved synthetic canary settled one
+bounded request. A separately rooted 256/512 output-budget run then settled exactly twenty
+no-retry calls; observed output-ceiling saturation fell from 4/10 to 1/10. Two further,
+separately rooted 512-token ten-case role observations each passed 2/10 local exact-JSON cases,
+both in task allocation. The first (`512a`) is retained as a legacy V1 projection that is not the
+normative machine-revalidation format; the second (`512b`) uses the strict V2 scored envelope.
+These are tiny, locally evaluated, alias-unpinned, non-promotable observations. They establish the
+request, receipt, accounting, and report-validation paths and select 512 tokens for the next
+observation;
+they do not establish model competence, provider billing, Builder fidelity, proof authority, or
+production admission. The `no-RC` decision remains unchanged.
+
 ## Evidence vocabulary
 
 The labels below are deliberately ordered neither by convenience nor by optimism.  A later label
@@ -182,37 +194,45 @@ the repository policy excludes Anthropic and Claude rather than providing them a
 - Implementation: [`Prover/src/autolean_prover/providers/`](../Prover/src/autolean_prover/providers/),
   [`Prover/operator-profiles/`](../Prover/operator-profiles/),
   [`scripts/deepseek_authorized_canary.py`](../scripts/deepseek_authorized_canary.py), and
-  [`scripts/deepseek_role_baseline.py`](../scripts/deepseek_role_baseline.py).
+  [`scripts/deepseek_role_baseline.py`](../scripts/deepseek_role_baseline.py), plus
+  [`scripts/deepseek_output_budget_ablation.py`](../scripts/deepseek_output_budget_ablation.py).
 - Policy: [`docs/model-provider-policy.md`](model-provider-policy.md) and
   [`docs/deepseek-authorized-canary.md`](deepseek-authorized-canary.md), plus the
-  [`docs/deepseek-role-operator.md`](deepseek-role-operator.md) procedure.
+  [`docs/deepseek-role-operator.md`](deepseek-role-operator.md) and
+  [`docs/deepseek-output-budget-ablation.md`](deepseek-output-budget-ablation.md) procedures.
+- Retained public records: the fully saturated
+  [256-token observation](research/deepseek-role-json-contract-calibration-2026-07-29.json), two
+  network-interrupted budget attempts from
+  [2026-07-29](research/deepseek-output-budget-ablation-2026-07-29.json) and
+  [2026-07-30](research/deepseek-output-budget-ablation-2026-07-30.json), the settled
+  [20-call 256/512 ablation](research/deepseek-output-budget-ablation-2026-07-30-settled-a.json),
+  legacy [512a](research/deepseek-live-baseline-2026-07-30-512-a.json), and strict V2
+  [512b](research/deepseek-live-baseline-2026-07-30-512-b-v2.json).
 - Replay command:
 
   ```text
   uv run --frozen pytest Prover/tests/test_providers.py Prover/tests/test_operator_profiles.py Prover/tests/test_model_execution_authorization.py scripts/tests/test_deepseek_authorized_canary.py scripts/tests/test_deepseek_role_baseline.py
   ```
 
-**Evidence class.** `unit` and `synthetic` policy coverage. The earlier operator-local canary
-returned redacted `execution_refused/network`. A later ten-call role observation settled every
-request, but every accepted completion reached the fixed 256-token output ceiling; its locally
-evaluated report is explicitly non-promotable and cannot support a competence conclusion. The
-operator sequence is:
+**Evidence class.** `unit`, `synthetic`, and operator-local non-promotable observations. The
+historical canary and two ablation attempts retained redacted network failures. A separate older
+ten-call role observation settled but all ten completions reached the 256-token ceiling. Later
+fresh roots produced one settled canary, one settled twenty-call 256/512 budget comparison, and two
+settled 512-token ten-case role observations. The strict V2 512b role report and its receipt-bound
+ledger are the current normative record shape; 512a is retained as legacy V1 evidence. Follow
+the linked operator procedures, which require distinct disposable roots for `plan`, `preflight`,
+and `run`; state must never be resumed across those modes.
 
-```text
-uv run --frozen python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id <RUN_ID> --max-cost-microusd-per-trial <LIMIT>
-uv run --frozen python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id <RUN_ID> --max-cost-microusd-per-trial <LIMIT>
-uv run --frozen python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id <RUN_ID> --max-cost-microusd-per-trial <LIMIT>
-```
+**Non-claim.** The settled records do not establish provider SLA, invoice cost, general model
+quality, role-floor admission, proof, semantic fidelity, or release authority. The 4/10-to-1/10
+saturation difference has a fixed control-first time confound, while the repeated 2/10 role result
+is a tiny local exact-JSON observation under an unpinned model alias. Strict V2 corrects the public
+report shape; it does not raise the experiment's authority or create a benchmark baseline.
 
-**Non-claim.** No provider capability, availability, cost, or model-quality result follows from
-the static profile, fake provider tests, network refusal, or the saturated ten-call observation. A
-bootstrap canary is explicitly neither a role-floor admission nor a benchmark score.
-
-**Remaining acceptance gate.** Replay the bounded request only when the authority environment has
-deliberate egress, with operator-owned environment credentials, independent admission and
-execution authorization, redacted private retention, and a separately recorded result. A later
-role comparison additionally needs an independently operated evaluator and the fixed repeated-run
-protocol.
+**Remaining acceptance gate.** Version a larger role-specific held-out suite, bind source-egress
+rights, use an independently operated evaluator, retain the fixed repeated-run protocol, and pin
+the provider/model identity as far as the endpoint permits. Operator-owned credentials and private
+raw state remain outside the checkout; no result can cross into proof or fidelity authority.
 
 ### A5. T6 OCI/library-substrate receipts are fail-closed at the design and test boundary
 
@@ -236,12 +256,16 @@ host-mounted result.
   uv run --frozen python -m Library.scripts.library_substrate_image all
   ```
 
-**Evidence class.** Test coverage is `unit`/`synthetic`; the last command defines an
-`operator-local` route only until it produces a new retained Docker `RepoDigest` receipt.
+**Evidence class.** Test coverage is `unit`/`synthetic`. The operator-local preflight produced
+Docker RepoDigest
+`autolean/library-substrate@sha256:bc336196592536658395ff0867f3008fc256dc6a3fd9098f414e118f18d5d1ef`
+and raw receipt SHA-256 `f98010e0c4efb3a43a06bb7782507aa74e799e10822c0cecba890a858e8590df`.
+This remains local V2-compatible preflight evidence, not an admitted T6 receipt.
 
-**Non-claim.** The Dockerfile, wrapper, and test records do not prove that Docker/WSL built the
-current image, that the pinned Lean/mathlib environment compiled cleanly, or that a query receipt
-may be used as a proof.  The Builder-only query remains proof-ineligible.
+**Non-claim.** The retained local build does not prove registry publication, production signer
+custody, a frozen contract/environment revision, gateway verification, or that a query receipt may
+be used as a proof. The Builder-only query remains proof-ineligible, and receipt replay does not
+claim that separate builds have identical image metadata or RepoDigest.
 
 **Remaining acceptance gate.** Run the admitted frozen contract through the authority
 environment's real OCI/Lean route; preserve the fresh Docker image digest, content-bound receipt,
@@ -354,8 +378,8 @@ operator or authoritative evidence according to the execution environment.
 ### A9. Synthetic control-plane chaos resists duplicate and stale work, within its stated scope
 
 **Claim.** The process-chaos harness and V2 local verifier exercise a bounded synthetic SQLite/CAS
-restart/replay protocol and reject altered retained evidence. They do not yet establish a
-provenance-bound 1,000-job result.
+restart/replay protocol and reject altered retained evidence. A fresh provenance-bound 1,000-job
+V2 campaign has been independently replayed within that local synthetic scope.
 
 **Exact evidence.**
 
@@ -366,20 +390,23 @@ provenance-bound 1,000-job result.
   source-root drift, non-SQLite or semantically tampered state, missing or extra manifest entries,
   unreferenced artifacts, and unexpected workspace files:
   [`scripts/tests/test_control_plane_process_chaos.py`](../scripts/tests/test_control_plane_process_chaos.py).
-- The older local V1 1,000-job summary is not a V2 receipt with a retained workspace, source
-  candidate, lock/runtime binding, or independent replay. It is not credited by this assurance case.
+- The retained V2 receipt binds candidate `cd42ba76473002cfff9eaf4b8710e90fa3877cd4`,
+  `uv.lock`, runtime, canonical argv, child state, SQLite event/lease history, terminal projection,
+  and cross-bound CAS artifacts. Independent replay checked 5,000 contiguous events, 4,000
+  artifacts, and 4,000 duplicate deliveries with no task loss or duplicate terminal verdict.
+  Receipt-file SHA-256 is `ad8d7d00d1bfc902ebedc618f248e5a6b748176042cf04e3dbc40696aa753626`;
+  its bound receipt SHA-256 is
+  `ae1d316d6b9b434dc34fac7b48ce172521b8d557d3709300a9a095b6f0917068`.
 
-**Evidence class.** `synthetic`, bounded local test coverage.
+**Evidence class.** `synthetic`, local provenance-bound process-recovery evidence.
 
 **Non-claim.** This does not exercise Lean, OCI, provider egress, production signing, physical
 power loss, or a real worker killed during a transaction. It does not authenticate a proof or
 replace T6/T7 authority-environment evidence.
 
-**Remaining acceptance gate.** From one exact source candidate, run a fresh 1,000-job V2 campaign,
-retain its workspace and receipt, and run the independent V2 verifier before treating the synthetic
-operational gate as complete. Then retain an authority-environment worker recovery result after the
-T6 image-owned wrapper and T7 leased execution exist. Do not reclassify either synthetic result as
-kernel or production evidence.
+**Remaining acceptance gate.** Retain an authority-environment worker recovery result after the T6
+image-owned wrapper and T7 leased execution exist. Do not reclassify the completed synthetic result
+as kernel or production evidence.
 
 ### A10. Public-release policy protects the source and operator boundary, but is not a release
 
@@ -425,8 +452,7 @@ test.  At minimum, the following independent evidence is still required before a
 4. at least one actual authorized provider execution through the frozen role path with independent
    evaluation and production verifier evidence; a full FATE-350 or published model ranking is
    additionally required only when those benchmark claims are reported;
-5. a fresh independently verified V2 1,000-job synthetic-chaos receipt, authority-environment
-   T6/T7 recovery evidence, plus SBOM, operations, exact staged public-release, and
+5. authority-environment T6/T7 recovery evidence, plus SBOM, operations, exact staged public-release, and
    controlled-browser evidence;
 6. a release decision that names every remaining failed, waived, or unrun gate.
 

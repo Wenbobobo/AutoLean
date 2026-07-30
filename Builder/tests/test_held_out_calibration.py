@@ -243,6 +243,24 @@ def test_split_builder_reloads_canonical_corpus_before_trusting_capability() -> 
         )
 
 
+def test_split_builder_rejects_object_new_capability_with_model_constructed_corpus() -> None:
+    corpus = _corpus()
+    forged_corpus_payload = corpus.corpus.model_dump(mode="python")
+    forged_corpus_payload["promotion_allowed"] = True
+    forged_corpus = type(corpus.corpus).model_construct(**forged_corpus_payload)
+    forged = object.__new__(VerifiedHeldOutCalibrationCorpus)
+    object.__setattr__(forged, "_corpus", forged_corpus)
+    object.__setattr__(forged, "_binding", corpus.binding)
+    object.__setattr__(forged, "_sample_bindings", corpus.sample_bindings)
+    object.__setattr__(forged, "_token", corpus._token)
+
+    with pytest.raises(HeldOutCalibrationError, match="differs from the canonical"):
+        build_held_out_calibration_split(
+            forged,
+            split_seed="heldout-calibration-split-v1",
+        )
+
+
 @pytest.mark.parametrize(
     ("mode", "expected_rates"),
     (

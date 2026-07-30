@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import json
 from collections.abc import Mapping
 from pathlib import Path
@@ -9,6 +10,7 @@ import pytest
 from autolean_prover.providers.operator_profile import ChatCompletionsOperatorProfileV1
 
 from scripts import deepseek_live_baseline as live
+from scripts import deepseek_role_baseline as role_runner
 
 
 def _profile() -> ChatCompletionsOperatorProfileV1:
@@ -23,6 +25,32 @@ def _config(tmp_path: Path, *, maximum: int = 100_000) -> live.LiveBaselineConfi
         max_total_authorized_cost_microusd=maximum,
         exercise_recovery=True,
     )
+
+
+def _legacy_scored_role_observation() -> dict[str, object]:
+    evidence_path = (
+        live._REPOSITORY_ROOT
+        / "docs"
+        / "research"
+        / "deepseek-role-json-contract-calibration-2026-07-29.json"
+    )
+    legacy = json.loads(evidence_path.read_text(encoding="utf-8"))["roles"]
+    operator_keys = set(role_runner.DeepSeekRolePublicReportV2.model_fields)
+    operator_report = role_runner.DeepSeekRolePublicReportV2.model_validate(
+        {key: legacy[key] for key in operator_keys}
+    )
+    return live.DeepSeekRoleScoredObservationV1(
+        operator_report=operator_report,
+        provider_call_count=legacy["provider_call_count"],
+        evaluation=legacy["evaluation"],
+        failure_taxonomy=legacy["failure_taxonomy"],
+        harness=live.DeepSeekRoleHarnessV1(),
+        failure_partition=live.DeepSeekRoleFailurePartitionV1(
+            schema_rejections=5,
+            semantic_mismatches=4,
+            passed=1,
+        ),
+    ).model_dump(mode="json")
 
 
 def test_secret_reference_accepts_one_named_key_without_printing_it(tmp_path: Path) -> None:
@@ -154,6 +182,44 @@ def test_budget_rejection_happens_before_secret_or_catalog_io(tmp_path: Path) ->
     assert calls == 0
 
 
+def test_512_output_budget_is_frozen_into_role_plan_and_static_cost(tmp_path: Path) -> None:
+    profile = _profile()
+    base = _config(tmp_path, maximum=102_400)
+    config = live.LiveBaselineConfig(
+        state_root=base.state_root,
+        private_root=base.private_root,
+        run_id=base.run_id,
+        max_total_authorized_cost_microusd=102_400,
+        exercise_recovery=False,
+        max_output_tokens=512,
+        run_canary=False,
+    )
+
+    role_config = live._validate_config(config, profile)
+    plan = role_runner.build_deepseek_role_plan(role_config)
+
+    assert role_config.max_output_tokens == 512
+    assert role_config.max_cost_microusd_per_trial == 10_240
+    assert live._role_static_cost(512) == 102_400
+    assert {trial.cell.budget.max_output_tokens for trial in plan.trials} == {512}
+
+
+def test_512_output_budget_rejects_the_256_default_cost_ceiling(tmp_path: Path) -> None:
+    base = _config(tmp_path)
+    config = live.LiveBaselineConfig(
+        state_root=base.state_root,
+        private_root=base.private_root,
+        run_id=base.run_id,
+        max_total_authorized_cost_microusd=100_000,
+        exercise_recovery=False,
+        max_output_tokens=512,
+        run_canary=False,
+    )
+
+    with pytest.raises(live.LiveBaselineError, match="approved bound"):
+        live._validate_config(config, _profile())
+
+
 def test_role_only_calibration_skips_canary_and_caps_generation_at_ten(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
@@ -178,19 +244,28 @@ def test_role_only_calibration_skips_canary_and_caps_generation_at_ten(
         raise AssertionError("role-only calibration must not call the canary")
 
     monkeypatch.setattr(live, "_run_canary", forbidden_canary)
-    monkeypatch.setattr(live, "_run_roles", lambda **_kwargs: {"status": "settled"})
+    monkeypatch.setattr(live, "_run_roles", lambda **_kwargs: _legacy_scored_role_observation())
 
     report = live.execute_live_baseline(config, secret_file=reference, catalog_get=get)
 
     assert report["status"] == "settled"
-    assert report["canary"] == {"status": "not_run", "reason": "role_calibration_only"}
+    assert report["schema_version"] == "autolean.deepseek-live-baseline.v2"
+    assert (
+        live.DeepSeekLiveBaselineSettledReportV2.model_validate(report).model_dump(mode="json")
+        == report
+    )
+    assert report["canary"] == {
+        "schema_version": "autolean.deepseek-live-canary-not-run.v1",
+        "status": "not_run",
+        "reason": "role_calibration_only",
+    }
     budget = report["budget"]
     assert isinstance(budget, dict)
     assert budget["provider_generation_request_ceiling"] == 10
 
 
 def test_public_report_writer_is_limited_to_research_json(tmp_path: Path) -> None:
-    report = {"schema_version": "safe", "status": "settled"}
+    report = {"schema_version": "safe", "status": "execution_refused"}
     allowed = live._REPOSITORY_ROOT / "docs" / "research" / ".deepseek-live-test.json"
     try:
         live._write_public_report(allowed, report)
@@ -244,3 +319,97 @@ def test_checked_in_json_contract_evidence_is_redacted_and_budget_saturated() ->
         "reasoning_content",
     ):
         assert forbidden not in public
+
+
+def test_checked_in_512_evidence_is_bound_to_ledger_audit() -> None:
+    report_path = (
+        live._REPOSITORY_ROOT / "docs" / "research" / "deepseek-live-baseline-2026-07-30-512-a.json"
+    )
+    ledger_path = report_path.with_name("deepseek-live-baseline-2026-07-30-512-a-ledger-audit.json")
+    report_bytes = report_path.read_bytes()
+    report = json.loads(report_bytes)
+    ledger = json.loads(ledger_path.read_text(encoding="ascii"))
+
+    assert report["status"] == "settled"
+    assert report["roles"]["per_trial_budget"]["max_output_tokens"] == 512
+    assert report["roles"]["failure_partition"] == {
+        "passed": 2,
+        "schema_rejections": 1,
+        "semantic_mismatches": 7,
+        "transport_failures": 0,
+    }
+    assert ledger["report_sha256"] == hashlib.sha256(report_bytes).hexdigest()
+    assert ledger["provider_call_count"] == report["roles"]["provider_call_count"] == 10
+    assert ledger["reserved_events"] == ledger["settled_events"] == 10
+    assert ledger["completion_receipts"] == ledger["completion_settlements"] == 10
+    assert ledger["unique_settled_reservations"] == 10
+    assert ledger["saturated_completion_count"] == 1
+    assert ledger["automatic_retry_observed"] is False
+
+
+def test_checked_in_512_v2_evidence_is_strict_and_ledger_bound() -> None:
+    report_path = (
+        live._REPOSITORY_ROOT
+        / "docs"
+        / "research"
+        / "deepseek-live-baseline-2026-07-30-512-b-v2.json"
+    )
+    ledger_path = report_path.with_name(
+        "deepseek-live-baseline-2026-07-30-512-b-v2-ledger-audit.json"
+    )
+    report_bytes = report_path.read_bytes()
+    report = live.DeepSeekLiveBaselineSettledReportV2.model_validate_json(report_bytes)
+    ledger = json.loads(ledger_path.read_text(encoding="ascii"))
+
+    assert report.roles.operator_report.per_trial_budget is not None
+    assert report.roles.operator_report.per_trial_budget.max_output_tokens == 512
+    assert report.roles.failure_partition.model_dump(exclude={"schema_version"}) == {
+        "passed": 2,
+        "schema_rejections": 1,
+        "semantic_mismatches": 7,
+        "transport_failures": 0,
+    }
+    assert ledger["report_sha256"] == hashlib.sha256(report_bytes).hexdigest()
+    assert ledger["provider_call_count"] == report.roles.provider_call_count == 10
+    assert ledger["reserved_events"] == ledger["settled_events"] == 10
+    assert ledger["completion_receipts"] == ledger["completion_settlements"] == 10
+    assert ledger["unique_settled_reservations"] == 10
+    assert ledger["saturated_completion_count"] == 1
+    assert ledger["automatic_retry_observed"] is False
+
+
+def test_v2_report_rejects_tampered_per_trial_static_cost() -> None:
+    report_path = (
+        live._REPOSITORY_ROOT
+        / "docs"
+        / "research"
+        / "deepseek-live-baseline-2026-07-30-512-b-v2.json"
+    )
+    payload = json.loads(report_path.read_text(encoding="ascii"))
+    payload["roles"]["operator_report"]["per_trial_budget"]["max_cost_microusd"] = 1
+
+    with pytest.raises(ValueError, match="budget does not match"):
+        live.DeepSeekLiveBaselineSettledReportV2.model_validate(payload)
+
+
+def test_v2_report_rejects_evaluation_taxonomy_pass_disagreement() -> None:
+    report_path = (
+        live._REPOSITORY_ROOT
+        / "docs"
+        / "research"
+        / "deepseek-live-baseline-2026-07-30-512-b-v2.json"
+    )
+    payload = json.loads(report_path.read_text(encoding="ascii"))
+    evaluation = payload["roles"]["evaluation"]
+    for trial in evaluation["trials"]:
+        if trial["role"] == "task_allocator":
+            trial["passed"] = False
+            trial["score_micros"] = 0
+    for metric in evaluation["role_metrics"]:
+        if metric["role"] == "task_allocator":
+            metric["passed"] = 0
+            metric["pass_rate_ppm"] = 0
+            metric["mean_score_micros"] = 0
+
+    with pytest.raises(ValueError, match="role pass counts disagree"):
+        live.DeepSeekLiveBaselineSettledReportV2.model_validate(payload)

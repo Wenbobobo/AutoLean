@@ -24,7 +24,7 @@ from collections.abc import Callable, Mapping, Sequence
 from contextlib import suppress
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Literal, cast
+from typing import Literal, Self, cast
 
 import httpx
 from autolean_contracts import (
@@ -32,7 +32,9 @@ from autolean_contracts import (
     AttestationPurposeV1,
     AttestationSignerV1,
     AttestationV1,
+    ContractModel,
     HmacAttestationSignerV1,
+    ModelExecutionCompletionPublicV1,
 )
 from autolean_prover.errors import (
     CapabilityError,
@@ -43,9 +45,12 @@ from autolean_prover.errors import (
 from autolean_prover.providers import ModelExecutionCompletionRecoveryRequired
 from autolean_prover.providers.operator_profile import ChatCompletionsOperatorProfileV1
 from autolean_prover.providers.responses import HttpxResponsesTransport, ResponsesTransport
+from pydantic import Field, model_validator
 
 from benchmarks.authorized_role_bridge import AuthorizedRoleCompletionEvidenceReaderV2
 from benchmarks.authorized_role_evaluation import (
+    AuthorizedRoleExactJsonEvaluationReportV1,
+    AuthorizedRoleExactJsonFailureTaxonomyReportV1,
     diagnose_completed_authorized_role_suite_exact_json,
     evaluate_completed_authorized_role_suite_exact_json,
 )
@@ -63,7 +68,9 @@ _HARD_TOTAL_AUTHORIZED_COST_MICROUSD = 10_000_000
 _STATIC_PRICE_MICROUSD_PER_TOKEN = 10
 _ROLE_TRIAL_COUNT = 10
 _ROLE_MAX_INPUT_TOKENS = 512
-_ROLE_MAX_OUTPUT_TOKENS = 256
+_RoleMaxOutputTokens = Literal[256, 512, 1024]
+_DEFAULT_ROLE_MAX_OUTPUT_TOKENS: _RoleMaxOutputTokens = 256
+_APPROVED_ROLE_MAX_OUTPUT_TOKENS: tuple[_RoleMaxOutputTokens, ...] = (256, 512, 1024)
 _SECRET_MAX_BYTES = 8_192
 _SECRET_ASSIGNMENT = re.compile(
     r"^(?:export\s+)?(?:AUTOLEAN_DEEPSEEK_API_KEY|DEEPSEEK_API_KEY|API_KEY)"
@@ -75,6 +82,7 @@ _SENSITIVE_REFERENCE = re.compile(
     flags=re.IGNORECASE,
 )
 _SAFE_RUN_ID = re.compile(r"^[a-z0-9][a-z0-9_.-]{0,63}$")
+_SHA256 = r"^[0-9a-f]{64}$"
 
 
 class LiveBaselineError(ValueError):
@@ -106,7 +114,218 @@ class LiveBaselineConfig:
     run_id: str
     max_total_authorized_cost_microusd: int
     exercise_recovery: bool
+    max_output_tokens: _RoleMaxOutputTokens = _DEFAULT_ROLE_MAX_OUTPUT_TOKENS
     run_canary: bool = True
+
+
+class DeepSeekCatalogEvidenceV1(ContractModel):
+    """Authenticated catalog identity evidence without capability authority."""
+
+    schema_version: Literal["autolean.deepseek-catalog-evidence.v1"] = (
+        "autolean.deepseek-catalog-evidence.v1"
+    )
+    status: Literal["target_model_listed"] = "target_model_listed"
+    target_model_listed: Literal[True] = True
+    evidence_class: Literal["authenticated_model_catalog_identity_only"] = (
+        "authenticated_model_catalog_identity_only"
+    )
+    capability_admission: Literal["forbidden"] = "forbidden"
+
+
+class DeepSeekLiveCanaryNotRunV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-live-canary-not-run.v1"] = (
+        "autolean.deepseek-live-canary-not-run.v1"
+    )
+    status: Literal["not_run"] = "not_run"
+    reason: Literal["role_calibration_only"] = "role_calibration_only"
+
+
+class DeepSeekLiveCanaryHashesV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-live-canary-hashes.v1"] = (
+        "autolean.deepseek-live-canary-hashes.v1"
+    )
+    authorization: str = Field(pattern=_SHA256)
+    bundle: str = Field(pattern=_SHA256)
+    contract: str = Field(pattern=_SHA256)
+    context_pack: str = Field(pattern=_SHA256)
+    outbound_request: str = Field(pattern=_SHA256)
+
+
+class DeepSeekAuthorizedCanaryPublicV2(ContractModel):
+    schema_version: Literal["autolean.deepseek-authorized-canary.v2"] = (
+        "autolean.deepseek-authorized-canary.v2"
+    )
+    status: Literal["settled"] = "settled"
+    authority_status: Literal["non-promotable-ephemeral-test-authority"] = (
+        "non-promotable-ephemeral-test-authority"
+    )
+    promotion_eligible: Literal[False] = False
+    capability_evidence_class: Literal["static_declared_only"] = "static_declared_only"
+    independent_capability_probe_status: Literal["not_independently_probed"] = (
+        "not_independently_probed"
+    )
+    provider_approval_class: Literal["operator_declared_bootstrap_only"] = (
+        "operator_declared_bootstrap_only"
+    )
+    role_floor_admission: Literal["forbidden"] = "forbidden"
+    provider_id: Literal["deepseek"] = "deepseek"
+    model_id: Literal["deepseek-v4-pro"] = "deepseek-v4-pro"
+    hashes: DeepSeekLiveCanaryHashesV1
+    completion: ModelExecutionCompletionPublicV1
+
+
+class DeepSeekLiveCanarySettledV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-live-canary-settled.v1"] = (
+        "autolean.deepseek-live-canary-settled.v1"
+    )
+    status: Literal["settled"] = "settled"
+    provider_call_count: Literal[1] = 1
+    recovery: Literal["not_exercised", "settled_without_provider_recall"]
+    receipt: DeepSeekAuthorizedCanaryPublicV2
+
+
+class DeepSeekRoleHarnessV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-role-harness.v1"] = (
+        "autolean.deepseek-role-harness.v1"
+    )
+    response_format: Literal["json_object"] = "json_object"
+    output_contract: Literal["role_json_v1"] = "role_json_v1"
+    tool_schema: Literal["none"] = "none"
+    structured_json_capability: Literal["static_declared_and_request_accepted"] = (
+        "static_declared_and_request_accepted"
+    )
+    structured_json_admission: Literal["forbidden"] = "forbidden"
+
+
+class DeepSeekRoleFailurePartitionV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-role-failure-partition.v1"] = (
+        "autolean.deepseek-role-failure-partition.v1"
+    )
+    transport_failures: Literal[0] = 0
+    schema_rejections: int = Field(ge=0, le=10)
+    semantic_mismatches: int = Field(ge=0, le=10)
+    passed: int = Field(ge=0, le=10)
+
+    @model_validator(mode="after")
+    def validate_partition(self) -> Self:
+        if self.schema_rejections + self.semantic_mismatches + self.passed != 10:
+            raise ValueError("role failure partition must cover ten settled trials")
+        return self
+
+
+class DeepSeekRoleScoredObservationV1(ContractModel):
+    """Strict scored extension around, rather than inside, the base operator contract."""
+
+    schema_version: Literal["autolean.deepseek-role-scored-observation.v1"] = (
+        "autolean.deepseek-role-scored-observation.v1"
+    )
+    status: Literal["settled"] = "settled"
+    operator_report: roles.DeepSeekRolePublicReportV2
+    provider_call_count: Literal[10] = 10
+    evaluation: AuthorizedRoleExactJsonEvaluationReportV1
+    failure_taxonomy: AuthorizedRoleExactJsonFailureTaxonomyReportV1
+    harness: DeepSeekRoleHarnessV1
+    failure_partition: DeepSeekRoleFailurePartitionV1
+
+    @model_validator(mode="after")
+    def validate_scored_observation(self) -> Self:
+        report = self.operator_report
+        if report.status != "settled" or report.mode != "run" or report.failure_class is not None:
+            raise ValueError("scored observation requires one settled base operator report")
+        evaluation = self.evaluation
+        taxonomy = self.failure_taxonomy
+        common = (
+            report.run_id,
+            report.provider_id,
+            report.model_id,
+            report.model_revision,
+        )
+        if common != (
+            evaluation.run_id,
+            evaluation.provider_id,
+            evaluation.model_id,
+            evaluation.model_revision,
+        ) or common != (
+            taxonomy.run_id,
+            taxonomy.provider_id,
+            taxonomy.model_id,
+            taxonomy.model_revision,
+        ):
+            raise ValueError("scored reports do not match the base operator identity")
+        if (
+            evaluation.provider_configuration_hash != taxonomy.provider_configuration_hash
+            or evaluation.evaluator_hash != taxonomy.evaluator_hash
+        ):
+            raise ValueError("scored evaluator bindings disagree")
+        evaluation_passes = {item.role: item.passed for item in evaluation.role_metrics}
+        taxonomy_passes = {item.role: item.passed for item in taxonomy.role_metrics}
+        if evaluation_passes != taxonomy_passes:
+            raise ValueError("evaluation and failure taxonomy role pass counts disagree")
+        expected = {
+            "transport_failures": 0,
+            "schema_rejections": sum(item.schema_rejections for item in taxonomy.role_metrics),
+            "semantic_mismatches": sum(item.semantic_mismatches for item in taxonomy.role_metrics),
+            "passed": sum(item.passed for item in taxonomy.role_metrics),
+        }
+        if self.failure_partition.model_dump(exclude={"schema_version"}) != expected:
+            raise ValueError("failure partition does not match the role taxonomy")
+        return self
+
+
+class DeepSeekLiveBudgetV1(ContractModel):
+    schema_version: Literal["autolean.deepseek-live-budget.v1"] = "autolean.deepseek-live-budget.v1"
+    maximum_authorized_cost_microusd: int = Field(ge=0, le=_HARD_TOTAL_AUTHORIZED_COST_MICROUSD)
+    canary_static_cost_microusd: int = Field(ge=0)
+    roles_static_cost_microusd: int = Field(ge=0)
+    provider_invoice_cost: Literal["not_available"] = "not_available"
+    provider_generation_request_ceiling: Literal[10, 11]
+
+
+class DeepSeekLiveBaselineSettledReportV2(ContractModel):
+    """Strict public contract for one fully settled live baseline observation."""
+
+    schema_version: Literal["autolean.deepseek-live-baseline.v2"] = (
+        "autolean.deepseek-live-baseline.v2"
+    )
+    status: Literal["settled"] = "settled"
+    authority_status: Literal["non-promotable-operator-observation"] = (
+        "non-promotable-operator-observation"
+    )
+    promotion_eligible: Literal[False] = False
+    role_floor_admission: Literal["forbidden"] = "forbidden"
+    provider_id: Literal["deepseek"] = "deepseek"
+    model_id: Literal["deepseek-v4-pro"] = "deepseek-v4-pro"
+    catalog: DeepSeekCatalogEvidenceV1
+    budget: DeepSeekLiveBudgetV1
+    canary: DeepSeekLiveCanaryNotRunV1 | DeepSeekLiveCanarySettledV1
+    roles: DeepSeekRoleScoredObservationV1
+
+    @model_validator(mode="after")
+    def validate_settled_report(self) -> Self:
+        skipped_canary = isinstance(self.canary, DeepSeekLiveCanaryNotRunV1)
+        expected_canary_cost = 0 if skipped_canary else 23_040
+        expected_call_ceiling = 10 if skipped_canary else 11
+        per_trial = self.roles.operator_report.per_trial_budget
+        if per_trial is None:
+            raise ValueError("settled scored report lacks a per-trial budget")
+        expected_role_cost = (
+            10
+            * (_ROLE_MAX_INPUT_TOKENS + per_trial.max_output_tokens)
+            * _STATIC_PRICE_MICROUSD_PER_TOKEN
+        )
+        expected_per_trial_cost = (
+            _ROLE_MAX_INPUT_TOKENS + per_trial.max_output_tokens
+        ) * _STATIC_PRICE_MICROUSD_PER_TOKEN
+        if (
+            per_trial.max_cost_microusd != expected_per_trial_cost
+            or self.budget.canary_static_cost_microusd != expected_canary_cost
+            or self.budget.provider_generation_request_ceiling != expected_call_ceiling
+            or self.budget.roles_static_cost_microusd != expected_role_cost
+            or self.budget.maximum_authorized_cost_microusd
+            < expected_canary_cost + expected_role_cost
+        ):
+            raise ValueError("live baseline budget does not match the settled observation")
+        return self
 
 
 class _CountingTransport:
@@ -293,10 +512,10 @@ def _canary_static_cost(profile: ChatCompletionsOperatorProfileV1) -> int:
     ) * _STATIC_PRICE_MICROUSD_PER_TOKEN
 
 
-def _role_static_cost() -> int:
+def _role_static_cost(max_output_tokens: _RoleMaxOutputTokens) -> int:
     return (
         _ROLE_TRIAL_COUNT
-        * (_ROLE_MAX_INPUT_TOKENS + _ROLE_MAX_OUTPUT_TOKENS)
+        * (_ROLE_MAX_INPUT_TOKENS + max_output_tokens)
         * _STATIC_PRICE_MICROUSD_PER_TOKEN
     )
 
@@ -310,7 +529,11 @@ def _validate_config(
     maximum = config.max_total_authorized_cost_microusd
     if isinstance(maximum, bool) or not isinstance(maximum, int):
         raise LiveBaselineError("maximum cost is invalid")
-    required = _role_static_cost() + (_canary_static_cost(profile) if config.run_canary else 0)
+    if config.max_output_tokens not in _APPROVED_ROLE_MAX_OUTPUT_TOKENS:
+        raise LiveBaselineError("role output limit is not approved")
+    required = _role_static_cost(config.max_output_tokens) + (
+        _canary_static_cost(profile) if config.run_canary else 0
+    )
     if maximum < required or maximum > _HARD_TOTAL_AUTHORIZED_COST_MICROUSD:
         raise LiveBaselineError("maximum cost is outside the approved bound")
     return roles.DeepSeekRoleOperatorConfig(
@@ -319,9 +542,10 @@ def _validate_config(
         state_root=config.state_root,
         private_root=config.private_root,
         max_cost_microusd_per_trial=(
-            (_ROLE_MAX_INPUT_TOKENS + _ROLE_MAX_OUTPUT_TOKENS) * _STATIC_PRICE_MICROUSD_PER_TOKEN
+            (_ROLE_MAX_INPUT_TOKENS + config.max_output_tokens) * _STATIC_PRICE_MICROUSD_PER_TOKEN
         ),
         operator_approved=True,
+        max_output_tokens=config.max_output_tokens,
     )
 
 
@@ -405,14 +629,14 @@ def _run_roles(
         )
         settled = roles.run_preflighted_deepseek_role_operator_with_private_sidecar(prepared)
         report = settled.report
-    except BaseException:
+    except BaseException as error:
+        if isinstance(error, (KeyboardInterrupt, SystemExit)):
+            raise
         return {
             "status": "execution_refused",
             "failure_class": "role_operator_unclassified",
             "provider_call_count": counter.calls,
         }
-    public = report.model_dump(mode="json")
-    public["provider_call_count"] = counter.calls
     if report.status == "settled" and counter.calls != _ROLE_TRIAL_COUNT:
         return {
             "status": "execution_refused",
@@ -445,30 +669,30 @@ def _run_roles(
                     completion_verifier=prepared.authorization_service,
                 ),
             )
-        except BaseException:
+        except BaseException as error:
+            if isinstance(error, (KeyboardInterrupt, SystemExit)):
+                raise
             return {
                 "status": "execution_refused",
                 "failure_class": "role_local_evaluation_rejected",
                 "provider_call_count": counter.calls,
             }
-        public["evaluation"] = evaluation.model_dump(mode="json")
-        public["failure_taxonomy"] = taxonomy.model_dump(mode="json")
-        public["harness"] = {
-            "response_format": prepared.plan.generation_policy.response_format,
-            "output_contract": prepared.plan.generation_policy.output_contract,
-            "tool_schema": "none",
-            "structured_json_capability": "static_declared_and_request_accepted",
-            "structured_json_admission": "forbidden",
-        }
-        public["failure_partition"] = {
-            "transport_failures": 0,
-            "schema_rejections": sum(metric.schema_rejections for metric in taxonomy.role_metrics),
-            "semantic_mismatches": sum(
-                metric.semantic_mismatches for metric in taxonomy.role_metrics
+        scored = DeepSeekRoleScoredObservationV1(
+            operator_report=report,
+            provider_call_count=10,
+            evaluation=evaluation,
+            failure_taxonomy=taxonomy,
+            harness=DeepSeekRoleHarnessV1(),
+            failure_partition=DeepSeekRoleFailurePartitionV1(
+                schema_rejections=sum(metric.schema_rejections for metric in taxonomy.role_metrics),
+                semantic_mismatches=sum(
+                    metric.semantic_mismatches for metric in taxonomy.role_metrics
+                ),
+                passed=sum(metric.passed for metric in taxonomy.role_metrics),
             ),
-            "passed": sum(metric.passed for metric in taxonomy.role_metrics),
-        }
-    return cast(dict[str, object], public)
+        )
+        return cast(dict[str, object], scored.model_dump(mode="json"))
+    return cast(dict[str, object], report.model_dump(mode="json"))
 
 
 def _refusal(
@@ -576,29 +800,29 @@ def execute_live_baseline(
         )
         return report
 
-    return {
-        "schema_version": _SCHEMA_VERSION,
-        "status": "settled",
-        "authority_status": "non-promotable-operator-observation",
-        "promotion_eligible": False,
-        "role_floor_admission": "forbidden",
-        "provider_id": profile.provider_id,
-        "model_id": profile.model_id,
-        "catalog": catalog.public_dict(),
-        "budget": {
-            "maximum_authorized_cost_microusd": config.max_total_authorized_cost_microusd,
-            "canary_static_cost_microusd": _canary_static_cost(profile) if config.run_canary else 0,
-            "roles_static_cost_microusd": _role_static_cost(),
-            "provider_invoice_cost": "not_available",
-            "provider_generation_request_ceiling": _ROLE_TRIAL_COUNT + int(config.run_canary),
-        },
-        "canary": canary_report,
-        "roles": role_report,
-    }
+    settled_report = DeepSeekLiveBaselineSettledReportV2(
+        catalog=DeepSeekCatalogEvidenceV1.model_validate(catalog.public_dict()),
+        budget=DeepSeekLiveBudgetV1(
+            maximum_authorized_cost_microusd=config.max_total_authorized_cost_microusd,
+            canary_static_cost_microusd=(_canary_static_cost(profile) if config.run_canary else 0),
+            roles_static_cost_microusd=_role_static_cost(config.max_output_tokens),
+            provider_generation_request_ceiling=(11 if config.run_canary else 10),
+        ),
+        canary=(
+            DeepSeekLiveCanarySettledV1.model_validate(canary_report)
+            if config.run_canary
+            else DeepSeekLiveCanaryNotRunV1.model_validate(canary_report)
+        ),
+        roles=DeepSeekRoleScoredObservationV1.model_validate(role_report),
+    )
+    return cast(dict[str, object], settled_report.model_dump(mode="json"))
 
 
 def _write_public_report(path: Path, report: Mapping[str, object]) -> None:
     """Allow a durable redacted report only in the repository's research evidence area."""
+
+    if report.get("status") == "settled":
+        report = DeepSeekLiveBaselineSettledReportV2.model_validate(report).model_dump(mode="json")
 
     public_root = (_REPOSITORY_ROOT / "docs" / "research").resolve()
     candidate = path.resolve(strict=False)
@@ -633,6 +857,12 @@ def _parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--exercise-recovery", action="store_true")
     parser.add_argument("--skip-canary", action="store_true")
+    parser.add_argument(
+        "--max-output-tokens",
+        choices=_APPROVED_ROLE_MAX_OUTPUT_TOKENS,
+        type=int,
+        default=_DEFAULT_ROLE_MAX_OUTPUT_TOKENS,
+    )
     parser.add_argument("--public-report", type=Path)
     return parser
 
@@ -649,6 +879,7 @@ def main(argv: Sequence[str] | None = None) -> int:
                 run_id=args.run_id,
                 max_total_authorized_cost_microusd=args.max_total_authorized_cost_microusd,
                 exercise_recovery=args.exercise_recovery,
+                max_output_tokens=cast(_RoleMaxOutputTokens, args.max_output_tokens),
                 run_canary=not args.skip_canary,
             ),
             secret_file=args.secret_file,

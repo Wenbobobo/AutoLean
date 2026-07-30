@@ -765,7 +765,7 @@ def main(argv: Sequence[str] | None = None) -> int:
             raise
         report = _bare_refusal(mode, run_id=run_id, failure_class=_failure_class(error))
     print(json.dumps(report.model_dump(mode="json"), sort_keys=True, separators=(",", ":")))
-    return 0
+    return 0 if report.status in {"planned", "preflight_ready", "settled"} else 2
 
 
 if __name__ == "__main__":

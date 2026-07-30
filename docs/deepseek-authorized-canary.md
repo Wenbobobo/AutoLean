@@ -1,9 +1,10 @@
 # DeepSeek V4 Pro authorized bootstrap canary
 
-`scripts/deepseek_authorized_canary.py` performs one real, bounded
-`deepseek-v4-pro` request through the same authorization boundary used by the
-Prover. It is a connectivity and accounting check, not a model benchmark and
-not release evidence. In particular, it does not independently probe endpoint
+The supported CLI entrypoint `python -m scripts.deepseek_authorized_canary` performs one real,
+bounded `deepseek-v4-pro` request through the same authorization boundary used by the Prover. Do
+not invoke the `scripts/deepseek_authorized_canary.py` file path directly; all operator runner
+documentation uses the module entrypoint. It is a connectivity and accounting check, not a model
+benchmark and not release evidence. In particular, it does not independently probe endpoint
 features and cannot admit the model to a role-floor benchmark.
 
 The command requires the credential only through the environment-variable
@@ -12,10 +13,12 @@ reference fixed in
 
 ```powershell
 $env:AUTOLEAN_DEEPSEEK_API_KEY = "<operator-owned value>"
-uv run --frozen python scripts/deepseek_authorized_canary.py --operator-approved
+uv run --frozen python -m scripts.deepseek_authorized_canary --operator-approved
 ```
 
-Use `--reasoning-effort max` only when that larger canary is intentional. The
+The CLI also accepts `--reasoning-effort {high,max}` (default `high`) and an optional `--profile`
+path; the selected profile must still pass the fixed provider/model/capability policy. Use
+`--reasoning-effort max` only when that larger canary is intentional. The
 only supported endpoint, provider, and model are
 `https://api.deepseek.com`, `deepseek`, and `deepseek-v4-pro`. The canary
 declares exactly text generation, usage accounting, and reasoning effort; it
@@ -87,3 +90,20 @@ ceiling. Its redacted local record is explicitly non-promotable and cannot disti
 answer from an answer crowded out by the fixed reasoning/output budget. It therefore supports no
 competence, role-floor, proof, or Builder-fidelity conclusion; see
 [the separate calibration record](research/deepseek-role-json-contract-calibration-2026-07-29.md).
+
+## 2026-07-30 later operator observations
+
+A new operator-approved invocation of the same fixed synthetic `n = n` canary settled one request
+and its receipt-bound usage path. This establishes only that the named endpoint/account route and
+local authorization/settlement machinery completed once; capability admission and role-floor
+admission remain forbidden.
+
+Separate, freshly rooted runs then completed a 20-call 256-vs-512 output-budget observation and two
+ten-call 512-token exact-JSON observations. The budget run reduced saturation from 4/10 to 1/10;
+both scored runs passed 2/10 cases, both task allocation. The first 512a report is retained as a
+legacy V1 projection; the second 512b report is the normative strict V2 envelope. See the
+[output-budget protocol](deepseek-output-budget-ablation.md) and the
+[legacy 512a report](research/deepseek-live-baseline-2026-07-30-512-a.json), plus the
+[strict V2 512b report](research/deepseek-live-baseline-2026-07-30-512-b-v2.json). None of these
+records is an independent capability probe, provider invoice, semantic review, Lean proof, or
+production authority.

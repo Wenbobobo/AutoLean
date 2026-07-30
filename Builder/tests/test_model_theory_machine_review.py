@@ -118,17 +118,28 @@ def test_verifier_and_renderer_reject_noncanonical_packet_content(mutation: str)
         render_model_theory_machine_review_packet(ROOT, changed)
 
 
-def test_source_authority_schema_rejects_unknown_true_alias() -> None:
-    changed = {
-        **machine_review._SOURCE_MATRIX_AUTHORITY_BOUNDARY,
-        "freeze_allowed": True,
-    }
+@pytest.mark.parametrize(
+    ("expected", "field"),
+    (
+        (machine_review._SOURCE_MATRIX_AUTHORITY_BOUNDARY, "freeze_allowed"),
+        (machine_review._FINE_SPAN_AUTHORITY_BOUNDARY, "may_freeze_statement"),
+        (machine_review._T4_AUTHORITY_BOUNDARY, "promotion_allowed"),
+        (
+            machine_review._HUMAN_PACKET_AUTHORITY_BOUNDARY,
+            "human_identity_authenticated",
+        ),
+    ),
+)
+def test_source_authority_schemas_reject_known_or_unknown_true_fields(
+    expected: dict[str, object], field: str
+) -> None:
+    changed = {**expected, field: True}
 
     with pytest.raises(ModelTheoryMachineReviewError, match="contains authority"):
         machine_review._require_false_authority(
             changed,
-            "source matrix authority",
-            machine_review._SOURCE_MATRIX_AUTHORITY_BOUNDARY,
+            "source authority",
+            expected,
         )
 
 

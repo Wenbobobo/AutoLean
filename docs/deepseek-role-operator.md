@@ -2,8 +2,10 @@
 
 ## Status
 
-`scripts/deepseek_role_baseline.py` runs the locked ten-trial, five-role
-answer-free suite against the fixed `deepseek-v4-pro` operator profile. It is a
+The supported CLI entrypoint `python -m scripts.deepseek_role_baseline` runs the locked ten-trial,
+five-role answer-free suite against the fixed `deepseek-v4-pro` operator profile. Do not invoke the
+`scripts/deepseek_role_baseline.py` file path directly; the module entrypoint is the only documented
+runner boundary. It is a
 non-promotable observation path. The CLI does not score responses by default,
 establish a model floor, admit the model to role benchmarks, or provide
 production authority. An optional private exact-JSON API can score the synthetic
@@ -23,7 +25,12 @@ The command requires:
 - a separate absolute `--private-root` outside this checkout; and
 - an explicit `--max-cost-microusd-per-trial`.
 
-The roots must be disjoint, absent, and have existing parent directories.
+Within each invocation the state and private roots must be disjoint, absent, and have existing
+parent directories. `plan`, `preflight`, and `run` must each receive a different disposable
+state/private root pair; do not reuse any root path between the three commands. `plan` writes
+nothing, but its path pair is still invocation-specific operator input. `preflight` publishes
+initialized state, so those roots are evidence from a zero-provider-call readiness check and are
+never valid `run` roots.
 Every parent component must be a physical directory rather than a symlink,
 junction, or reparse point. Preflight snapshots the resolved parent path and its
 filesystem identity, then rechecks both around claim, marker creation,
@@ -49,10 +56,15 @@ production KMS/HSM authority.
 From the repository root:
 
 ```text
-uv run python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
-uv run python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
-uv run python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_STATE> --private-root <ABS_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
+uv run --frozen python -m scripts.deepseek_role_baseline plan --operator-approved --state-root <ABS_PLAN_STATE> --private-root <ABS_PLAN_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
+uv run --frozen python -m scripts.deepseek_role_baseline preflight --operator-approved --state-root <ABS_PREFLIGHT_STATE> --private-root <ABS_PREFLIGHT_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
+uv run --frozen python -m scripts.deepseek_role_baseline run --operator-approved --state-root <ABS_RUN_STATE> --private-root <ABS_RUN_PRIVATE> --run-id deepseek-role-001 --max-cost-microusd-per-trial 100000
 ```
+
+All six placeholders above name different paths. Treat the write-free `plan` pair as consumed by
+that inspection, and retain any roots published or quarantined by `preflight` or `run` for
+evidence/reconciliation rather than resuming another mode in them. Use a new run identity as well
+when starting a genuinely new experiment rather than the three-step inspection of one frozen plan.
 
 `plan` performs no state writes or provider I/O and needs no secret; it does read
 the pinned profile, fixture, and license. `preflight` loads the two secret
@@ -68,12 +80,25 @@ whole-suite gate and then delegates execution to
 `run_completed_authorized_role_floor_suite`, which registers, mints, and
 consumes one short-lived capability at a time.
 
-The locked per-trial limits are one attempt, 512 input tokens, 256 output tokens,
-a 120-second provider timeout, a 30-second settlement margin, a 150-second model
-authorization, and a 180-second lease. The CLI cost argument is copied exactly
-into each of the ten cell budgets. Settlement uses a conservative local
+The base operator CLI keeps its historical per-trial limits at one attempt, 512 input tokens,
+256 output tokens, a 120-second provider timeout, a 30-second settlement margin, a 150-second
+model authorization, and a 180-second lease. The CLI cost argument is copied exactly into each of
+the ten cell budgets. Settlement uses a conservative local
 10-microusd-per-token accounting coefficient; this is an authorization bound,
 not a claim about the provider's current quoted price.
+
+The scored wrapper `python -m scripts.deepseek_live_baseline` additionally accepts the frozen
+`--max-output-tokens {256,512,1024}` option and binds it into every role cell, request,
+authorization, and static cost check. This is not an adaptive per-role budget. A 512-token run
+without another canary requires at least 102,400 microUSD of total local authorization and fresh
+state/private roots:
+
+```text
+uv run --frozen python -m scripts.deepseek_live_baseline --operator-approved --secret-file llm.txt --state-root <ABS_NEW_STATE> --private-root <ABS_NEW_PRIVATE> --run-id <short-safe-id> --max-total-authorized-cost-microusd 102400 --max-output-tokens 512 --skip-canary --public-report docs/research/<unique-report>.json
+```
+
+The output-budget ablation selects an observation budget; it does not establish competence. The
+wrapper's exact-JSON evaluator remains local, synthetic, role-separated, and non-promotable.
 
 ## Evidence and failure
 
@@ -215,3 +240,39 @@ receipt-bound candidate artifact. Those states remain outside this evaluator rat
 silently counted as JSON or schema failures. The structural report is local non-production
 evidence, remains ineligible for promotion and role-floor admission, and must not be aggregated
 across roles.
+
+## Observed 2026-07-30 512-token scored run
+
+After the separate output-budget experiment selected 512 for the next observation, the scored
+wrapper used new external roots, skipped the already completed canary, and settled all ten role
+requests with no retry. The local exact-JSON evaluator passed 2/10 cases, both task-allocation
+cases. It recorded one schema rejection and seven semantic mismatches; Prover, statement
+formalizer, fidelity reviewer, and cheating supervisor each passed 0/2.
+
+The first public report is retained as
+[`deepseek-live-baseline-2026-07-30-512-a.json`](research/deepseek-live-baseline-2026-07-30-512-a.json),
+SHA-256 `ecac7ec0303ad2947a66c4b6d2b3a6eb74357269c2c2a29c66cc0e968febe3b2`.
+It is a legacy V1 projection: its base role-report object carries scored extension fields that are
+not declared by `DeepSeekRolePublicReportV2`, so it is preserved as historical JSON but is not the
+normative machine-revalidation format. Its response-content-free ledger aggregate remains bound to
+that exact file.
+
+The corrected wrapper composes the unchanged base operator report inside
+`DeepSeekRoleScoredObservationV1` and emits strict top-level
+`autolean.deepseek-live-baseline.v2`. A second fresh 512-token run produced the same aggregate
+outcome: 2/10 passes, one schema rejection, seven semantic mismatches, and one ceiling hit. The
+normative V2 report is
+[`deepseek-live-baseline-2026-07-30-512-b-v2.json`](research/deepseek-live-baseline-2026-07-30-512-b-v2.json),
+SHA-256 `c8036e1283cb608ed17836eccdf8b075a71675965dee948b29ae97be4045e538`.
+Its bound ledger aggregate records ten reservations/receipts/settlements and 47,940 microUSD of
+local receipt-bound accounting:
+[`deepseek-live-baseline-2026-07-30-512-b-v2-ledger-audit.json`](research/deepseek-live-baseline-2026-07-30-512-b-v2-ledger-audit.json),
+SHA-256 `c2aab3f741030155d17228aacf0de0dd081935f1f473bc63523f87a15aa3fade`.
+Neither local accounting value is a provider invoice.
+
+The earlier 256-token observation and the two 512-token observations are different stochastic runs
+against an unpinned API alias, not a paired causal comparison. The change from one passing case to
+two therefore cannot be attributed to the token limit. Repeating the same 2/10 role distribution
+improves confidence in this tiny fixture observation, but the total is still only four cases per
+role across two non-independent runs. It is harness-calibration evidence, not a role floor or
+competence claim.
