@@ -140,6 +140,12 @@ outputs. Only the output ceiling changed from D34 to D35. Because the fixture is
 lookup-recoverable, this is failure-accounting and replay evidence, not held-out benchmarking,
 semantic calibration, a capability floor, or pilot admission.
 
+The replayable D35 risk route now has a source-free
+[next-case intent projection](research/ifem-next-calibration-case-intents-v1.md). It retains all 21
+nodes as `unknown` and `not_authored`, ordered as 10 P1, 2 P2, and 9 P3 work intents. This is a
+bounded scheduling interface for later private case authoring; it does not contain or authorize
+source text, Lean statements, evaluator oracles, model work, statement freeze, or Prover handoff.
+
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |
 | Pilot admission | One source/formal boundary selected or explicit backup selected | Candidate audits, textbook alignment, source-rights checks |

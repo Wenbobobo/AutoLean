@@ -120,6 +120,10 @@ runner reports success.
      calibration into deterministic abstention. Current unverified execution, lineage, and
      digest-only calibration evidence also abstain; signed completion-bound positive routing remains
      open. The layer never creates a statement freeze or Prover handoff.
+     The source-free [iFEM next-case intent queue](research/ifem-next-calibration-case-intents-v1.md)
+     separately projects the D35 risk route into 21 stable `not_authored` work intents: 10 P1, 2 P2,
+     and 9 P3. It contains no source, Lean, oracle, provider, or private payload and is scheduling
+     metadata only, not a set of calibration cases.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused

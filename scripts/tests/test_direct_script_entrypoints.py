@@ -16,6 +16,7 @@ _SCRIPTS = (
     "fate_execution_preflight.py",
     "ifem_calibration_risk_routing.py",
     "ifem_classification_triage.py",
+    "ifem_next_calibration_case_intents.py",
     "ifem_pilot_readiness.py",
     "ifem_prerequisite_census_oci.py",
     "ifem_structural_role_corpus.py",
