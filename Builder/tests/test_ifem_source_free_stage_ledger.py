@@ -582,6 +582,39 @@ def test_two_resumers_still_allow_at_most_one_executor_call_per_coordinate(
     assert executor.calls == 24
 
 
+def test_execute_coordinate_advances_only_the_requested_canary_coordinate(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    executor = CountingExecutor()
+    first, second = ledger.run.coordinates[:2]
+
+    projection = ledger.execute_coordinate(first, executor)
+    repeated = ledger.execute_coordinate(first, executor)
+
+    assert projection == repeated
+    assert executor.calls == 1
+    assert projection.executor_dispatch_count == 1
+    assert projection.completion_committed_count == 1
+    assert projection.reconciliation_required_count == 0
+    assert projection.pending_count == 26
+    assert ledger.state_for(first) is stage_ledger.SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED
+    assert ledger.state_for(second) is stage_ledger.SourceFreeStageLedgerStateV1.PENDING
+
+
+def test_execute_coordinate_never_bypasses_an_unfinished_predecessor(tmp_path: Path) -> None:
+    ledger = _ledger(tmp_path)
+    executor = CountingExecutor()
+    reviewer = ledger.run.coordinates[1]
+
+    projection = ledger.execute_coordinate(reviewer, executor)
+
+    assert executor.calls == 0
+    assert projection.executor_dispatch_count == 0
+    assert projection.completion_committed_count == 0
+    assert projection.reconciliation_required_count == 0
+    assert projection.pending_count == 27
+    assert ledger.state_for(reviewer) is stage_ledger.SourceFreeStageLedgerStateV1.PENDING
+
+
 @pytest.mark.parametrize(
     "invalid_executor",
     (

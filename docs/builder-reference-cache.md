@@ -82,6 +82,35 @@ The current repository text bitstream names its producer and method. `tool_name`
 `tool_version` are explicitly `null` because the repository does not disclose them; AutoLean does
 not invent extraction metadata.
 
+### Markdown byte-identity overlay
+
+`repository_text_extraction` has two deliberately distinct cases. Historical repository-provided
+PDF companion text remains an `operator_only` fetched artifact: its bytes need not match the PDF,
+and it keeps its original repository provenance. The cache does not reinterpret it as a local
+extraction.
+
+The iFEM Markdown overlay is narrower. It accepts only a `text/markdown` `.md` source document
+and creates a `text/plain` `.txt` object with the fixed
+`utf8-markdown-byte-identity-v1` method. The parent and child must both be `local_only`, have
+identical SHA-256 and byte count, keep `human_declared` parent-location authority, and declare no
+tool name or version. Its child is `local_derivation_only`, has no download URL, and is rejected if
+any Markdown parsing, normalization, conversion, size change, hash change, or egress widening is
+claimed.
+
+The local iFEM adapter is intentionally separate from the source-lock acquisition route:
+
+```text
+uv run --frozen python scripts/ifem_repository_text.py materialize
+uv run --frozen python scripts/ifem_repository_text.py verify
+```
+
+It replays the canonical source-lock receipt and its fixed `intro.md` parent, writes a local
+two-entry overlay manifest and receipt once below the ignored reference cache, and installs the
+distinct `.txt` content-addressed object only after both byte identities verify. Standard output
+contains hashes and negative authority flags, never source text, source paths, or cache paths.
+This local alias neither approves model execution nor creates a statement contract, freeze, or
+Prover handoff.
+
 A derived text artifact must retain the parent source record, rights metadata, attribution, access
 policy, and an egress policy no broader than its parent. A parent digest mismatch rejects the
 entire manifest.

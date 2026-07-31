@@ -27,6 +27,7 @@ from autolean_contracts import (
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
     ModelWorkBundleV2,
+    ModelWorkRoleV1,
     model_work_admission_evidence_identity,
     model_work_admission_payload,
     stable_identifier,
@@ -52,6 +53,7 @@ from autolean_prover.providers import (
     TokenUsage,
 )
 
+from benchmarks import ifem_source_free_model_work_sidecar as sidecar_module
 from benchmarks.ifem_source_free_model_work_sidecar import (
     EventStoreSourceFreeModelWorkAttemptStore,
     SourceFreeModelWorkAttemptBindingV1,
@@ -59,6 +61,7 @@ from benchmarks.ifem_source_free_model_work_sidecar import (
     SourceFreeModelWorkExecutionSidecar,
     SourceFreeModelWorkReconciliationRequired,
     render_source_free_model_work_public_report,
+    source_free_model_work_prompt_contract_sha256,
 )
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -374,10 +377,17 @@ def test_prepared_cards_never_include_private_seed_or_oracle_fields(tmp_path: Pa
 
     prepared = sidecar.prepare(first_coordinate, item)
     serialized = prepared.request.prompt.encode("utf-8")
+    system_prompt = prepared.request.system_prompt
 
     assert prepared.work_bundle.native_tools_enabled is False
     assert prepared.work_bundle.retrieval_enabled is False
     assert prepared.request.tools == ()
+    assert system_prompt is not None
+    assert (
+        'schema_version exactly to "autolean.ifem-source-free-authoring-response.v1"'
+        in system_prompt
+    )
+    assert "autolean.ifem-source-free-stage-output.v1" not in system_prompt
     for forbidden in (
         b"node_id",
         b"partition",
@@ -387,6 +397,85 @@ def test_prepared_cards_never_include_private_seed_or_oracle_fields(tmp_path: Pa
         b"item_content_sha256",
     ):
         assert forbidden not in serialized
+
+
+@pytest.mark.parametrize(
+    "role",
+    (
+        ModelWorkRoleV1.STATEMENT_FORMALIZER,
+        ModelWorkRoleV1.FIDELITY_REVIEWER,
+        ModelWorkRoleV1.CHEATING_SUPERVISOR,
+    ),
+)
+def test_prompt_contract_digest_is_role_specific_and_deterministic(
+    role: ModelWorkRoleV1,
+) -> None:
+    first = source_free_model_work_prompt_contract_sha256(role)
+    second = source_free_model_work_prompt_contract_sha256(role)
+
+    assert first == second
+    assert len(first) == 64
+
+
+def test_prompt_contract_digests_are_distinct_between_roles() -> None:
+    supported_roles = (
+        ModelWorkRoleV1.STATEMENT_FORMALIZER,
+        ModelWorkRoleV1.FIDELITY_REVIEWER,
+        ModelWorkRoleV1.CHEATING_SUPERVISOR,
+    )
+    assert len(
+        {source_free_model_work_prompt_contract_sha256(role) for role in supported_roles}
+    ) == len(supported_roles)
+
+
+@pytest.mark.parametrize(
+    ("role", "required_fragments"),
+    (
+        (
+            ModelWorkRoleV1.STATEMENT_FORMALIZER,
+            ("authoring-response.v1", "each from 0 to 9", "disposition abstain"),
+        ),
+        (
+            ModelWorkRoleV1.FIDELITY_REVIEWER,
+            ("review-response.v1", "author abstained", "disposition abstain"),
+        ),
+        (
+            ModelWorkRoleV1.CHEATING_SUPERVISOR,
+            ("supervisor-response.v1", "upstream role abstained", "disposition abstain"),
+        ),
+    ),
+)
+def test_prompt_contract_names_each_finite_abstention_path(
+    role: ModelWorkRoleV1,
+    required_fragments: tuple[str, ...],
+) -> None:
+    prompt = sidecar_module._system_prompt(role)
+
+    assert all(fragment in prompt for fragment in required_fragments)
+
+
+def test_predecessor_abstention_remains_valid_through_all_three_roles(tmp_path: Path) -> None:
+    harness = _harness(
+        tmp_path,
+        response_texts=[
+            '{"schema_version":"autolean.ifem-source-free-authoring-response.v1",'
+            '"disposition":"abstain","selected_slot":null,"candidate":null}',
+            '{"schema_version":"autolean.ifem-source-free-review-response.v1",'
+            '"disposition":"abstain","observed_change_count":0}',
+            '{"schema_version":"autolean.ifem-source-free-supervisor-response.v1",'
+            '"disposition":"abstain","violation_detected":false}',
+        ],
+    )
+    sidecar = harness.sidecar()
+    ledger = _ledger(tmp_path, harness, sidecar)
+
+    for coordinate in ledger.run.coordinates[:3]:
+        ledger.execute_coordinate(coordinate, sidecar.execute_once)
+
+    projection = ledger.public_projection()
+    assert harness.provider.calls == 3
+    assert projection.completion_committed_count == 3
+    assert projection.pending_count == 24
 
 
 @pytest.mark.parametrize(

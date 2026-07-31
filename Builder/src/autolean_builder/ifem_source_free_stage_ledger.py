@@ -520,69 +520,100 @@ class LocalSourceFreeStageLedger:
 
         if not callable(executor):
             raise SourceFreeStageLedgerError("source-free stage executor must be callable")
-        item_by_case = {item.case_id: item for item in self._manifest.items}
         for coordinate in self._run.coordinates:
-            predecessor = self._predecessor_for(coordinate)
-            if predecessor is not None and self._read_state(predecessor).state is not (
-                SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED
-            ):
-                continue
-            state = self._read_state(coordinate)
-            if state.state is SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED:
-                continue
-            if state.state is SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED:
-                continue
-            if state.state is SourceFreeStageLedgerStateV1.DISPATCH_STARTED:
-                # A second process may be observing a live executor.  Resume therefore neither
-                # replays nor reclassifies a durable dispatch.  Reconciliation requires an
-                # explicit operator quiescence confirmation through the method below.
-                continue
-            if state.state is SourceFreeStageLedgerStateV1.PENDING:
-                self._append_event(
-                    coordinate,
-                    state=SourceFreeStageLedgerStateV1.CLAIMED,
-                )
-                self._checkpoint("claim_committed", coordinate)
-
-            won_dispatch = self._append_event(
-                coordinate,
-                state=SourceFreeStageLedgerStateV1.DISPATCH_STARTED,
-                require_new=True,
-            )
-            if not won_dispatch:
-                # Another process won the single durable dispatch transition.  It alone may call
-                # the executor; this process may only observe/reconcile on a later invocation.
-                continue
-            self._checkpoint("dispatch_committed", coordinate)
-            try:
-                completion = executor(coordinate, item_by_case[coordinate.case_id])
-            except Exception:
-                self._append_event(
-                    coordinate,
-                    state=SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED,
-                    reconciliation_reason="executor_outcome_unknown",
-                )
-                continue
-            try:
-                validated_completion = self._verify_completion_binding(
-                    completion,
-                    coordinate=coordinate,
-                )
-            except SourceFreeStageLedgerError:
-                self._append_event(
-                    coordinate,
-                    state=SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED,
-                    reconciliation_reason="completion_binding_invalid",
-                )
-                continue
-            self._checkpoint("executor_returned", coordinate)
-            self._append_event(
-                coordinate,
-                state=SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED,
-                completion=validated_completion,
-            )
-            self._checkpoint("completion_committed", coordinate)
+            self._advance_coordinate(coordinate, executor)
         return self.public_projection()
+
+    def execute_coordinate(
+        self,
+        coordinate: SourceFreeStageCoordinateV1,
+        executor: Callable[
+            [SourceFreeStageCoordinateV1, PrivateSourceFreeSeedItemV2],
+            SourceFreeStageCompletionBindingV1,
+        ],
+    ) -> SourceFreeStageLedgerPublicProjectionV1:
+        """Advance exactly one ledger-owned coordinate through the normal dispatch protocol.
+
+        This is the narrow canary entry point.  It deliberately does not scan, classify, or
+        advance any other coordinate.  A blocked predecessor, a durable in-flight dispatch, or
+        a reconciliation state remains untouched just as it would during :meth:`resume`.
+        """
+
+        if not callable(executor):
+            raise SourceFreeStageLedgerError("source-free stage executor must be callable")
+        self._advance_coordinate(self._require_coordinate(coordinate), executor)
+        return self.public_projection()
+
+    def _advance_coordinate(
+        self,
+        coordinate: SourceFreeStageCoordinateV1,
+        executor: Callable[
+            [SourceFreeStageCoordinateV1, PrivateSourceFreeSeedItemV2],
+            SourceFreeStageCompletionBindingV1,
+        ],
+    ) -> None:
+        """Apply the one-coordinate state machine shared by full resume and a canary."""
+
+        stage = self._require_coordinate(coordinate)
+        predecessor = self._predecessor_for(stage)
+        if predecessor is not None and self._read_state(predecessor).state is not (
+            SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED
+        ):
+            return
+        state = self._read_state(stage)
+        if state.state in {
+            SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED,
+            SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED,
+            SourceFreeStageLedgerStateV1.DISPATCH_STARTED,
+        }:
+            # A second process may be observing a live executor.  It must neither replay nor
+            # reclassify its durable dispatch; explicit reconciliation remains the only path.
+            return
+        if state.state is SourceFreeStageLedgerStateV1.PENDING:
+            self._append_event(
+                stage,
+                state=SourceFreeStageLedgerStateV1.CLAIMED,
+            )
+            self._checkpoint("claim_committed", stage)
+
+        won_dispatch = self._append_event(
+            stage,
+            state=SourceFreeStageLedgerStateV1.DISPATCH_STARTED,
+            require_new=True,
+        )
+        if not won_dispatch:
+            # Another process won the durable transition and is the only one allowed to execute.
+            return
+        self._checkpoint("dispatch_committed", stage)
+        item_by_case = {item.case_id: item for item in self._manifest.items}
+        try:
+            completion = executor(stage, item_by_case[stage.case_id])
+        except Exception:
+            self._append_event(
+                stage,
+                state=SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED,
+                reconciliation_reason="executor_outcome_unknown",
+            )
+            return
+        try:
+            validated_completion = self._verify_completion_binding(
+                completion,
+                coordinate=stage,
+            )
+        except SourceFreeStageLedgerError:
+            self._append_event(
+                stage,
+                state=SourceFreeStageLedgerStateV1.RECONCILIATION_REQUIRED,
+                reconciliation_reason="completion_binding_invalid",
+            )
+            return
+        self._checkpoint("executor_returned", stage)
+        self._append_event(
+            stage,
+            state=SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED,
+            completion=validated_completion,
+        )
+        self._checkpoint("completion_committed", stage)
 
     def mark_interrupted_dispatches_for_reconciliation(
         self,

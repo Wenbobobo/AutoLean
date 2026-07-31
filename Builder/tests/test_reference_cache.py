@@ -6,6 +6,7 @@ import threading
 import time
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from copy import deepcopy
 from pathlib import Path
 from typing import BinaryIO
 
@@ -25,6 +26,7 @@ _PARENT_ID = "official-reference-pdf-v1"
 _TEXT_ID = "official-reference-text-v1"
 _PARENT_BYTES = b"%PDF-1.7\nparent source artifact\n"
 _TEXT_BYTES = b"Introduction\nCurvature is alternating.\nConclusion\n"
+_MARKDOWN_PARENT_BYTES = b"# Locked opening\n\nA local identity projection.\n"
 _ATTRIBUTION = "Official reference by Example Author, CC BY-SA 4.0."
 
 
@@ -98,6 +100,50 @@ def _manifest_payload() -> dict[str, object]:
             ),
         ],
     }
+
+
+def _markdown_identity_manifest_payload() -> dict[str, object]:
+    payload = _manifest_payload()
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    parent = entries[0]
+    derived = entries[1]
+    assert isinstance(parent, dict)
+    assert isinstance(derived, dict)
+    parent.update(
+        {
+            "reference_id": "official-reference-markdown-v1",
+            "media_type": "text/markdown",
+            "file_extension": ".md",
+            "size_bytes": len(_MARKDOWN_PARENT_BYTES),
+            "max_bytes": len(_MARKDOWN_PARENT_BYTES),
+            "sha256": hashlib.sha256(_MARKDOWN_PARENT_BYTES).hexdigest(),
+        }
+    )
+    derived.update(
+        {
+            "reference_id": "official-reference-markdown-text-v1",
+            "download_url": None,
+            "acquisition_policy": "local_derivation_only",
+            "size_bytes": len(_MARKDOWN_PARENT_BYTES),
+            "max_bytes": len(_MARKDOWN_PARENT_BYTES),
+            "sha256": hashlib.sha256(_MARKDOWN_PARENT_BYTES).hexdigest(),
+        }
+    )
+    derivation = derived["derivation"]
+    assert isinstance(derivation, dict)
+    derivation.update(
+        {
+            "parent_reference_id": parent["reference_id"],
+            "parent_sha256": parent["sha256"],
+            "producer": "AutoLean local repository text overlay",
+            "method": "utf8-markdown-byte-identity-v1",
+            "tool_name": None,
+            "tool_version": None,
+            "parent_locator_authority": "human_declared",
+        }
+    )
+    return payload
 
 
 def _manifest(
@@ -313,6 +359,104 @@ def test_manifest_requires_a_pinned_local_pdf_text_recipe(tmp_path: Path) -> Non
     derivation["tool_version"] = None
     with pytest.raises(ReferenceCacheError, match="pinned tool version"):
         _manifest(tmp_path, payload=payload)
+
+
+def test_markdown_byte_identity_derivation_is_typed_and_exact(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path, payload=_markdown_identity_manifest_payload())
+    parent = manifest.require("official-reference-markdown-v1")
+    derived = manifest.require("official-reference-markdown-text-v1")
+
+    assert parent.media_type == "text/markdown"
+    assert parent.file_extension == ".md"
+    assert parent.model_egress_policy.value == "local_only"
+    assert derived.media_type == "text/plain"
+    assert derived.file_extension == ".txt"
+    assert derived.acquisition_policy.value == "local_derivation_only"
+    assert derived.model_egress_policy.value == "local_only"
+    assert derived.sha256 == parent.sha256
+    assert derived.size_bytes == parent.size_bytes
+    assert derived.derivation is not None
+    assert derived.derivation.method == "utf8-markdown-byte-identity-v1"
+    assert derived.derivation.tool_name is None
+    assert derived.derivation.tool_version is None
+    assert derived.derivation.parent_locator_authority.value == "human_declared"
+
+
+@pytest.mark.parametrize(
+    ("mutate", "message"),
+    (
+        (
+            lambda parent, derived, derivation: parent.update(
+                {"media_type": "text/markdown", "file_extension": ".markdown"}
+            ),
+            "requires Markdown or PDF parent",
+        ),
+        (
+            lambda parent, derived, derivation: derived.update(
+                {
+                    "acquisition_policy": "operator_only",
+                    "download_url": "https://example.invalid/x.txt",
+                }
+            ),
+            "Markdown byte identity must be local-derivation-only",
+        ),
+        (
+            lambda parent, derived, derivation: (
+                parent.update({"model_egress_policy": "approved_external"}),
+                derived.update({"model_egress_policy": "approved_external"}),
+            ),
+            "Markdown byte identity must remain local-only",
+        ),
+        (
+            lambda parent, derived, derivation: derived.update({"sha256": "0" * 64}),
+            "Markdown byte identity must retain parent hash and size",
+        ),
+        (
+            lambda parent, derived, derivation: derived.update(
+                {"size_bytes": derived["size_bytes"] + 1, "max_bytes": derived["max_bytes"] + 1}
+            ),
+            "Markdown byte identity must retain parent hash and size",
+        ),
+        (
+            lambda parent, derived, derivation: derivation.update({"method": "markdown-parser-v1"}),
+            "unsupported Markdown byte-identity method",
+        ),
+        (
+            lambda parent, derived, derivation: derivation.update({"tool_name": "pandoc"}),
+            "Markdown byte identity must not declare a tool",
+        ),
+        (
+            lambda parent, derived, derivation: derivation.update(
+                {"parent_locator_authority": "manifest_bound"}
+            ),
+            "Markdown byte identity parent must be human-declared",
+        ),
+    ),
+)
+def test_markdown_byte_identity_rejects_any_policy_or_identity_widening(
+    tmp_path: Path,
+    mutate: Callable[[dict[str, object], dict[str, object], dict[str, object]], object],
+    message: str,
+) -> None:
+    payload = deepcopy(_markdown_identity_manifest_payload())
+    entries = payload["entries"]
+    assert isinstance(entries, list)
+    parent = entries[0]
+    derived = entries[1]
+    assert isinstance(parent, dict)
+    assert isinstance(derived, dict)
+    derivation = derived["derivation"]
+    assert isinstance(derivation, dict)
+    mutate(parent, derived, derivation)
+
+    with pytest.raises(ReferenceCacheError, match=message):
+        _manifest(tmp_path, payload=payload)
+
+
+def test_historical_repository_provided_pdf_text_remains_loadable(tmp_path: Path) -> None:
+    manifest = _manifest(tmp_path)
+
+    assert manifest.require(_TEXT_ID).derivation is not None
 
 
 def test_operator_import_local_requires_the_manifested_bytes(tmp_path: Path) -> None:

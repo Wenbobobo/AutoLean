@@ -88,6 +88,9 @@ from pydantic import Field, model_validator
 SOURCE_FREE_MODEL_WORK_PROTOCOL: Final[
     Literal["autolean.ifem-source-free-model-work-sidecar.v1"]
 ] = "autolean.ifem-source-free-model-work-sidecar.v1"
+_STAGE_INPUT_SCHEMA_VERSION: Final = "autolean.ifem-source-free-stage-input.v1"
+_STAGE_INPUT_TOP_LEVEL_KEYS: Final = ("card", "role", "schema_version")
+_STRUCTURED_RESPONSE_FORMAT: Final = "json_object"
 _ATTEMPT_ENTITY_TYPE: Final = "ifem_source_free_model_work_attempt"
 _ATTEMPT_EVENT_TYPE: Final = "ifem_source_free_model_work.authorization_bound.v1"
 _ROLE_ORDER: Final[tuple[ModelWorkRoleV1, ...]] = (
@@ -799,13 +802,7 @@ def _prepare_model_work(
     policy: SourceFreeModelWorkExecutionPolicyV1,
 ) -> PreparedSourceFreeModelWorkStage:
     system_prompt = _system_prompt(coordinate.role)
-    prompt = canonical_json_bytes(
-        {
-            "schema_version": "autolean.ifem-source-free-stage-input.v1",
-            "role": coordinate.role.value,
-            "card": card.model_dump(mode="json"),
-        }
-    ).decode("ascii")
+    prompt = canonical_json_bytes(_stage_input_payload(coordinate.role, card)).decode("ascii")
     context_hash = digest_model(
         HashKindV1.PROMPT,
         {
@@ -828,7 +825,7 @@ def _prepare_model_work(
         max_output_tokens=policy.max_output_tokens,
         timeout_seconds=float(policy.request_timeout_seconds),
         reasoning_effort=policy.reasoning_effort,
-        response_format="json_object",
+        response_format=_STRUCTURED_RESPONSE_FORMAT,
         required_capabilities=frozenset(capabilities),
         context_pack_hash=context_hash,
     )
@@ -985,14 +982,88 @@ def _system_prompt(role: ModelWorkRoleV1) -> str:
 def _output_contract(role: ModelWorkRoleV1) -> str:
     if role is ModelWorkRoleV1.STATEMENT_FORMALIZER:
         return (
-            "Use keys schema_version, disposition, selected_slot, candidate. "
-            "Use propose with a complete finite candidate, or abstain with nulls."
+            "Set schema_version exactly to "
+            '"autolean.ifem-source-free-authoring-response.v1". '
+            "Do not copy the input schema_version. "
+            "Use exactly the keys schema_version, disposition, selected_slot, candidate. "
+            "Use disposition propose with selected_slot 0, 1, or 2 and a complete candidate "
+            "containing integer alpha, beta, gamma each from 0 to 9 and boolean guard_enabled; "
+            "or use "
+            "disposition abstain with selected_slot and candidate both null."
         )
     if role is ModelWorkRoleV1.FIDELITY_REVIEWER:
-        return "Use keys schema_version, disposition, observed_change_count."
+        return (
+            'Set schema_version exactly to "autolean.ifem-source-free-review-response.v1". '
+            "Use exactly the keys schema_version, disposition, observed_change_count. "
+            "Use disposition abstain with observed_change_count 0 when the author abstained; "
+            "otherwise use disposition accept or reject. Use an integer observed_change_count "
+            "from 0 to 3."
+        )
     if role is ModelWorkRoleV1.CHEATING_SUPERVISOR:
-        return "Use keys schema_version, disposition, violation_detected."
+        return (
+            'Set schema_version exactly to "autolean.ifem-source-free-supervisor-response.v1". '
+            "Use exactly the keys schema_version, disposition, violation_detected. "
+            "Use disposition abstain with violation_detected false when an upstream role "
+            "abstained; otherwise use disposition allow with violation_detected false, or "
+            "disposition reject with violation_detected true."
+        )
     raise SourceFreeModelWorkError("unsupported source-free ModelWork role")
+
+
+def source_free_model_work_prompt_contract_sha256(role: ModelWorkRoleV1) -> str:
+    """Bind the exact role prompt and wire envelope used before provider dispatch."""
+
+    if type(role) is not ModelWorkRoleV1:
+        raise SourceFreeModelWorkError("prompt contract role requires its exact enum type")
+    return _sha256_json(
+        {
+            "schema_version": "autolean.ifem-source-free-model-work-prompt-contract.v2",
+            "role": role.value,
+            "input_envelope_contract": _stage_input_envelope_contract(role),
+            "system_prompt": _system_prompt(role),
+            "response_format": _STRUCTURED_RESPONSE_FORMAT,
+        }
+    )
+
+
+def _stage_input_envelope_contract(role: ModelWorkRoleV1) -> dict[str, object]:
+    if role is ModelWorkRoleV1.STATEMENT_FORMALIZER:
+        card_schema = SourceFreeAuthoringCardV1.model_json_schema(mode="validation")
+    elif role is ModelWorkRoleV1.FIDELITY_REVIEWER:
+        card_schema = SourceFreeReviewerCardV1.model_json_schema(mode="validation")
+    elif role is ModelWorkRoleV1.CHEATING_SUPERVISOR:
+        card_schema = SourceFreeSupervisorCardV1.model_json_schema(mode="validation")
+    else:
+        raise SourceFreeModelWorkError("unsupported source-free ModelWork role")
+    return {
+        "schema_version": "autolean.ifem-source-free-stage-input-contract.v1",
+        "top_level_keys": list(_STAGE_INPUT_TOP_LEVEL_KEYS),
+        "schema_version_literal": _STAGE_INPUT_SCHEMA_VERSION,
+        "role_literal": role.value,
+        "card_json_schema_sha256": _sha256_json(card_schema),
+    }
+
+
+def _stage_input_payload(
+    role: ModelWorkRoleV1,
+    card: SourceFreeCardV1,
+) -> dict[str, object]:
+    if role is ModelWorkRoleV1.STATEMENT_FORMALIZER and type(card) is not SourceFreeAuthoringCardV1:
+        raise SourceFreeModelWorkError("formalizer input requires its exact card type")
+    if role is ModelWorkRoleV1.FIDELITY_REVIEWER and type(card) is not SourceFreeReviewerCardV1:
+        raise SourceFreeModelWorkError("reviewer input requires its exact card type")
+    if role is ModelWorkRoleV1.CHEATING_SUPERVISOR and type(card) is not SourceFreeSupervisorCardV1:
+        raise SourceFreeModelWorkError("supervisor input requires its exact card type")
+    if role not in _ROLE_ORDER:
+        raise SourceFreeModelWorkError("unsupported source-free ModelWork role")
+    payload: dict[str, object] = {
+        "schema_version": _STAGE_INPUT_SCHEMA_VERSION,
+        "role": role.value,
+        "card": card.model_dump(mode="json"),
+    }
+    if tuple(sorted(payload)) != _STAGE_INPUT_TOP_LEVEL_KEYS:
+        raise SourceFreeModelWorkError("source-free stage input envelope drifted")
+    return payload
 
 
 def _parse_response(
@@ -1111,4 +1182,5 @@ __all__ = [
     "SourceFreeModelWorkPublicReportV1",
     "SourceFreeModelWorkReconciliationRequired",
     "render_source_free_model_work_public_report",
+    "source_free_model_work_prompt_contract_sha256",
 ]
