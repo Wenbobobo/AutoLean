@@ -49,6 +49,14 @@ A fresh 2026-07-30 WSL probe returned `Wsl/EnumerateDistros/Service/E_ACCESSDENI
 Lean or OCI execution occurred. Fresh authority-host, gateway, and provider results must be retained
 under their own exact execution identities.
 
+A separate iFEM structural-role lane now binds one tracked 25-node candidate graph, one tracked
+sixteen-case project-synthetic corpus, provider request policy, response contract, private D31
+ledger, D32/D34 runner, and independent D33 aggregation through exact hashes. The retained 256-token
+run settled 16/16 calls but produced 16 invalid responses; the 512-token successor settled 16/16,
+with four valid abstentions and twelve invalid responses. This closes reproducible runtime and
+failure-accounting mechanics only. The corpus is public and lookup-recoverable, so neither run is
+held-out model ranking, a capability floor, textbook fidelity evidence, or promotion authority.
+
 The remaining work is not to invent another runtime. It is to close a narrow vertical path in which
 one admitted Builder statement moves through the exact same interfaces that future textbook and
 Open Problem dependency nodes will use.
@@ -139,9 +147,9 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-03 | Partial | Retain PDE and metric/algebraic-geometry lane cards with explicit stop conditions and no production-ingestion claim. |
 | P2-04 | Partial | Thirteen pinned iFEM source files are locally locked and independently replayed under `local_only`, with source-lock receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`. Digest-only indexes bind 161 notebook cells and three `intro.md` heading sections. A deterministic [candidate-only dependency graph](ifem-candidate-dependency-graph.md) now records 25 nodes and 49 planning edges without source text. This closes source/locator and graph-skeleton construction only: there is no semantic source mapping, mathematical dependency claim, FormalGraph, ExecutionGraph, freeze, or Prover handoff. |
 | P2-05 | Done | Preserve the [active discovery-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) with source, rights, overlap, and stop gates for every active lane. This is discovery metadata only; egress remains `local_only` until `AUTH-RIGHTS-01` closes. |
-| P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. The bound coverage census remains `not_started`; no coverage result is claimed. |
-| P2-07 | Next | Compile exact pinned-mathlib type/import queries and classify direct mappings, thin adapters, and missing nodes separately. |
-| P2-08 | Next | Issue a falsifiable GO/NO-GO for iFEM at the unchanged 70--80 percent prerequisite band; an absent restriction API or broad import remains NO-GO evidence. |
+| P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. Its frozen manifest remains historically `not_started`. A generic-host WSL census under `/mnt/c` reached its 600-second bound, wrote no observation/result, and cleaned its temporary query; it changes neither that manifest nor the absence of a 21-node semantic classification. |
+| P2-07 | Partial | The active five-profile plan `21bd18f7f8522470247852ef8281f1e4c7016f6415771e4fc0c05ab433247619` built receipt-bound child image `sha256:6c54c3600b2572ddcabae024a3a8b6c533c3defa6d4bda31c90408cb4c61f0ab`. Two runs produced byte-identical observation/result artifacts (file SHA-256 `1900a11003a78ecaa681ad76ab5660762d4f5ca81e28b0b9525a95998131d736` / `ba9ca42865fd385fbf94b922e4111dd76ab9dec4386f28bbba778779dfc52298`), now exposed through a [redacted replay-bound summary](research/ifem-pinned-mathlib-profile-public-summary-2026-07-31.json). This proves only pinned-environment visibility, not mapping, semantic classification, or coverage. Exact direct imports do not establish narrow transitive closures. |
+| P2-08 | Partial | The v2 gate fixes the 21-node 15--16 direct/thin band, distinguishes exact direct imports from transitive closure acceptance, and cannot return `go` while closure policy is unresolved. The real [2026-07-31 decision](research/ifem-pilot-readiness-decision-2026-07-31.json), content SHA-256 `c45cbff7a5efed34e59efbe922729f30f6d25cbe2120bd5cc1825325cb851b90`, is `incomplete`: the profile evidence binds exact imports, while the host census timed out, all 21 semantic classifications remain unknown, and closure policy remains unresolved. It authorizes neither freeze nor Prover handoff. |
 
 ### Phase 2: machine-first statement factory
 

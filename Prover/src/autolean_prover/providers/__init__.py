@@ -7,6 +7,7 @@ from .authorization import (
 )
 from .base import (
     MAX_MODEL_REQUEST_TIMEOUT_SECONDS,
+    CanonicalJsonRequestBody,
     Capability,
     ModelExecutionTimeoutPolicyV1,
     ModelProvider,
@@ -16,6 +17,7 @@ from .base import (
     TokenUsage,
     ToolCall,
     ToolSpec,
+    canonical_json_request_body,
     effective_model_timeout_seconds,
 )
 from .chat import ChatCompletionsProvider, ChatCompletionsSettings
@@ -34,10 +36,16 @@ from .registry import (
     ProviderRegistry,
     StaticCapabilityProbe,
 )
-from .responses import ResponsesProvider, ResponsesSettings
+from .responses import (
+    HttpxResponsesTransport,
+    ResponsesProvider,
+    ResponsesSettings,
+    ResponsesTransport,
+)
 
 __all__ = [
     "MAX_MODEL_REQUEST_TIMEOUT_SECONDS",
+    "CanonicalJsonRequestBody",
     "Capability",
     "CapabilityProbe",
     "ChatCompletionsOperatorProfileV1",
@@ -47,6 +55,7 @@ __all__ = [
     "CodexCliSettings",
     "CompletedModelExecution",
     "FakeProvider",
+    "HttpxResponsesTransport",
     "LocalPrivateModelOutputStore",
     "ModelExecutionAuthorizationGate",
     "ModelExecutionCompletionRecoveryRequired",
@@ -60,10 +69,12 @@ __all__ = [
     "ProviderRegistry",
     "ResponsesProvider",
     "ResponsesSettings",
+    "ResponsesTransport",
     "StaticCapabilityProbe",
     "TokenUsage",
     "ToolCall",
     "ToolSpec",
+    "canonical_json_request_body",
     "effective_model_timeout_seconds",
     "model_response_artifact",
     "response_from_artifact",

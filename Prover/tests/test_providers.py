@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
@@ -72,6 +73,26 @@ class RecordingTransport:
         )
         return self.response
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        self.calls.append(
+            {
+                "url": url,
+                "headers": dict(headers),
+                "payload": payload,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return self.response
+
 
 class FailingTransport:
     def __init__(self, message: str) -> None:
@@ -86,6 +107,17 @@ class FailingTransport:
         timeout_seconds: float,
     ) -> Mapping[str, object]:
         del url, headers, payload, timeout_seconds
+        raise TimeoutError(self.message)
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
         raise TimeoutError(self.message)
 
 

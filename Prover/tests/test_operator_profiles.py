@@ -5,7 +5,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
-from autolean_prover.errors import ConfigurationError
+from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.providers import ChatCompletionsOperatorProfileV1
 
 
@@ -32,6 +32,26 @@ class RecordingTransport:
         )
         return self.response
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        self.calls.append(
+            {
+                "url": url,
+                "headers": dict(headers),
+                "payload": payload,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return self.response
+
 
 PROFILE_PATH = (
     Path(__file__).resolve().parents[1]
@@ -46,6 +66,7 @@ def _profile_payload() -> dict[str, object]:
 
 def test_deepseek_profile_is_reference_only_and_builds_a_bounded_canary() -> None:
     profile = ChatCompletionsOperatorProfileV1.from_json_file(PROFILE_PATH)
+    assert profile == ChatCompletionsOperatorProfileV1.from_json_bytes(PROFILE_PATH.read_bytes())
     assert profile.provider_id == "deepseek"
     assert profile.model_id == "deepseek-v4-pro"
     assert profile.base_url == "https://api.deepseek.com"
@@ -77,6 +98,8 @@ def test_deepseek_profile_is_reference_only_and_builds_a_bounded_canary() -> Non
     response = provider.generate(canary)
     assert response.text == "rfl"
     assert response.usage.cached_input_tokens == 3
+    assert provider._settings.require_response_model is True
+    assert provider._settings.require_usage is True
     assert transport.calls == [
         {
             "url": "https://api.deepseek.com/chat/completions",
@@ -96,6 +119,15 @@ def test_deepseek_profile_is_reference_only_and_builds_a_bounded_canary() -> Non
     ]
     assert "unit-test-token" not in repr(provider._settings)
     assert "unit-test-token" not in provider.configuration_hash.value
+
+
+def test_profile_bytes_are_the_single_parse_input() -> None:
+    payload = PROFILE_PATH.read_bytes()
+    assert ChatCompletionsOperatorProfileV1.from_json_bytes(payload).profile_id == (
+        "deepseek-v4-pro-canary"
+    )
+    with pytest.raises(ConfigurationError, match="must be bytes"):
+        ChatCompletionsOperatorProfileV1.from_json_bytes("not-bytes")  # type: ignore[arg-type]
 
 
 @pytest.mark.parametrize(
@@ -135,3 +167,44 @@ def test_profile_uses_the_fixed_official_endpoint_despite_environment_drift() ->
         },
     )
     assert provider._settings.base_url == "https://api.deepseek.com"
+
+
+@pytest.mark.parametrize(
+    "response,match",
+    [
+        (
+            {
+                "choices": [{"message": {"content": "rfl"}}],
+                "usage": {"prompt_tokens": 8, "completion_tokens": 1},
+            },
+            "response model",
+        ),
+        (
+            {
+                "model": "deepseek-v4-pro",
+                "choices": [{"message": {"content": "rfl"}}],
+            },
+            "missing usage",
+        ),
+        (
+            {
+                "model": "deepseek-v4-pro",
+                "choices": [{"message": {"content": "rfl"}}],
+                "usage": {"completion_tokens": 1},
+            },
+            "prompt_tokens",
+        ),
+    ],
+)
+def test_deepseek_profile_requires_response_identity_and_usage(
+    response: Mapping[str, object],
+    match: str,
+) -> None:
+    profile = ChatCompletionsOperatorProfileV1.from_json_file(PROFILE_PATH)
+    provider = profile.create_provider(
+        transport=RecordingTransport(response),
+        environment={"AUTOLEAN_DEEPSEEK_API_KEY": "unit-test-token"},
+    )
+
+    with pytest.raises(ProviderResponseError, match=match):
+        provider.generate(profile.canary_request("Return rfl."))

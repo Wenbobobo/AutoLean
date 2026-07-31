@@ -1,8 +1,8 @@
 # iFEM Candidate Dependency Graph
 
-`scripts/ifem_candidate_dependency_graph.py` produces a local-cache artifact for the
-`ifem-coercive-galerkin` discovery lane.  It is a planning projection, not a formalization,
-coverage result, or proof input.
+`scripts/ifem_candidate_dependency_graph.py` produces a source-text-free planning projection for
+the `ifem-coercive-galerkin` discovery lane. It is not a formalization, coverage result, or proof
+input.
 
 ## Inputs and replay
 
@@ -26,8 +26,15 @@ Run the project script through `uv`:
 uv run python scripts/ifem_candidate_dependency_graph.py
 ```
 
-The artifact is written under the local reference cache with the canonical filename
-`ifem-candidate-dependency-graph.v1.json`.  It is intentionally not a tracked source file.
+The default artifact is written under the local reference cache with the canonical filename
+`ifem-candidate-dependency-graph.v1.json`. A byte-identical canonical copy is also tracked at
+`Builder/pilots/discovery/ifem-candidate-dependency-graph.v1.json` as a D32/D34 runtime input. Its
+file SHA-256 is `e6442bfe1cc5305a3d26972c23c70a08029f8cde387dc1b58088d918632cd3af`;
+its content SHA-256 is
+`ba9b246805a4b94ea9f0b02898a772114e495fc8dc12c783b7388b519470a71d`.
+Each protocol pins both values, revalidates the graph, and rebuilds the paired corpus against it.
+The tracked copy remains source-metadata-bound and non-authoritative; publishing hashes, stable
+identifiers, and candidate edges does not authorize source-text or model egress.
 
 ## Edge meanings
 

@@ -10,7 +10,10 @@ from autolean_contracts import (
     DigestV1,
     EndpointClassV1,
     HashKindV1,
+    OutboundRequestBodyV1,
+    canonical_json_bytes,
     digest_model,
+    outbound_request_body_binding,
 )
 from autolean_contracts.hashing import require_digest_kind
 
@@ -93,6 +96,41 @@ class TokenUsage:
             raise ConfigurationError("token usage must contain non-negative integer values")
         if self.cached_input_tokens > self.input_tokens:
             raise ConfigurationError("cached_input_tokens cannot exceed input_tokens")
+
+
+@dataclass(frozen=True, slots=True)
+class CanonicalJsonRequestBody:
+    """Exact credential-free JSON bytes prepared for one provider transport call.
+
+    ``binding`` is safe to retain as evidence; ``body`` remains an in-memory send input and must
+    not be copied into public reports or response artifacts.
+    """
+
+    body: bytes
+    binding: OutboundRequestBodyV1
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.body, bytes):
+            raise ConfigurationError("canonical JSON request body must be bytes")
+        try:
+            expected = outbound_request_body_binding(self.body)
+        except ValueError as error:
+            raise ConfigurationError("canonical JSON request body is invalid") from error
+        if self.binding != expected:
+            raise ConfigurationError("canonical JSON request body binding does not match its bytes")
+
+
+def canonical_json_request_body(payload: Mapping[str, object]) -> CanonicalJsonRequestBody:
+    """Serialize one credential-free provider payload into its exact JSON wire bytes."""
+
+    if not isinstance(payload, Mapping):
+        raise ConfigurationError("canonical JSON request payload must be a mapping")
+    try:
+        body = canonical_json_bytes(dict(payload))
+        binding = outbound_request_body_binding(body)
+    except (TypeError, ValueError) as error:
+        raise ConfigurationError("canonical JSON request payload is not serializable") from error
+    return CanonicalJsonRequestBody(body=body, binding=binding)
 
 
 @dataclass(frozen=True, slots=True)

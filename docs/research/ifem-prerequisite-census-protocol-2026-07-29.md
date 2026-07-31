@@ -1,6 +1,7 @@
 # iFEM Coercive Prerequisite Census Protocol
 
-Status: bounded P2-07 query plan implemented; pinned Lean query not run
+Status: bounded P2-06/P2-07 query plan implemented; the generic-host WSL run reached its internal
+600-second bound and produced no census observation or result
 
 ## Conclusion
 
@@ -90,6 +91,21 @@ lake env lean --run <generated-query.lean>
 Successful execution still emits 21 `unknown` classifications with reason
 `builder_semantic_review_not_recorded`. The observation must be reviewed and a
 separate evidence-complete result constructed before any coverage arithmetic.
+
+## 2026-07-31 execution boundary
+
+The generic-host WSL attempt from the checkout under `/mnt/c` reached the wrapper's internal
+600-second timeout. It wrote no observation file and no result file, and its generated temporary
+Lean query was cleaned up. The frozen census manifest keeps its historical `not_started` status;
+this timeout is not a completed census, a negative query, or a reason to rewrite the manifest.
+Accordingly, all 21 nodes remain unclassified. A later `host_query_timeout` record represents the
+absence of completed census evidence without inventing an observation; P2-08 may bind that record
+only to conclude `incomplete`.
+
+The separate receipt-bound five-profile run is real pinned-environment visibility evidence, but it
+does not substitute for this two-import, 21-node census. Fixed exact direct imports identify the
+query roots only; they do not establish a narrow transitive import closure. A closure-width
+acceptance policy remains unresolved pending independent review.
 
 ## Counter-argument
 

@@ -76,6 +76,23 @@ class CountingTransport:
             },
         }
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        return self.post_json(
+            url=url,
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+
 
 class RaisingTransport:
     def __init__(self, marker: str) -> None:
@@ -91,6 +108,18 @@ class RaisingTransport:
         timeout_seconds: float,
     ) -> Mapping[str, object]:
         del url, headers, payload, timeout_seconds
+        self.calls += 1
+        raise RuntimeError(self.marker)
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
         self.calls += 1
         raise RuntimeError(self.marker)
 

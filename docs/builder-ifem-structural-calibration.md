@@ -1,6 +1,6 @@
 # iFEM structural calibration
 
-Status: source-free discovery calibration; not textbook alignment, semantic admission, or proof
+Status: source-text-free discovery calibration; not textbook alignment, semantic admission, or proof
 authority
 
 ## Purpose
@@ -33,32 +33,69 @@ The catalog remains evaluator-side metadata. It must not be sent to a model: its
 role, and required-disposition fields disclose the oracle, and its egress contract is explicitly
 false.
 
-A later role Benchmark bridge must create a separate Apache-2.0 project-synthetic probe corpus and
-an exact `SourceRecordV1`/`RightsRecordV1` for the actual outbound bytes. Each harmful mutant must
-have a surface-matched baseline and a falsifying witness or counterexample. Outbound prompts must
+The implemented role bridge derives a separate Apache-2.0 project-synthetic prompt fixture and an
+exact `SourceRecordV1`/`RightsRecordV1` for the actual outbound bytes. The catalog and role-probe
+corpus do not themselves authorize egress. Each harmful mutant must have a surface-matched
+baseline and a falsifying witness or counterexample. Outbound prompts must
 omit catalog IDs, control labels, risk names, mutation names, required dispositions, source
 locators, graph bytes, and iFEM source bytes. The current ten-case authorized floor suite remains
 unchanged; iFEM probes require a separately locked bridge and evaluator.
 
 | Catalog role | Benchmark role | Measurement boundary |
 | --- | --- | --- |
-| `conversion_proposer` | `statement_formalizer` | Requests a semantic gap when source-free structure is insufficient |
+| `conversion_proposer` | `statement_formalizer` | Requests a semantic gap when source-text-free structure is insufficient |
 | `fidelity_reviewer` | `fidelity_reviewer` | Accepts a baseline and rejects its harmful mutant |
 | `mutation_critic` | `cheating_supervisor` | Detects a change to the frozen structural boundary |
 
 The first row measures abstention and guardrail behavior, not formalization competence. Results
-remain role-local; cross-role aggregation is forbidden.
+remain role-local; cross-role aggregation is forbidden. Because the paired corpus and construction
+code are public, this lane is open calibration rather than a held-out or contamination-resistant
+benchmark; repository-aware lookup can recover the intended baseline.
+
+## Project-synthetic witness boundary
+
+The eight local witness specifications are independently pinned twice: the role-probe corpus
+commits each complete specification, while the evaluator checks a separate immutable golden digest
+before interpreting any field. Field addition, removal, or mutation therefore fails even if an
+in-process caller also rewrites the role-probe commitment table. These digests detect code or
+fixture drift; they are neither signatures nor mathematical proofs.
+
+A witness report's internal hashes establish only payload integrity. Verification, rendering, and
+atomic writing rebuild the exact role-probe corpus from the supplied candidate graph, rerun all
+eight evaluator checks, and require byte-for-byte contract equality with the proposed report. A
+self-hashed or normally `model_validate`-constructed report cannot certify its own semantic fields.
+
+The checks remain project-synthetic observations. In particular, the absolute-value case is a
+singleton observation on a deliberately non-sign-closed scope. It is not a counterexample to the
+usual globally quantified bilinear continuity bound on a real vector space, where sign closure can
+make the one-sided and absolute formulations equivalent. The strengthened finite evaluator checks
+finite-support truncations and exact geometric tails for `c00`/`l2`; subspace membership,
+restriction equality, and an ambient outside witness in `R^2`; zero lower-bound and positive
+candidate refuters on `(0,1)`; and the nonsymmetric matrix values plus positive-definite symmetric
+part for parameter reversal. These remain executable observations with named standard-lemma
+dependencies, not Lean/kernel evidence. None of these artifacts can establish textbook fidelity,
+freeze a statement, enter Prover, or authorize promotion.
+
+The executable role-pair, witness, pair-split, private-root, and exact-wire boundary is recorded
+in [iFEM role calibration v1](builder-ifem-role-calibration-v1.md). That document is the current
+implementation boundary for D16-D24; this catalog document remains the source-text-free registry
+description.
 
 ## Verification
 
 ```text
 uv run --frozen pytest -q \
   Builder/tests/test_ifem_candidate_dependency_graph.py \
-  Builder/tests/test_ifem_structural_calibration.py
+  Builder/tests/test_ifem_structural_calibration.py \
+  Builder/tests/test_ifem_structural_witness_validation.py
 ```
 
 Acceptance requires deterministic rebuild, complete risk coverage, exact graph binding, rejection
 of `model_construct` authority or case tampering, and preserved no-freeze/no-handoff behavior.
-Every downstream consumer must call
+A consumer of an independently supplied catalog must call
 `verify_ifem_structural_calibration_catalog_against_graph()` with the exact candidate graph; a
-standalone catalog hash is not proof of provenance.
+standalone catalog hash is not proof of provenance. D32/D34 instead consumes the deliberately
+published, canonical role-probe corpus through a loader that pins both file and content hashes.
+Only `scripts/ifem_structural_role_corpus.py materialize` may rebuild a successor corpus from the
+locked source graph; there is no automatic source-cache fallback in plan, preflight, run, or
+evaluation.

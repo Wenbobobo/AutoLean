@@ -53,6 +53,7 @@ class HashKindV1(StrEnum):
     EVENT = "event"
     CONFIG = "config"
     PROMPT = "prompt"
+    OUTBOUND_REQUEST_BODY = "outbound_request_body"
     TOOL = "tool"
 
 

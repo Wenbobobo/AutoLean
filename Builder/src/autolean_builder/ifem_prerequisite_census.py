@@ -664,10 +664,10 @@ private def executeQuery : IO Json := do
 def main (_arguments : List String) : IO UInt32 := do
   try
     IO.println (← executeQuery).compress
-    return 0
+    return (0 : UInt32)
   catch error =>
     IO.eprintln s!"autolean-ifem-prerequisite-query: {{error}}"
-    return 2
+    return (2 : UInt32)
 """
 
 
@@ -828,7 +828,12 @@ def not_run_result(
     plan_path: Path,
     reason: str,
 ) -> IFEMPrerequisiteCensusResultV1:
-    if reason not in {"operator_not_run", "pinned_runtime_unavailable", "wsl_unavailable"}:
+    if reason not in {
+        "host_query_timeout",
+        "operator_not_run",
+        "pinned_runtime_unavailable",
+        "wsl_unavailable",
+    }:
         raise IFEMPrerequisiteCensusError("unsupported not-run reason")
     node_results = [
         {
@@ -928,7 +933,10 @@ def run_query(
     source = render_lean_query(plan)
     source_bytes = source.encode("utf-8")
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
-    with tempfile.TemporaryDirectory(prefix="autolean-ifem-prerequisite-query-") as raw_root:
+    with tempfile.TemporaryDirectory(
+        prefix=".autolean-ifem-prerequisite-query-",
+        dir=library_root,
+    ) as raw_root:
         query_path = Path(raw_root) / "IFEMPrerequisiteQuery.lean"
         query_path.write_bytes(source_bytes)
         command = ["lake", "env", "lean", "--run", str(query_path)]
@@ -972,7 +980,12 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
     not_run.add_argument("--out", type=Path, required=True)
     not_run.add_argument(
         "--reason",
-        choices=("operator_not_run", "pinned_runtime_unavailable", "wsl_unavailable"),
+        choices=(
+            "host_query_timeout",
+            "operator_not_run",
+            "pinned_runtime_unavailable",
+            "wsl_unavailable",
+        ),
         required=True,
     )
     run = subparsers.add_parser("run", help="execute the query without classifying mappings")

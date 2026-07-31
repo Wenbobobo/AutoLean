@@ -64,6 +64,7 @@ from autolean_prover.providers import (
     ModelProvider,
     ProviderRegistry,
     StaticCapabilityProbe,
+    canonical_json_request_body,
 )
 from autolean_prover.providers.responses import HttpxResponsesTransport, ResponsesTransport
 from pydantic import Field, model_validator
@@ -410,6 +411,17 @@ class _NoIoTransport:
         del url, headers, payload, timeout_seconds
         raise AssertionError("plan construction must not perform provider I/O")
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
+        raise AssertionError("plan construction must not perform provider I/O")
+
 
 class RedactingDiagnosticTransport:
     """Retain only a stable failure category, never an exception message."""
@@ -433,12 +445,27 @@ class RedactingDiagnosticTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Mapping[str, object]:
+        return self.post_json_bytes(
+            url=url,
+            headers=headers,
+            body=canonical_json_request_body(payload).body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
         self._failure_class = None
         try:
-            response = self._delegate.post_json(
+            response = self._delegate.post_json_bytes(
                 url=url,
                 headers=headers,
-                payload=payload,
+                body=body,
                 timeout_seconds=timeout_seconds,
             )
         except httpx.HTTPStatusError as error:

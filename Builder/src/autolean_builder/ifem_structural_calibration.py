@@ -36,7 +36,7 @@ class IFEMStructuralCalibrationError(ValueError):
 
 
 class IFEMStructuralCalibrationRoleV1(StrEnum):
-    """Closed role vocabulary for this source-free calibration plan."""
+    """Closed role vocabulary for this source-text-free calibration plan."""
 
     CONVERSION_PROPOSER = "conversion_proposer"
     FIDELITY_REVIEWER = "fidelity_reviewer"
@@ -98,7 +98,7 @@ class IFEMStructuralCaseIdV1(StrEnum):
 
 
 class IFEMStructuralCalibrationAuthorityV1(ContractModel):
-    """Hard-negative authority boundary for the source-free plan."""
+    """Hard-negative authority boundary for the source-text-free plan."""
 
     schema_version: Literal["autolean.ifem-structural-calibration-authority.v1"] = (
         "autolean.ifem-structural-calibration-authority.v1"
@@ -373,7 +373,7 @@ def _expected_cases() -> tuple[IFEMStructuralCalibrationCaseV1, ...]:
 
 
 class IFEMStructuralCalibrationCatalogV1(ContractModel):
-    """A re-renderable source-free structural calibration contract."""
+    """A re-renderable source-text-free structural calibration contract."""
 
     schema_version: Literal["autolean.ifem-structural-calibration.v1"] = (
         IFEM_STRUCTURAL_CALIBRATION_SCHEMA
@@ -427,7 +427,7 @@ class IFEMStructuralCalibrationCatalogV1(ContractModel):
 
     def assert_not_routable(self) -> Never:
         raise IFEMStructuralCalibrationError(
-            "source-free iFEM structural calibration cannot create a statement contract, "
+            "source-text-free iFEM structural calibration cannot create a statement contract, "
             "freeze a statement, or hand work to Prover"
         )
 

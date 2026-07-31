@@ -189,6 +189,13 @@ from .models import (
     validate_axiom_policy_v1,
     verification_attestation_payload,
 )
+from .outbound_request import OutboundRequestBodyV1, outbound_request_body_binding
+from .pair_split import (
+    AtomicPairCommitmentV1,
+    PairLevelSplitCommitmentV1,
+    PairSplitAuthorityV1,
+    PairSplitPartitionV1,
+)
 from .verification_gateway import (
     VerificationSigningContextV1,
     VerificationSigningLeaseBindingV1,
@@ -199,6 +206,7 @@ from .verification_gateway import (
 __all__ = [
     "AcceptedDependencyV1",
     "ActorKindV1",
+    "AtomicPairCommitmentV1",
     "AttestationError",
     "AttestationPurposeV1",
     "AttestationSignerV1",
@@ -308,6 +316,10 @@ __all__ = [
     "OciVerificationArtifactV2",
     "OciVerifierExecutionPolicyV1",
     "OciVerifierExecutionPolicyV2",
+    "OutboundRequestBodyV1",
+    "PairLevelSplitCommitmentV1",
+    "PairSplitAuthorityV1",
+    "PairSplitPartitionV1",
     "PermissionDecisionV1",
     "ProofStatusV1",
     "ProofBoundaryV1",
@@ -368,6 +380,7 @@ __all__ = [
     "model_work_rights_binding",
     "model_work_run_hash",
     "model_work_source_binding",
+    "outbound_request_body_binding",
     "proof_dependency_manifest_hash",
     "parse_dependency_closure_manifest",
     "stable_identifier",

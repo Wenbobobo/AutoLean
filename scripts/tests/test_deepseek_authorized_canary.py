@@ -90,6 +90,23 @@ class CountingTransport:
             },
         }
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        return self.post_json(
+            url=url,
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+
 
 class RaisingTransport:
     def __init__(self, error: Exception) -> None:
@@ -106,6 +123,17 @@ class RaisingTransport:
         del url, headers, payload, timeout_seconds
         raise self._error
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
+        raise self._error
+
 
 class ReturningTransport:
     def post_json(
@@ -117,6 +145,17 @@ class ReturningTransport:
         timeout_seconds: float,
     ) -> Mapping[str, object]:
         del url, headers, payload, timeout_seconds
+        return {"safe": True}
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
         return {"safe": True}
 
 

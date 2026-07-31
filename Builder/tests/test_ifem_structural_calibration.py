@@ -1,4 +1,4 @@
-"""Tests for the source-free iFEM structural calibration contract."""
+"""Tests for the source-text-free iFEM structural calibration contract."""
 
 from __future__ import annotations
 

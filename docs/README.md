@@ -12,7 +12,7 @@ runner reports success.
 | Stable specification | [Architecture](architecture.md), [protocol](protocol.md), [threat model](threat-model.md), and [Phase 1 acceptance](phase-1-acceptance.md) | Non-waivable system and acceptance invariants |
 | Observed facts | [Phase 1 progress ledger](phase-1-progress.md) | Evidence actually observed, bound to its stated commit or candidate tree |
 | Active execution | [Next operating plan](roadmap-next.md) | Current ordering, parallel waves, and task status |
-| External authority | [Operator and authority worklist](operator-and-authority-worklist.md) | Human, host, rights, account, signer, and release actions |
+| External authority | [Operator and authority worklist](operator-and-authority-worklist.md) and its [Chinese operational copy](operator-and-authority-worklist.zh-CN.md) | Human, host, rights, account, signer, and release actions; the English file is canonical |
 | Long-range strategy | [Phase 2 fractal roadmap](phase-2-fractal-roadmap.md) | Phase 2 and later milestones and stop conditions |
 | Historical decisions | [Archive index](archive/README.md) | Superseded plans and their safe-retention policy |
 | Research input | [Research](research/) and [audits](audits/) | Evidence and proposals that cannot change a gate by themselves |
@@ -75,8 +75,9 @@ runner reports success.
     [the progress ledger](phase-1-progress.md) records observed evidence and unrun gates.
     [The Phase 1 assurance case](phase-1-assurance-case.md) maps each current safety claim to
     its replayable evidence, non-claim, and remaining acceptance gate.
-    [The operator and authority worklist](operator-and-authority-worklist.md) is the only active
-    checklist for external actions. The old [route](phase-1-plan.md) and
+     [The operator and authority worklist](operator-and-authority-worklist.md) is the only active
+     checklist for external actions; its [Chinese operational copy](operator-and-authority-worklist.zh-CN.md)
+     is for project operation and does not create a second authority source. The old [route](phase-1-plan.md) and
     [parallel plan](phase-1-parallel-execution.md) are retained historical snapshots indexed in
     [the archive](archive/README.md).
     [The Phase 2 fractal roadmap](phase-2-fractal-roadmap.md) is the longer-horizon planning
@@ -97,7 +98,19 @@ runner reports success.
     review, mutation, abstention, split, and replay structure over eleven project-synthetic samples.
     They are fake-provider architecture regressions, not real-model or semantic calibration.
     The [iFEM structural calibration](builder-ifem-structural-calibration.md) separately freezes a
-    source-free risk registry; it is evaluator metadata, not a textbook statement or model input.
+    source-text-free risk registry plus a hash-pinned, tracked public graph/corpus runtime pair;
+    both are evaluator metadata, not a textbook statement or model input.
+    The [iFEM role calibration boundary](builder-ifem-role-calibration-v1.md) records the
+    graph-bound witness recomputation, pair leakage closure, private partition roots, and exact
+    outbound-byte contract. The [independent synthetic-role bridge](ifem-synthetic-role-bridge.md)
+    now supplies exact-byte execution acknowledgements, private-input reconciliation, and an
+    [operator-private output ledger](ifem-synthetic-role-private-ledger.md). All three remain
+    non-promotable calibration evidence rather than benchmark or semantic authority. The
+    [D32/D34 DeepSeek iFEM operator runner](ifem-deepseek-role-calibration.md) applies that exact
+    private-ledger path to a live local observation only after explicit operator approval; its
+    selected revision is bound to both the root pair and the
+    [D33 public aggregate](ifem-private-evaluation-operator.md). It is likewise non-promotable and
+    does not score, evaluate the oracle, or create Builder--Prover authority.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
@@ -160,10 +173,21 @@ runner reports success.
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
     binds the actual 25-node / 21-prerequisite denominator and keeps every mapping `unknown`
     until the pinned Lean query and semantic classification evidence exist. The
+    [P2-08 readiness gate](research/ifem-pilot-readiness-gate-v1.md) makes the
+    fixed 15--16/21 pilot hypothesis falsifiable without converting missing
+    evidence into a negative decision or granting any promotion authority. The
     [25-node/49-edge candidate dependency graph](ifem-candidate-dependency-graph.md) is a
     source-text-free planning projection only; it creates no semantic mapping, FormalGraph,
     ExecutionGraph, freeze, or Prover handoff.
-27. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
+27. [iFEM fixed Mathlib profile query](ifem-pinned-mathlib-profiles.md) freezes five
+    singleton-import observation profiles and a digest-bound OCI evidence path. Its plan and
+    receipts record only environment facts; they cannot classify a prerequisite, decide coverage,
+    freeze a Builder contract, or hand work to Prover. The 2026-07-31
+    [public profile projection](research/ifem-pinned-mathlib-profile-public-summary-2026-07-31.json)
+    binds the real run without canonical type text or closure members, and the corresponding
+    [P2-08 v2 decision](research/ifem-pilot-readiness-decision-2026-07-31.json) remains
+    `incomplete` with every promotion authority false.
+28. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.
 28. [T7 real Lean changed-source preflight](t7-real-lean-changed-source-preflight.md) binds one

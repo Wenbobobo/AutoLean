@@ -42,7 +42,10 @@ from autolean_prover.errors import (
     PolicyViolation,
     ProviderResponseError,
 )
-from autolean_prover.providers import ModelExecutionCompletionRecoveryRequired
+from autolean_prover.providers import (
+    ModelExecutionCompletionRecoveryRequired,
+    canonical_json_request_body,
+)
 from autolean_prover.providers.operator_profile import ChatCompletionsOperatorProfileV1
 from autolean_prover.providers.responses import HttpxResponsesTransport, ResponsesTransport
 from pydantic import Field, model_validator
@@ -343,11 +346,26 @@ class _CountingTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Mapping[str, object]:
-        self.calls += 1
-        return self._delegate.post_json(
+        return self.post_json_bytes(
             url=url,
             headers=headers,
-            payload=payload,
+            body=canonical_json_request_body(payload).body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        self.calls += 1
+        return self._delegate.post_json_bytes(
+            url=url,
+            headers=headers,
+            body=body,
             timeout_seconds=timeout_seconds,
         )
 

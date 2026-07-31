@@ -92,8 +92,20 @@ class ChatCompletionsOperatorProfileV1:
         """Load an exact V1 profile without resolving its API key reference."""
 
         try:
-            loaded: object = json.loads(path.read_text(encoding="utf-8"))
-        except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
+            payload = path.read_bytes()
+        except OSError as error:
+            raise ConfigurationError("operator profile must be readable canonical JSON") from error
+        return cls.from_json_bytes(payload)
+
+    @classmethod
+    def from_json_bytes(cls, payload: bytes) -> ChatCompletionsOperatorProfileV1:
+        """Parse the exact bytes later bound into preflight or execution evidence."""
+
+        if not isinstance(payload, bytes):
+            raise ConfigurationError("operator profile payload must be bytes")
+        try:
+            loaded: object = json.loads(payload.decode("utf-8"))
+        except (UnicodeDecodeError, json.JSONDecodeError) as error:
             raise ConfigurationError("operator profile must be readable canonical JSON") from error
         if not isinstance(loaded, dict) or set(loaded) != _REQUIRED_FIELDS:
             raise ConfigurationError("operator profile has an unsupported schema")
@@ -185,6 +197,8 @@ class ChatCompletionsOperatorProfileV1:
                 endpoint_class=self.endpoint_class,
                 timeout_seconds=self.timeout_seconds,
                 thinking_enabled=self.thinking_enabled,
+                require_response_model=True,
+                require_usage=True,
             ),
             transport=transport,
             environment=source_environment,

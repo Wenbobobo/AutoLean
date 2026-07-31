@@ -20,6 +20,7 @@ import hashlib
 import json
 import os
 import re
+import stat
 import tempfile
 from collections.abc import Iterable, Mapping
 from contextlib import suppress
@@ -472,6 +473,78 @@ def render_ifem_candidate_dependency_graph(graph: IFEMCandidateDependencyGraphV1
             "cannot render an invalid or model-constructed candidate graph"
         ) from error
     return canonical_json_bytes(verified) + b"\n"
+
+
+def _is_link_or_reparse(path: Path, metadata: os.stat_result) -> bool:
+    reparse_flag = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0)
+    file_attributes = getattr(metadata, "st_file_attributes", 0)
+    return (
+        stat.S_ISLNK(metadata.st_mode) or bool(file_attributes & reparse_flag) or path.is_symlink()
+    )
+
+
+def _physical_parent_identities(path: Path) -> tuple[tuple[int, int], ...]:
+    identities: list[tuple[int, int]] = []
+    for parent in path.parents:
+        metadata = parent.stat(follow_symlinks=False)
+        if _is_link_or_reparse(parent, metadata) or not stat.S_ISDIR(metadata.st_mode):
+            raise IFEMCandidateDependencyGraphError(
+                "candidate graph parent chain must contain only physical directories"
+            )
+        identities.append((metadata.st_dev, metadata.st_ino))
+    return tuple(identities)
+
+
+def load_ifem_candidate_dependency_graph(
+    path: Path,
+    *,
+    expected_file_sha256: str,
+    expected_content_sha256: str,
+) -> IFEMCandidateDependencyGraphV1:
+    """Load one exact source-text-free graph projection without source replay."""
+
+    if not isinstance(path, Path):
+        raise IFEMCandidateDependencyGraphError("candidate graph path must be a Path")
+    try:
+        parents_before = _physical_parent_identities(path)
+        before = path.lstat()
+        if _is_link_or_reparse(path, before) or not stat.S_ISREG(before.st_mode):
+            raise IFEMCandidateDependencyGraphError(
+                "candidate graph must be an unlinked regular file"
+            )
+        raw = path.read_bytes()
+        after = path.lstat()
+        parents_after = _physical_parent_identities(path)
+    except OSError as error:
+        raise IFEMCandidateDependencyGraphError("candidate graph is unavailable") from error
+    if (
+        _is_link_or_reparse(path, after)
+        or not stat.S_ISREG(after.st_mode)
+        or (before.st_dev, before.st_ino, before.st_size)
+        != (after.st_dev, after.st_ino, after.st_size)
+        or parents_before != parents_after
+    ):
+        raise IFEMCandidateDependencyGraphError("candidate graph changed while loading")
+    if hashlib.sha256(raw).hexdigest() != expected_file_sha256:
+        raise IFEMCandidateDependencyGraphError("candidate graph file hash drifted")
+    try:
+        payload = json.loads(
+            raw.decode("utf-8", errors="strict"),
+            object_pairs_hook=_reject_duplicate_keys,
+        )
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise IFEMCandidateDependencyGraphError("candidate graph is not strict JSON") from error
+    if not isinstance(payload, dict):
+        raise IFEMCandidateDependencyGraphError("candidate graph must be a JSON object")
+    try:
+        graph = IFEMCandidateDependencyGraphV1.model_validate(payload)
+    except ValueError as error:
+        raise IFEMCandidateDependencyGraphError("candidate graph is invalid") from error
+    if graph.content_sha256 != expected_content_sha256:
+        raise IFEMCandidateDependencyGraphError("candidate graph content hash drifted")
+    if render_ifem_candidate_dependency_graph(graph) != raw:
+        raise IFEMCandidateDependencyGraphError("candidate graph is not canonically rendered")
+    return graph
 
 
 def write_ifem_candidate_dependency_graph(

@@ -52,6 +52,23 @@ class SaturatingTransport:
             },
         }
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        return self.post_json(
+            url=url,
+            headers=headers,
+            payload=payload,
+            timeout_seconds=timeout_seconds,
+        )
+
 
 class FailingTransport:
     def __init__(self) -> None:
@@ -66,6 +83,18 @@ class FailingTransport:
         timeout_seconds: float,
     ) -> Mapping[str, object]:
         del url, headers, payload, timeout_seconds
+        self.calls.append(1)
+        raise RuntimeError("do-not-publish-private-provider-error")
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
         self.calls.append(1)
         raise RuntimeError("do-not-publish-private-provider-error")
 

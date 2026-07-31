@@ -71,8 +71,15 @@ The content-addressed
 [active-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) now records all
 three discovery lanes with source, rights, overlap, stop gates, and `local_only` model egress. The
 iFEM lane also freezes prerequisite denominator revision
-`ifem-coercive-prerequisites-r01-f9d1f2d4717a` before any coverage observation. Its mathlib census
-is still `not_started`. The exact 13-file source set has now been acquired and replayed as
+`ifem-coercive-prerequisites-r01-f9d1f2d4717a` before any coverage observation. Its frozen census
+manifest remains historically `not_started`: a generic-host WSL run under `/mnt/c` reached its
+600-second internal bound, emitted no observation/result, and cleaned its temporary query. The
+separate active five-profile plan
+`21bd18f7f8522470247852ef8281f1e4c7016f6415771e4fc0c05ab433247619` did build its receipt-bound
+child image and twice emitted byte-identical visibility artifacts, but it does not classify the
+21-node census. Its exact direct imports have measured closures from 3,666 to 4,199 modules; an
+exact root import is not evidence of a narrow transitive closure, and the closure-width acceptance
+policy remains pending independent review. The exact 13-file source set has now been acquired and replayed as
 `local_only`. Text-free indexes bind 10 notebooks and 161 cells plus three ATX-heading sections in
 `intro.md`; no mathematical claim span has been selected. A deterministic candidate-only
 MathematicalGraph projection now contains 25 nodes and 49 planning edges. Its source anchors are
@@ -80,7 +87,10 @@ index-position locators, not semantic mappings, and its edges are declared-unrev
 low-confidence overlap signals, not mathematical dependencies. It creates no FormalGraph,
 ExecutionGraph, contract, freeze, or Prover handoff. This closes source-byte acquisition, locator
 construction, and a graph skeleton only, not model egress, source interpretation, textbook
-calibration, pilot admission, or a coverage claim.
+calibration, pilot admission, a semantic classification, a positive P2-08 decision, or a coverage
+claim. The retained 2026-07-31 P2-08 v2 artifact is explicitly `incomplete`: it binds exact profile
+visibility plus the host-timeout record while leaving all 21 classifications and closure acceptance
+unresolved.
 
 ## Machine-first review policy
 
@@ -105,6 +115,14 @@ self-calibration harness and a deterministic 5/3/3 train/dev/held-out structural
 eleven canonical fixtures. Both use exact local fake providers and measure replayable structure,
 not mathematical equivalence. They provide no evidence about real models, textbook fidelity,
 semantic admission, Lean compilation, freeze, or Builder-to-Prover transfer.
+
+The separate iFEM structural-role lane tracks a source-text-free, source-metadata-bound 25-node
+candidate graph and sixteen project-synthetic comparison cases. D31 through D34 now bind those
+bytes, provider policy, response contract, private outputs, and public aggregation without reading
+the operator source cache at runtime. Its 256-token observation yielded 16 invalid responses; the
+512-token successor yielded four valid abstentions and twelve invalid responses. Because the
+fixture is public and lookup-recoverable, this is failure-accounting and replay evidence, not
+held-out benchmarking, semantic calibration, or pilot admission.
 
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |

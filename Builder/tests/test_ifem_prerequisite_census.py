@@ -150,6 +150,24 @@ def test_not_run_result_is_content_addressed_and_all_unknown() -> None:
     assert result.coverage_claim == "not_authorized"
 
 
+def test_not_run_result_records_host_query_timeout_without_claiming_execution() -> None:
+    plan = _plan()
+    result = not_run_result(
+        plan,
+        plan_path=DEFAULT_PLAN_PATH,
+        reason="host_query_timeout",
+    )
+
+    assert result.execution_state == "not_run"
+    assert result.query_source_sha256 is None
+    assert result.query_observation_sha256 is None
+    assert all(
+        item.evidence.classification == "unknown"
+        and item.evidence.explicit_unknown_reason == "host_query_timeout"
+        for item in result.node_results
+    )
+
+
 @pytest.mark.parametrize(
     ("payload", "message"),
     [

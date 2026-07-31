@@ -21,6 +21,7 @@ from pathlib import Path
 from typing import Final, Literal, Never, Protocol, Self
 
 from autolean_contracts import ContractModel, ModelWorkRoleV1, canonical_json_bytes
+from autolean_prover.providers import canonical_json_request_body
 from autolean_prover.providers.responses import HttpxResponsesTransport
 from pydantic import ConfigDict, Field, model_validator
 
@@ -57,6 +58,15 @@ class _RedactedArgumentParser(argparse.ArgumentParser):
 
 
 class _Transport(Protocol):
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]: ...
+
     def post_json(
         self,
         *,
@@ -82,11 +92,26 @@ class CountingTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Mapping[str, object]:
-        self.calls += 1
-        return self._delegate.post_json(
+        return self.post_json_bytes(
             url=url,
             headers=headers,
-            payload=payload,
+            body=canonical_json_request_body(payload).body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        self.calls += 1
+        return self._delegate.post_json_bytes(
+            url=url,
+            headers=headers,
+            body=body,
             timeout_seconds=timeout_seconds,
         )
 

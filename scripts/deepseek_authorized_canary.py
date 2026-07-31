@@ -94,6 +94,7 @@ from autolean_prover.providers import (
     ModelRequest,
     ProviderRegistry,
     StaticCapabilityProbe,
+    canonical_json_request_body,
 )
 from autolean_prover.providers.responses import HttpxResponsesTransport, ResponsesTransport
 
@@ -165,12 +166,27 @@ class SafeDiagnosticTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Mapping[str, object]:
+        return self.post_json_bytes(
+            url=url,
+            headers=headers,
+            body=canonical_json_request_body(payload).body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
         self._last_failure_class = None
         try:
-            response = self._delegate.post_json(
+            response = self._delegate.post_json_bytes(
                 url=url,
                 headers=headers,
-                payload=payload,
+                body=body,
                 timeout_seconds=timeout_seconds,
             )
         except httpx.HTTPStatusError as error:

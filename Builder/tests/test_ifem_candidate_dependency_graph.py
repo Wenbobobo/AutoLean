@@ -27,6 +27,11 @@ from scripts import ifem_candidate_dependency_graph as candidate_graph_script
 
 ROOT = Path(__file__).resolve().parents[2]
 _REVISION = "a" * 40
+_PUBLIC_GRAPH_PATH = (
+    ROOT / "Builder" / "pilots" / "discovery" / "ifem-candidate-dependency-graph.v1.json"
+)
+_PUBLIC_GRAPH_FILE_SHA256 = "e6442bfe1cc5305a3d26972c23c70a08029f8cde387dc1b58088d918632cd3af"
+_PUBLIC_GRAPH_CONTENT_SHA256 = "ba9b246805a4b94ea9f0b02898a772114e495fc8dc12c783b7388b519470a71d"
 
 
 @dataclass(frozen=True, slots=True)
@@ -535,6 +540,88 @@ def test_write_and_cli_keep_output_redacted(
     assert summary["candidate_edge_count"] == 49
     assert summary["contains_source_text"] is False
     assert summary["prover_handoff_allowed"] is False
+
+
+def _load_public_graph(
+    path: Path = _PUBLIC_GRAPH_PATH,
+    *,
+    expected_file_sha256: str = _PUBLIC_GRAPH_FILE_SHA256,
+    expected_content_sha256: str = _PUBLIC_GRAPH_CONTENT_SHA256,
+) -> candidate_graph.IFEMCandidateDependencyGraphV1:
+    return candidate_graph.load_ifem_candidate_dependency_graph(
+        path,
+        expected_file_sha256=expected_file_sha256,
+        expected_content_sha256=expected_content_sha256,
+    )
+
+
+def test_public_graph_loader_binds_exact_canonical_bytes() -> None:
+    graph = _load_public_graph()
+
+    assert hashlib.sha256(_PUBLIC_GRAPH_PATH.read_bytes()).hexdigest() == (
+        _PUBLIC_GRAPH_FILE_SHA256
+    )
+    assert graph.content_sha256 == _PUBLIC_GRAPH_CONTENT_SHA256
+    assert len(graph.candidate_nodes) == 25
+    assert len(graph.candidate_edges) == 49
+    assert not graph.contains_source_text
+    assert not graph.contains_model_input
+    assert not graph.authority.prover_handoff_allowed
+
+
+def test_public_graph_loader_rejects_file_and_content_hash_drift() -> None:
+    with pytest.raises(
+        candidate_graph.IFEMCandidateDependencyGraphError, match="file hash drifted"
+    ):
+        _load_public_graph(expected_file_sha256="0" * 64)
+    with pytest.raises(
+        candidate_graph.IFEMCandidateDependencyGraphError,
+        match="content hash drifted",
+    ):
+        _load_public_graph(expected_content_sha256="0" * 64)
+
+
+def test_public_graph_loader_rejects_duplicate_keys_and_noncanonical_bytes(
+    tmp_path: Path,
+) -> None:
+    raw = _PUBLIC_GRAPH_PATH.read_bytes()
+    duplicate = (
+        raw.removesuffix(b"\n")[:-1]
+        + b',"schema_version":"autolean.ifem-candidate-dependency-graph.v1"}'
+    )
+    duplicate_path = tmp_path / "duplicate.json"
+    duplicate_path.write_bytes(duplicate)
+    with pytest.raises(candidate_graph.IFEMCandidateDependencyGraphError, match="duplicate JSON"):
+        _load_public_graph(
+            duplicate_path,
+            expected_file_sha256=hashlib.sha256(duplicate).hexdigest(),
+        )
+
+    noncanonical = raw + b" "
+    noncanonical_path = tmp_path / "noncanonical.json"
+    noncanonical_path.write_bytes(noncanonical)
+    with pytest.raises(
+        candidate_graph.IFEMCandidateDependencyGraphError,
+        match="not canonically rendered",
+    ):
+        _load_public_graph(
+            noncanonical_path,
+            expected_file_sha256=hashlib.sha256(noncanonical).hexdigest(),
+        )
+
+
+def test_public_graph_loader_rejects_symlink_when_supported(tmp_path: Path) -> None:
+    link = tmp_path / "graph-link.json"
+    try:
+        link.symlink_to(_PUBLIC_GRAPH_PATH)
+    except (NotImplementedError, OSError) as error:
+        pytest.skip(f"symbolic links are unavailable on this host: {error}")
+
+    with pytest.raises(
+        candidate_graph.IFEMCandidateDependencyGraphError,
+        match="unlinked regular file",
+    ):
+        _load_public_graph(link)
 
 
 def test_module_has_no_prover_or_control_plane_runtime_import() -> None:
