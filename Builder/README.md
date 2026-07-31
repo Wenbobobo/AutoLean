@@ -101,6 +101,19 @@ and refuses classification, freeze, or Prover handoff. Its 3/3/3 labels and stab
 are publicly replayable; it explicitly claims no private held-out isolation and must not be used
 as model or textbook-calibration evidence.
 
+The follow-on [operator-private seed V2](../docs/research/ifem-source-free-private-seed-v2.md)
+can persist a fresh, repository-external nine-case manifest before returning a redacted public
+commitment. Its public fields distinguish the default CSPRNG code path from injected test entropy,
+but explicitly set entropy provenance, unpredictability, and persistence attestation to false.
+Materialization still occurs in one process, `live_model_eligible=false`, and neither the private
+3/3/3 labels nor the commitment authorize a model call, held-out claim, freeze, or Prover handoff.
+
+The [private stage ledger V1](../docs/research/ifem-source-free-stage-ledger-v1.md) then loads that
+persisted seed through exact queue replay and fixes 27 ordered, write-once coordinates. Its
+counting-fake tests enforce predecessor blocking, explicit-quiescence reconciliation, and at most
+one executor callback per coordinate. It does not perform or authorize a provider dispatch; a
+separate ModelWork/CAS/completion sidecar remains required before any live model use.
+
 When a round records a `partial_passed_with_gap` Library preselection spike, it references the
 tracked public-safe packet and compile receipt by repository-relative path and content digest.
 Loading that round revalidates the exact Library v2 build-input closure, pinned environment,

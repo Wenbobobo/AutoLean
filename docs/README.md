@@ -123,7 +123,15 @@ runner reports success.
      The source-free [iFEM next-case intent queue](research/ifem-next-calibration-case-intents-v1.md)
      separately projects the D35 risk route into 21 stable `not_authored` work intents: 10 P1, 2 P2,
      and 9 P3. It contains no source, Lean, oracle, provider, or private payload and is scheduling
-     metadata only, not a set of calibration cases.
+     metadata only, not a set of calibration cases. The nine P3 intents have a
+     [fake-first authoring harness](research/ifem-source-free-case-authoring-v1.md) and a separate
+     [operator-private seed V2](research/ifem-source-free-private-seed-v2.md). V2 fixes private
+     project-synthetic case bytes before public projection, but explicitly supplies no verified
+     entropy provenance, unpredictability, storage attestation, held-out isolation, live-model
+     eligibility, semantic authority, freeze, or Prover handoff. The subsequent
+     [private 27-stage ledger V1](research/ifem-source-free-stage-ledger-v1.md) adds persisted-seed
+     replay, ordered role dependencies, write-once dispatch accounting, and conservative recovery.
+     Its executor remains counting-fake-only; it is not the ModelWork/provider execution sidecar.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused

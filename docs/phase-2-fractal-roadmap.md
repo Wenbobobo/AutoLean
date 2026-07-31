@@ -155,6 +155,19 @@ forces same-agent output to `abstain`. The case linkage is publicly replayable a
 tamper-regression mechanics. It is not a private held-out set, real model calibration, iFEM
 statement conversion, or machine-advisory admission.
 
+The next narrow layer is the
+[operator-private seed V2 protocol](research/ifem-source-free-private-seed-v2.md). Its supported
+store path fixes one repository-external nine-case manifest before public projection and recovers
+the same bytes without regenerating entropy. The commitment does not elevate a self-declared
+CSPRNG path label into verified provenance or unpredictability, and it explicitly lacks storage
+attestation, held-out worker isolation, live-model eligibility, semantic authority, freeze, and
+Prover handoff. The follow-on
+[private 27-stage ledger V1](research/ifem-source-free-stage-ledger-v1.md) now loads only the
+persisted seed plus exact queue replay, enforces ordered role predecessors, and records at most one
+counting-executor dispatch per coordinate with explicit-quiescence recovery. It still performs no
+provider dispatch and attests no completion verification; the ModelWork/authorization/CAS sidecar
+remains required before any live model use.
+
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |
 | Pilot admission | One source/formal boundary selected or explicit backup selected | Candidate audits, textbook alignment, source-rights checks |
