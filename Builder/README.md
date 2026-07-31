@@ -94,6 +94,13 @@ The fixture permits redistribution only of its exact bound bytes, denies model e
 production ingestion, rights clearance, promotion, freeze, and Prover handoff to `false`. It does
 not satisfy the roadmap's rights-cleared `local_calibration` state.
 
+The [iFEM source-free case-authoring V1](../docs/research/ifem-source-free-case-authoring-v1.md)
+is a later but still non-authoritative plumbing check. It admits only the nine P3 scheduling
+intents, executes 27 strict finite fake role stages, binds its exact run in a public aggregate,
+and refuses classification, freeze, or Prover handoff. Its 3/3/3 labels and stable case handles
+are publicly replayable; it explicitly claims no private held-out isolation and must not be used
+as model or textbook-calibration evidence.
+
 When a round records a `partial_passed_with_gap` Library preselection spike, it references the
 tracked public-safe packet and compile receipt by repository-relative path and content digest.
 Loading that round revalidates the exact Library v2 build-input closure, pinned environment,

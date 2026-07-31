@@ -146,6 +146,15 @@ nodes as `unknown` and `not_authored`, ordered as 10 P1, 2 P2, and 9 P3 work int
 bounded scheduling interface for later private case authoring; it does not contain or authorize
 source text, Lean statements, evaluator oracles, model work, statement freeze, or Prover handoff.
 
+Its nine P3 intents now have a separate
+[fake-first authoring harness](research/ifem-source-free-case-authoring-v1.md). The retained public
+plan routes them through a deterministic 3/3/3 topology and exactly 27 finite
+formalizer/reviewer/supervisor calls; the public report binds the exact in-memory run hash and
+forces same-agent output to `abstain`. The case linkage is publicly replayable and
+`heldout_isolation_claimed=false`, so this closes only role-projection, parsing, call-count, and
+tamper-regression mechanics. It is not a private held-out set, real model calibration, iFEM
+statement conversion, or machine-advisory admission.
+
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |
 | Pilot admission | One source/formal boundary selected or explicit backup selected | Candidate audits, textbook alignment, source-rights checks |
