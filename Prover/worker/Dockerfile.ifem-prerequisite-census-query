@@ -1,0 +1,97 @@
+FROM sha256:6c54c3600b2572ddcabae024a3a8b6c533c3defa6d4bda31c90408cb4c61f0ab
+
+ARG AUTOLEAN_CENSUS_PLAN_SHA256
+ARG AUTOLEAN_CENSUS_DOCKERFILE_SHA256
+ARG AUTOLEAN_CENSUS_HELPER_SHA256
+ARG AUTOLEAN_CENSUS_WRAPPER_SHA256
+ARG AUTOLEAN_CENSUS_LEAN_TOOLCHAIN
+ARG AUTOLEAN_CENSUS_MATHLIB_REVISION
+ARG AUTOLEAN_CENSUS_LAKE_MANIFEST_SHA256
+ARG AUTOLEAN_CENSUS_BASE_IMAGE_ID
+
+LABEL org.autolean.ifem.census.protocol="autolean.ifem-prerequisite-census-query.v1" \
+      org.autolean.ifem.census.plan-sha256="${AUTOLEAN_CENSUS_PLAN_SHA256}" \
+      org.autolean.ifem.census.dockerfile-sha256="${AUTOLEAN_CENSUS_DOCKERFILE_SHA256}" \
+      org.autolean.ifem.census.helper-sha256="${AUTOLEAN_CENSUS_HELPER_SHA256}" \
+      org.autolean.ifem.census.wrapper-sha256="${AUTOLEAN_CENSUS_WRAPPER_SHA256}" \
+      org.autolean.ifem.census.lean-toolchain="${AUTOLEAN_CENSUS_LEAN_TOOLCHAIN}" \
+      org.autolean.ifem.census.mathlib-revision="${AUTOLEAN_CENSUS_MATHLIB_REVISION}" \
+      org.autolean.ifem.census.lake-manifest-sha256="${AUTOLEAN_CENSUS_LAKE_MANIFEST_SHA256}" \
+      org.autolean.ifem.census.base-image-id="${AUTOLEAN_CENSUS_BASE_IMAGE_ID}"
+
+USER root
+WORKDIR /opt/mathlib
+
+COPY AutoleanIFEMPrerequisiteCensusQuery.lean \
+  /opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean
+COPY autolean-ifem-prerequisite-census-query \
+  /opt/autolean/bin/autolean-ifem-prerequisite-census-query
+
+RUN set -eu; \
+    case "$AUTOLEAN_CENSUS_PLAN_SHA256:$AUTOLEAN_CENSUS_DOCKERFILE_SHA256:$AUTOLEAN_CENSUS_HELPER_SHA256:$AUTOLEAN_CENSUS_WRAPPER_SHA256:$AUTOLEAN_CENSUS_LAKE_MANIFEST_SHA256" in \
+      *[!0-9a-f:]*|*:|:*|*::* ) exit 2 ;; \
+    esac; \
+    case "$AUTOLEAN_CENSUS_BASE_IMAGE_ID" in sha256:*) ;; *) exit 2 ;; esac; \
+    base_image_hex=${AUTOLEAN_CENSUS_BASE_IMAGE_ID#sha256:}; \
+    case "$base_image_hex" in *[!0-9a-f]*) exit 2 ;; esac; \
+    test "$(printf '%s' "$base_image_hex" | wc -c)" -eq 64; \
+    case "$AUTOLEAN_CENSUS_MATHLIB_REVISION" in *[!0-9a-f]*|?????????????????????????????????????????*) exit 2 ;; esac; \
+    test "$(printf '%s' "$AUTOLEAN_CENSUS_MATHLIB_REVISION" | wc -c)" -eq 40; \
+    test "$(cat /opt/mathlib/lean-toolchain)" = "$AUTOLEAN_CENSUS_LEAN_TOOLCHAIN"; \
+    printf '%s  %s\n' "$AUTOLEAN_CENSUS_HELPER_SHA256" \
+      /opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean \
+      | sha256sum --check --strict --status -; \
+    printf '%s  %s\n' "$AUTOLEAN_CENSUS_WRAPPER_SHA256" \
+      /opt/autolean/bin/autolean-ifem-prerequisite-census-query \
+      | sha256sum --check --strict --status -; \
+    mkdir -p /opt/autolean-census-build; \
+    cp /opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean \
+      /opt/autolean-census-build/AutoleanIFEMPrerequisiteCensusQuery.lean; \
+    cp /opt/mathlib/lean-toolchain /opt/autolean-census-build/lean-toolchain; \
+    printf '%s\n' \
+      'import Lake' \
+      'open Lake DSL' \
+      'package autoleanIfemPrerequisiteCensus' \
+      'require mathlib from "/opt/mathlib"' \
+      '@[default_target]' \
+      'lean_exe autoleanIfemPrerequisiteCensusQuery where' \
+      '  root := `AutoleanIFEMPrerequisiteCensusQuery' \
+      '  supportInterpreter := true' \
+      > /opt/autolean-census-build/lakefile.lean; \
+    cd /opt/autolean-census-build; \
+    MATHLIB_NO_CACHE_ON_UPDATE=1 lake build autoleanIfemPrerequisiteCensusQuery; \
+    cp .lake/build/bin/autoleanIfemPrerequisiteCensusQuery \
+      /opt/autolean/bin/autolean-ifem-prerequisite-census-query-lean; \
+    cd /opt/mathlib; \
+    printf '%s\n' \
+      "plan_content_sha256=$AUTOLEAN_CENSUS_PLAN_SHA256" \
+      "lean_toolchain=$AUTOLEAN_CENSUS_LEAN_TOOLCHAIN" \
+      "mathlib_revision=$AUTOLEAN_CENSUS_MATHLIB_REVISION" \
+      "lake_manifest_sha256=$AUTOLEAN_CENSUS_LAKE_MANIFEST_SHA256" \
+      "dockerfile_sha256=$AUTOLEAN_CENSUS_DOCKERFILE_SHA256" \
+      "helper_sha256=$AUTOLEAN_CENSUS_HELPER_SHA256" \
+      "wrapper_sha256=$AUTOLEAN_CENSUS_WRAPPER_SHA256" \
+      "base_image_id=$AUTOLEAN_CENSUS_BASE_IMAGE_ID" \
+      > /opt/autolean/attestations/ifem-prerequisite-census-worker.v1; \
+    sha256sum \
+      /opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean \
+      /opt/autolean-census-build/.lake/build/lib/lean/AutoleanIFEMPrerequisiteCensusQuery.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/LaxMilgram.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Bilinear.olean \
+      /opt/autolean/bin/autolean-ifem-prerequisite-census-query-lean \
+      /opt/autolean/attestations/ifem-prerequisite-census-worker.v1 \
+      | LC_ALL=C sort \
+      > /opt/autolean/attestations/ifem-prerequisite-census-built-artifacts.sha256; \
+    sha256sum --check --strict --status \
+      /opt/autolean/attestations/ifem-prerequisite-census-built-artifacts.sha256; \
+    chmod 0444 \
+      /opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean \
+      /opt/autolean-census-build/.lake/build/lib/lean/AutoleanIFEMPrerequisiteCensusQuery.olean \
+      /opt/autolean/attestations/ifem-prerequisite-census-worker.v1 \
+      /opt/autolean/attestations/ifem-prerequisite-census-built-artifacts.sha256; \
+    chmod 0555 \
+      /opt/autolean/bin/autolean-ifem-prerequisite-census-query \
+      /opt/autolean/bin/autolean-ifem-prerequisite-census-query-lean
+
+USER 65532:65532
+WORKDIR /work

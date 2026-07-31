@@ -1,0 +1,87 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-ifem-prerequisite-census-query: $1" >&2
+  exit 2
+}
+
+[ "$#" -eq 12 ] || fail "expected the fixed census argument shape"
+[ "$1" = "--protocol" ] || fail "missing protocol argument"
+[ "$2" = "autolean.ifem-prerequisite-census-query.v1" ] || fail "unsupported protocol"
+[ "$3" = "--plan-content-sha256" ] || fail "missing plan identity"
+plan_content_sha256=$4
+[ "$5" = "--lean-toolchain" ] || fail "missing Lean toolchain identity"
+lean_toolchain=$6
+[ "$7" = "--mathlib-revision" ] || fail "missing Mathlib revision identity"
+mathlib_revision=$8
+[ "$9" = "--lake-manifest-sha256" ] || fail "missing Lake manifest identity"
+lake_manifest_sha256=${10}
+[ "${11}" = "--queries-json" ] || fail "missing census query payload"
+queries_json=${12}
+
+identity=/opt/autolean/attestations/ifem-prerequisite-census-worker.v1
+manifest=/opt/autolean/attestations/ifem-prerequisite-census-built-artifacts.sha256
+helper=/opt/mathlib/AutoLean/AutoleanIFEMPrerequisiteCensusQuery.lean
+wrapper=/opt/autolean/bin/autolean-ifem-prerequisite-census-query
+binary=/opt/autolean/bin/autolean-ifem-prerequisite-census-query-lean
+
+for artifact in "$identity" "$manifest" "$helper" "$wrapper" "$binary"; do
+  [ -f "$artifact" ] && [ ! -L "$artifact" ] || fail "an image-owned artifact is unavailable"
+done
+
+identity_value() {
+  key=$1
+  value=$(LC_ALL=C awk -F= -v expected="$key" '
+    $1 == expected { count += 1; value = substr($0, index($0, "=") + 1) }
+    END { if (count != 1 || value == "") exit 1; print value }
+  ' "$identity") || fail "image identity is malformed"
+  printf '%s' "$value"
+}
+
+[ "$plan_content_sha256" = "$(identity_value plan_content_sha256)" ] || fail "plan identity drifted"
+[ "$lean_toolchain" = "$(identity_value lean_toolchain)" ] || fail "Lean toolchain drifted"
+[ "$mathlib_revision" = "$(identity_value mathlib_revision)" ] || fail "Mathlib revision drifted"
+[ "$lake_manifest_sha256" = "$(identity_value lake_manifest_sha256)" ] || fail "Lake manifest drifted"
+[ "$(sha256sum "$helper" | awk '{print $1}')" = "$(identity_value helper_sha256)" ] ||
+  fail "helper source hash drifted"
+[ "$(sha256sum "$wrapper" | awk '{print $1}')" = "$(identity_value wrapper_sha256)" ] ||
+  fail "wrapper hash drifted"
+sha256sum --check --strict --status "$manifest" || fail "built artifact manifest does not match"
+
+[ -n "$queries_json" ] && [ "${#queries_json}" -le 1048576 ] || fail "query payload is invalid"
+case "$queries_json" in
+  *"
+"*|*""*) fail "query payload must be one line" ;;
+esac
+
+lean_path=$(cat /opt/autolean/environment/lean-path)
+[ -n "$lean_path" ] || fail "image-owned LEAN_PATH is unavailable"
+
+scratch=$(mktemp -d /tmp/autolean-ifem-prerequisite-census.XXXXXX)
+cleanup() {
+  rm -rf "$scratch"
+}
+trap cleanup EXIT HUP INT TERM
+
+if ! LEAN_PATH="$lean_path" "$binary" \
+  "$plan_content_sha256" "$lean_toolchain" "$mathlib_revision" \
+  "$lake_manifest_sha256" "$queries_json" \
+  >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+then
+  sed -n '1,200p' "$scratch/query.stderr" >&2
+  exit 21
+fi
+[ ! -s "$scratch/query.stderr" ] || {
+  sed -n '1,200p' "$scratch/query.stderr" >&2
+  fail "query helper emitted diagnostics on success"
+}
+
+result_lines=$(wc -l <"$scratch/query.stdout")
+[ "$result_lines" -eq 1 ] || fail "query helper did not emit exactly one record"
+record=$(cat "$scratch/query.stdout")
+case "$record" in
+  \{*\}) ;;
+  *) fail "query helper record is not one JSON object" ;;
+esac
+printf '%s\n' "$record"

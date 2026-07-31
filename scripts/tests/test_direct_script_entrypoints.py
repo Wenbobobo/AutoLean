@@ -14,7 +14,10 @@ _REPOSITORY_ROOT = Path(__file__).resolve().parents[2]
 _SCRIPTS = (
     "authoritative_preflight.py",
     "fate_execution_preflight.py",
+    "ifem_calibration_risk_routing.py",
+    "ifem_classification_triage.py",
     "ifem_pilot_readiness.py",
+    "ifem_prerequisite_census_oci.py",
     "ifem_structural_role_corpus.py",
     "real_lean_module_build_preflight.py",
 )

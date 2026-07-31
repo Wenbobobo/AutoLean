@@ -547,6 +547,125 @@ def validate_plan_bindings(
         raise IFEMPrerequisiteCensusError("Library environment differs from the census plan")
 
 
+def _require_real_directory(path: Path, *, label: str) -> None:
+    try:
+        path.lstat()
+    except OSError as error:
+        raise IFEMPrerequisiteCensusError(f"{label} is missing") from error
+    if path.is_symlink() or not path.is_dir():
+        raise IFEMPrerequisiteCensusError(f"{label} must be a real directory")
+
+
+def _require_real_file(path: Path, *, label: str) -> None:
+    try:
+        metadata = path.lstat()
+    except OSError as error:
+        raise IFEMPrerequisiteCensusError(f"{label} is missing") from error
+    if path.is_symlink() or not path.is_file() or metadata.st_size <= 0:
+        raise IFEMPrerequisiteCensusError(f"{label} must be a real non-empty file")
+
+
+def _git_probe_environment() -> dict[str, str]:
+    environment = os.environ.copy()
+    environment["GIT_CONFIG_NOSYSTEM"] = "1"
+    environment["GIT_CONFIG_GLOBAL"] = os.devnull
+    environment["GIT_TERMINAL_PROMPT"] = "0"
+    return environment
+
+
+def _host_query_environment() -> dict[str, str]:
+    """Disable Git-backed dependency network access in the diagnostic host runner."""
+
+    environment = _git_probe_environment()
+    environment.update(
+        {
+            "GIT_CONFIG_COUNT": "2",
+            "GIT_CONFIG_KEY_0": "url.file:///__autolean_network_disabled__/.insteadOf",
+            "GIT_CONFIG_VALUE_0": "https://",
+            "GIT_CONFIG_KEY_1": "protocol.file.allow",
+            "GIT_CONFIG_VALUE_1": "never",
+        }
+    )
+    return environment
+
+
+def validate_local_library_dependencies(
+    plan: IFEMPrerequisiteCensusPlanV1,
+    *,
+    library_root: Path = DEFAULT_LIBRARY_ROOT,
+) -> None:
+    """Fail before Lake when a locked local Git package is absent or incomplete.
+
+    ``lake env`` may otherwise populate ``.lake/packages`` from the network.  The
+    host runner is diagnostic only, but it still must not turn an observation
+    command into an implicit dependency installer.
+    """
+
+    manifest, _ = _read_json(library_root / "lake-manifest.json", label="Library lake manifest")
+    packages = manifest.get("packages")
+    if not isinstance(packages, list) or not packages:
+        raise IFEMPrerequisiteCensusError("Library lake manifest has no package list")
+    packages_root = library_root / ".lake" / "packages"
+    _require_real_directory(packages_root, label="Library local package directory")
+    seen: set[str] = set()
+    mathlib_root: Path | None = None
+    for index, raw_package in enumerate(packages):
+        if not isinstance(raw_package, dict):
+            raise IFEMPrerequisiteCensusError("Library package record is not an object")
+        name = raw_package.get("name")
+        revision = raw_package.get("rev")
+        config_file = raw_package.get("configFile")
+        manifest_file = raw_package.get("manifestFile")
+        if (
+            raw_package.get("type") != "git"
+            or not isinstance(name, str)
+            or re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]{0,95}", name) is None
+            or name.casefold() in seen
+            or not isinstance(revision, str)
+            or re.fullmatch(_REVISION, revision) is None
+            or not isinstance(config_file, str)
+            or Path(config_file).name != config_file
+            or not isinstance(manifest_file, str)
+            or Path(manifest_file).name != manifest_file
+        ):
+            raise IFEMPrerequisiteCensusError(
+                f"Library package record {index} is not a bounded Git dependency"
+            )
+        seen.add(name.casefold())
+        package_root = packages_root / name
+        _require_real_directory(package_root, label=f"Library package {name}")
+        _require_real_directory(package_root / ".git", label=f"Library package {name} Git metadata")
+        _require_real_file(package_root / config_file, label=f"Library package {name} config")
+        _require_real_file(package_root / manifest_file, label=f"Library package {name} manifest")
+        try:
+            completed = subprocess.run(
+                ("git", "-C", str(package_root), "rev-parse", "--verify", "HEAD^{commit}"),
+                check=False,
+                capture_output=True,
+                text=True,
+                encoding="ascii",
+                errors="strict",
+                stdin=subprocess.DEVNULL,
+                timeout=15,
+                env=_git_probe_environment(),
+            )
+        except (OSError, subprocess.SubprocessError, UnicodeError) as error:
+            raise IFEMPrerequisiteCensusError(
+                f"cannot verify Library package {name} revision"
+            ) from error
+        if completed.returncode != 0 or completed.stdout.strip() != revision:
+            raise IFEMPrerequisiteCensusError(
+                f"Library package {name} does not match its locked revision"
+            )
+        if name == "mathlib":
+            mathlib_root = package_root
+    if mathlib_root is None:
+        raise IFEMPrerequisiteCensusError("Library local packages omit mathlib")
+    for module in plan.environment.direct_imports:
+        source = mathlib_root.joinpath(*module.split(".")).with_suffix(".lean")
+        _require_real_file(source, label=f"Mathlib direct import {module}")
+
+
 def _lean_string(value: str) -> str:
     if not value.isascii() or any(character in value for character in ("\x00", "\n", "\r")):
         raise IFEMPrerequisiteCensusError("Lean query strings must be single-line ASCII")
@@ -930,6 +1049,7 @@ def run_query(
         raise IFEMPrerequisiteCensusError(
             "the pinned query must run from the repository's POSIX/WSL Library environment"
         )
+    validate_local_library_dependencies(plan, library_root=library_root)
     source = render_lean_query(plan)
     source_bytes = source.encode("utf-8")
     source_sha256 = hashlib.sha256(source_bytes).hexdigest()
@@ -950,6 +1070,7 @@ def run_query(
                 encoding="utf-8",
                 errors="strict",
                 timeout=600,
+                env=_host_query_environment(),
             )
         except (OSError, subprocess.SubprocessError, UnicodeError) as error:
             raise IFEMPrerequisiteCensusError("pinned Lean query execution failed") from error

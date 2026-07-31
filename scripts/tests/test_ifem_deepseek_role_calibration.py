@@ -1,4 +1,4 @@
-"""Focused D32 operator-runner checks; all provider calls use an injected recording transport."""
+"""Focused iFEM operator-runner checks; all provider calls use an injected recording transport."""
 
 from __future__ import annotations
 
@@ -379,6 +379,229 @@ def test_operator_material_rejects_foreign_files(tmp_path: Path) -> None:
         runner._load_or_initialize_operator_material(root)
 
 
+def test_operator_secret_file_accepts_an_external_physical_regular_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkout = (tmp_path / "checkout").resolve()
+    external = (tmp_path / "external").resolve()
+    checkout.mkdir()
+    external.mkdir()
+    secret_file = external / "api-key.txt"
+    secret_file.write_text(_API_KEY, encoding="ascii")
+    monkeypatch.setattr(runner, "_REPOSITORY_ROOT", checkout)
+
+    assert runner._read_operator_secret_file(secret_file, minimum_bytes=1) == _API_KEY
+
+
+def test_operator_api_key_file_accepts_one_assignment_with_nonsecret_endpoint_metadata(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkout = (tmp_path / "checkout").resolve()
+    external = (tmp_path / "external").resolve()
+    checkout.mkdir()
+    external.mkdir()
+    secret_file = external / "api-key.txt"
+    secret_file.write_text(
+        f"BASE_URL = https://api.deepseek.com\r\nAPI_KEY = {_API_KEY}",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "_REPOSITORY_ROOT", checkout)
+
+    assert runner._read_operator_api_key_file(secret_file) == _API_KEY
+
+
+def test_operator_api_key_file_rejects_a_second_sensitive_assignment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkout = (tmp_path / "checkout").resolve()
+    external = (tmp_path / "external").resolve()
+    checkout.mkdir()
+    external.mkdir()
+    secret_file = external / "api-key.txt"
+    secret_file.write_text(
+        f"API_KEY = {_API_KEY}\nPASSWORD = unrelated-sensitive-value",
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(runner, "_REPOSITORY_ROOT", checkout)
+
+    with pytest.raises(runner.OperatorSecretUnavailable, match="contains another secret"):
+        runner._read_operator_api_key_file(secret_file)
+
+
+def test_cli_rejects_checkout_secret_file_before_read_material_roots_or_transport(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    checkout = (tmp_path / "checkout").resolve()
+    external = (tmp_path / "external").resolve()
+    checkout.mkdir()
+    external.mkdir()
+    checkout_secret = checkout / "llm.txt"
+    checkout_secret.write_text(_API_KEY, encoding="ascii")
+    state_root = external / "state"
+    private_root = external / "private"
+    operator_material_root = external / "operator-material"
+    read_attempts: list[Path] = []
+    material_attempts: list[Path] = []
+    transport_instances: list[object] = []
+
+    def unexpected_secret_read(path: Path) -> str:
+        read_attempts.append(path)
+        raise AssertionError("checkout-internal secret bytes must not be read")
+
+    def unexpected_material_initialization(path: Path) -> tuple[str, str]:
+        material_attempts.append(path)
+        raise AssertionError("operator material must not be initialized")
+
+    class UnexpectedTransport:
+        def __init__(self) -> None:
+            transport_instances.append(self)
+
+    monkeypatch.setattr(runner, "_REPOSITORY_ROOT", checkout)
+    monkeypatch.setattr(runner, "_read_operator_api_key_file", unexpected_secret_read)
+    monkeypatch.setattr(
+        runner,
+        "_load_or_initialize_operator_material",
+        unexpected_material_initialization,
+    )
+    monkeypatch.setattr(runner, "HttpxResponsesTransport", UnexpectedTransport)
+
+    assert (
+        runner.main(
+            [
+                "run",
+                "--operator-approved",
+                "--protocol",
+                "d35-v3",
+                "--state-root",
+                str(state_root),
+                "--private-root",
+                str(private_root),
+                "--api-key-file",
+                str(checkout_secret),
+                "--operator-material-root",
+                str(operator_material_root),
+            ]
+        )
+        == 2
+    )
+    report = json.loads(capsys.readouterr().out)
+
+    assert report["status"] == "execution_refused"
+    assert report["failure_class"] == "secret_reference_unavailable"
+    assert report["protocol_id"] == "d35-v3"
+    assert read_attempts == []
+    assert material_attempts == []
+    assert transport_instances == []
+    assert not state_root.exists()
+    assert not private_root.exists()
+    assert not operator_material_root.exists()
+
+
+@pytest.mark.parametrize("mode", ("plan", "preflight"))
+def test_cli_rejects_secret_file_options_outside_run_before_read_or_write(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    mode: str,
+) -> None:
+    external = (tmp_path / "external").resolve()
+    external.mkdir()
+    secret_file = external / "api-key.txt"
+    secret_file.write_text(_API_KEY, encoding="ascii")
+    state_root = external / "state"
+    private_root = external / "private"
+    operator_material_root = external / "operator-material"
+    read_attempts: list[Path] = []
+    material_attempts: list[Path] = []
+    transport_instances: list[object] = []
+
+    def unexpected_secret_read(path: Path) -> str:
+        read_attempts.append(path)
+        raise AssertionError("plan and preflight must not read secret bytes")
+
+    def unexpected_material_initialization(path: Path) -> tuple[str, str]:
+        material_attempts.append(path)
+        raise AssertionError("plan and preflight must not initialize operator material")
+
+    class UnexpectedTransport:
+        def __init__(self) -> None:
+            transport_instances.append(self)
+
+    monkeypatch.setattr(runner, "_read_operator_api_key_file", unexpected_secret_read)
+    monkeypatch.setattr(
+        runner,
+        "_load_or_initialize_operator_material",
+        unexpected_material_initialization,
+    )
+    monkeypatch.setattr(runner, "HttpxResponsesTransport", UnexpectedTransport)
+
+    assert (
+        runner.main(
+            [
+                mode,
+                "--protocol",
+                "d35-v3",
+                "--state-root",
+                str(state_root),
+                "--private-root",
+                str(private_root),
+                "--api-key-file",
+                str(secret_file),
+                "--operator-material-root",
+                str(operator_material_root),
+            ]
+        )
+        == 2
+    )
+    report = json.loads(capsys.readouterr().out)
+
+    assert report["status"] == "execution_refused"
+    assert report["failure_class"] == "secret_reference_unavailable"
+    assert read_attempts == []
+    assert material_attempts == []
+    assert transport_instances == []
+    assert not state_root.exists()
+    assert not private_root.exists()
+    assert not operator_material_root.exists()
+
+
+def test_operator_secret_file_rejects_parent_link_before_content_read(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    checkout = (tmp_path / "checkout").resolve()
+    physical_parent = (tmp_path / "physical").resolve()
+    linked_parent = tmp_path / "linked"
+    checkout.mkdir()
+    physical_parent.mkdir()
+    (physical_parent / "api-key.txt").write_text(_API_KEY, encoding="ascii")
+    read_attempts: list[Path] = []
+
+    def unexpected_physical_read(path: Path, **_kwargs: object) -> bytes:
+        read_attempts.append(path)
+        raise AssertionError("linked secret path must fail before content read")
+
+    try:
+        _create_directory_link(linked_parent, physical_parent)
+        monkeypatch.setattr(runner, "_REPOSITORY_ROOT", checkout)
+        monkeypatch.setattr(runner, "_read_physical_regular_file", unexpected_physical_read)
+
+        with pytest.raises(runner.OperatorSecretUnavailable, match="external physical"):
+            runner._read_operator_secret_file(
+                linked_parent / "api-key.txt",
+                minimum_bytes=1,
+            )
+    finally:
+        _remove_directory_link(linked_parent)
+
+    assert read_attempts == []
+
+
 def test_legacy_d32_v1_root_pair_remains_readable_and_rebuildable(tmp_path: Path) -> None:
     config = _config(tmp_path, "run", approved=True)
     plan = runner.build_ifem_deepseek_role_calibration_plan()
@@ -497,9 +720,69 @@ def test_d34_v2_prepares_a_512_token_selected_option_only_contract() -> None:
     assert transport.calls == []
 
 
+def test_d35_v3_is_a_1024_token_d34_successor_without_other_generation_changes(
+    tmp_path: Path,
+) -> None:
+    d34_plan = runner.build_ifem_deepseek_role_calibration_plan(protocol_id="d34-v2")
+    d35_plan = runner.build_ifem_deepseek_role_calibration_plan(protocol_id="d35-v3")
+    transport = RecordingTransport()
+    inputs = runner._prepare_run_inputs(d35_plan, environment=_environment(), transport=transport)
+
+    assert d35_plan.protocol.protocol_id == runner.IFEMDeepSeekRoleCalibrationProtocolIdV1.D35_V3
+    assert d35_plan.profile.profile_id == "deepseek-v4-pro-ifem-role-d35"
+    assert d35_plan.profile.model_id == d34_plan.profile.model_id == "deepseek-v4-pro"
+    assert d35_plan.graph == d34_plan.graph
+    assert d35_plan.corpus == d34_plan.corpus
+    assert d35_plan.case_count == d34_plan.case_count == 16
+    assert d35_plan.role_counts == d34_plan.role_counts
+    assert (
+        d35_plan.request_policy.max_input_tokens == d34_plan.request_policy.max_input_tokens == 2048
+    )
+    assert (
+        d35_plan.request_policy.reasoning_effort
+        == d34_plan.request_policy.reasoning_effort
+        == "high"
+    )
+    assert d35_plan.request_policy.max_output_tokens == 1024
+    assert d34_plan.request_policy.max_output_tokens == 512
+    assert d35_plan.response_contract is (
+        IFEMSyntheticRoleResponseContractV1.SELECTED_OPTION_ONLY_V2
+    )
+    assert d35_plan.response_contract is d34_plan.response_contract
+
+    d34_profile = json.loads(d34_plan.profile_bytes)
+    d35_profile = json.loads(d35_plan.profile_bytes)
+    assert {key for key in d34_profile if d34_profile[key] != d35_profile[key]} == {
+        "profile_id",
+        "canary_max_output_tokens",
+    }
+    assert set(d34_profile) == set(d35_profile)
+
+    assert inputs.executor.request_policy == d35_plan.request_policy
+    for prepared in inputs.preflight.prepared:
+        body = json.loads(prepared.body)
+        system = body["messages"][0]["content"]
+        assert body["max_tokens"] == 1024
+        assert system == ifem_synthetic_role_system_prompt(
+            prepared.role,
+            response_contract=IFEMSyntheticRoleResponseContractV1.SELECTED_OPTION_ONLY_V2,
+        )
+        assert "exactly one selected_option field" in system
+        assert "reason" not in system
+    assert transport.calls == []
+
+    report = runner.execute_ifem_deepseek_role_calibration(
+        _config(tmp_path, "plan", protocol_id="d35-v3"),
+        environment={},
+        transport=transport,
+    )
+    assert report.status == "planned"
+    assert report.authority == runner.IFEMDeepSeekRoleCalibrationAuthorityV1()
+
+
 @pytest.mark.parametrize(
     "protocol_id",
-    ("d32-v1", "d34-v2"),
+    ("d32-v1", "d34-v2", "d35-v3"),
 )
 def test_protocols_pin_their_current_profile_graph_and_corpus_bytes(protocol_id: str) -> None:
     plan = runner.build_ifem_deepseek_role_calibration_plan(protocol_id=protocol_id)
@@ -745,3 +1028,32 @@ def test_protocol_root_mismatch_is_refused_before_any_v2_transport(tmp_path: Pat
     assert d34.failure_class == "root_policy_rejected"
     assert len(d32_transport.calls) == 16
     assert d34_transport.calls == []
+
+
+def test_d35_root_mismatch_is_refused_before_any_provider_transport(tmp_path: Path) -> None:
+    roots = tmp_path / "roots"
+    d34_transport = RecordingTransport()
+    d34_config = _config(roots, "run", approved=True, protocol_id="d34-v2")
+    settled = runner.execute_ifem_deepseek_role_calibration(
+        d34_config,
+        environment=_environment(),
+        transport=d34_transport,
+    )
+    d35_transport = RecordingTransport()
+    d35 = runner.execute_ifem_deepseek_role_calibration(
+        runner.IFEMDeepSeekRoleCalibrationConfig(
+            mode="run",
+            state_root=d34_config.state_root,
+            private_root=d34_config.private_root,
+            protocol_id="d35-v3",
+            operator_approved=True,
+        ),
+        environment=_environment(),
+        transport=d35_transport,
+    )
+
+    assert settled.status == "settled"
+    assert d35.status == "execution_refused"
+    assert d35.failure_class == "root_policy_rejected"
+    assert len(d34_transport.calls) == 16
+    assert d35_transport.calls == []

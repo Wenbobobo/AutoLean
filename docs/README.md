@@ -106,11 +106,20 @@ runner reports success.
     now supplies exact-byte execution acknowledgements, private-input reconciliation, and an
     [operator-private output ledger](ifem-synthetic-role-private-ledger.md). All three remain
     non-promotable calibration evidence rather than benchmark or semantic authority. The
-    [D32/D34 DeepSeek iFEM operator runner](ifem-deepseek-role-calibration.md) applies that exact
+    [D32/D34/D35 DeepSeek iFEM operator runner](ifem-deepseek-role-calibration.md) applies that exact
     private-ledger path to a live local observation only after explicit operator approval; its
     selected revision is bound to both the root pair and the
-    [D33 public aggregate](ifem-private-evaluation-operator.md). It is likewise non-promotable and
-    does not score, evaluate the oracle, or create Builder--Prover authority.
+     [D33 public aggregate](ifem-private-evaluation-operator.md). It is likewise non-promotable and
+     does not score, evaluate the oracle, or create Builder--Prover authority. The retained
+     [D35 1,024-token observation](research/ifem-deepseek-role-calibration-2026-07-31-1024-v3.md)
+     reports 2 correct, 0 incorrect, 8 abstentions, and 6 invalid outputs on the same sixteen
+     public synthetic cases; it is a response-budget/failure-accounting observation, not a model
+     ranking, capability floor, or semantic result.
+     The [P2-13 machine-advisory admission layer](builder-machine-advisory-admission.md) separately
+     turns any critical dissent, surviving mutation, counterexample, shared model lineage, or stale
+     calibration into deterministic abstention. Current unverified execution, lineage, and
+     digest-only calibration evidence also abstain; signed completion-bound positive routing remains
+     open. The layer never creates a statement freeze or Prover handoff.
 16. [Mathlib downstream workspace](mathlib-downstream.md) defines `Library/` as the independent
     formal-work record, review surface, and later upstream staging boundary.
 17. [Target-free Library substrate](library-substrate-decision.md) separates the focused
@@ -171,8 +180,12 @@ runner reports success.
     The [digest-only notebook index](research/ifem-notebook-source-span-index-2026-07-29.md)
     records the 10-notebook / 161-cell locator replay without source text, while the
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
-    binds the actual 25-node / 21-prerequisite denominator and keeps every mapping `unknown`
-    until the pinned Lean query and semantic classification evidence exist. The
+    binds the actual 25-node / 21-prerequisite denominator. The pinned Lean query has now run, but
+    every mapping remains `unknown` until independent semantic classification evidence exists. The separate
+    [receipt-bound census OCI worker](ifem-prerequisite-census-oci.md) supplies a native,
+    network-disabled execution route without changing the immutable five-profile image; its
+    [audit-fixed run record](research/ifem-prerequisite-census-oci-run-2026-07-31.md) publishes
+    normalized projections while retaining raw stdout under the operator-private boundary. The
     [P2-08 readiness gate](research/ifem-pilot-readiness-gate-v1.md) makes the
     fixed 15--16/21 pilot hypothesis falsifiable without converting missing
     evidence into a negative decision or granting any promotion authority. The
@@ -185,8 +198,12 @@ runner reports success.
     freeze a Builder contract, or hand work to Prover. The 2026-07-31
     [public profile projection](research/ifem-pinned-mathlib-profile-public-summary-2026-07-31.json)
     binds the real run without canonical type text or closure members, and the corresponding
-    [P2-08 v2 decision](research/ifem-pilot-readiness-decision-2026-07-31.json) remains
-    `incomplete` with every promotion authority false.
+    historical [P2-08 v2 decision](research/ifem-pilot-readiness-decision-2026-07-31.json) remains
+    `incomplete` with every promotion authority false. The graph-chain successor remains the
+    coherent `af4ae42b` D35 calibration lineage. The current
+    [OCI successor](research/ifem-pilot-readiness-decision-2026-07-31-oci-successor.json) instead
+    binds completed result `fbaf12b9`, supplies no profile evidence, keeps all 21 classifications
+    unknown, and likewise forbids freeze and Prover handoff.
 28. [T7 real Lean project-DAG preflight](t7-real-lean-project-dag-preflight.md) binds a small,
     side-by-side 20-declaration Lean fixture to a content graph and records its deliberately
     non-acceptance local source-v2 clean-build boundary.

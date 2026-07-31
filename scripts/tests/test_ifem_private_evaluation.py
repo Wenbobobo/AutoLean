@@ -129,7 +129,19 @@ def test_settled_d32_run_is_rebuilt_into_a_public_d33_aggregate(tmp_path: Path) 
     assert ledger_key not in rendered
 
 
-def test_d34_v2_run_is_rebuilt_by_the_matching_d33_protocol(tmp_path: Path) -> None:
+@pytest.mark.parametrize(
+    ("protocol_id", "output_tokens", "expected_protocol"),
+    (
+        ("d34-v2", 512, runner.IFEMDeepSeekRoleCalibrationProtocolIdV1.D34_V2),
+        ("d35-v3", 1024, runner.IFEMDeepSeekRoleCalibrationProtocolIdV1.D35_V3),
+    ),
+)
+def test_selected_option_successor_run_is_rebuilt_by_the_matching_d33_protocol(
+    tmp_path: Path,
+    protocol_id: str,
+    output_tokens: int,
+    expected_protocol: runner.IFEMDeepSeekRoleCalibrationProtocolIdV1,
+) -> None:
     operator_material = (tmp_path / "operator-material").resolve()
     seed, ledger_key = runner._load_or_initialize_operator_material(operator_material)
     state_root = (tmp_path / "state").resolve()
@@ -141,7 +153,7 @@ def test_d34_v2_run_is_rebuilt_by_the_matching_d33_protocol(tmp_path: Path) -> N
             mode="run",
             state_root=state_root,
             private_root=private_root,
-            protocol_id="d34-v2",
+            protocol_id=protocol_id,
             operator_approved=True,
         ),
         environment={
@@ -156,20 +168,20 @@ def test_d34_v2_run_is_rebuilt_by_the_matching_d33_protocol(tmp_path: Path) -> N
         private_root=private_root,
         operator_material_root=operator_material,
         public_output_root=public_root,
-        protocol_id="d34-v2",
+        protocol_id=protocol_id,
     )
 
     assert report.status == "settled"
-    assert report.protocol_id == runner.IFEMDeepSeekRoleCalibrationProtocolIdV1.D34_V2
+    assert report.protocol_id == expected_protocol
     assert len(transport.calls) == 16
-    assert all(json.loads(body)["max_tokens"] == 512 for body in transport.calls)
+    assert all(json.loads(body)["max_tokens"] == output_tokens for body in transport.calls)
     assert aggregate.case_count == 16
     assert not aggregate.authority.promotion_allowed
     payload = json.loads(
         (public_root / IFEM_PRIVATE_EVALUATOR_PUBLIC_REPORT_FILENAME).read_text(encoding="utf-8")
     )
     assert payload["schema_version"] == "autolean.ifem-private-evaluator-public-report.v2"
-    assert payload["protocol_binding"]["protocol_id"] == "d34-v2"
+    assert payload["protocol_binding"]["protocol_id"] == protocol_id
     assert payload["protocol_binding"]["response_contract"] == "selected_option_only.v2"
 
 
@@ -207,7 +219,7 @@ def test_d33_refuses_a_private_root_from_the_wrong_protocol(tmp_path: Path) -> N
     assert not public_root.exists()
 
 
-@pytest.mark.parametrize("protocol_id", ("d32-v1", "d34-v2"))
+@pytest.mark.parametrize("protocol_id", ("d32-v1", "d34-v2", "d35-v3"))
 def test_settlement_and_evaluation_never_open_ignored_source_cache(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,

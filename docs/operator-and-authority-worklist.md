@@ -5,17 +5,19 @@ Status: active, canonical external-action register
 Chinese operational copy: [operator-and-authority-worklist.zh-CN.md](operator-and-authority-worklist.zh-CN.md).
 It is a faithful reader-oriented translation, not a second authority source.
 
-Last cross-audit: 2026-07-30. The audit compared this file with every current `AUTH-*`
+Last cross-audit: 2026-07-31. The audit compared this file with every current `AUTH-*`
 reference, the stable `OQ-*` register, the Phase 1 evidence ledger, the active roadmap, and the
 Phase 2 roadmap. All eleven pre-existing `AUTH-*` identifiers are here. Two formerly implicit
 decisions are now explicit: `AUTH-T5-01` (freeze one exact statement contract) and
 `AUTH-DASHBOARD-REMOTE-01` (remote Dashboard access). No ordinary plan may keep a separate
 operator checklist.
 
-Latest remote fact, checked 2026-07-30: draft [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26)
-is open and mergeable at `f251e19b1393dfc02f49a63625d132e9ba383f27`. Its CI and local evidence
-are useful engineering evidence, not an RC, semantic admission, signer deployment, or mathematical
-result.
+Latest remote fact, checked 2026-07-31: draft [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26)
+is open and `CLEAN` at `705f2c192865eae1dbe4151926f92ce61634fddc`; all four jobs in
+[CI run 30612841190](https://github.com/Wenbobobo/AutoLean/actions/runs/30612841190) completed
+successfully. The PR body separately records clean-stage local validation of 1,875 passes, 13
+explicit skips, and zero failures. These are useful engineering records, not an RC, semantic
+admission, signer deployment, provider authority, or mathematical result.
 
 ## What this file is for
 
@@ -138,9 +140,13 @@ Keeping it as a negative fixture requires no mathematical expert; reviving it do
   and evaluator, rather than confusing a local mock with model capability.
 - **Current state:** one settled canary and a 20-call 256/512 output-budget observation are retained;
   saturation fell from 4/10 to 1/10. Two ten-call 512-token role observations each passed 2/10
-  cases: 512a is a legacy V1 projection and 512b is the normative strict V2 envelope. These records
-  remain alias-unpinned, locally evaluated, and non-promotable; no model ranking or capability claim
-  follows. See the [authorized canary record](deepseek-authorized-canary.md).
+  cases: 512a is a legacy V1 projection and 512b is the normative strict V2 envelope. A separate
+  D35 iFEM role calibration settled 16 source-text-free synthetic cases at a 1,024-token ceiling;
+  the local D33 evaluator reported 2 correct, 0 incorrect, 8 abstentions, and 6 invalid outputs.
+  All records remain alias-unpinned, locally evaluated, public or lookup-recoverable, and
+  non-promotable; no model ranking, capability floor, textbook fidelity, or provider-authority
+  claim follows. See the [authorized canary record](deepseek-authorized-canary.md) and
+  [D35 observation](research/ifem-deepseek-role-calibration-2026-07-31-1024-v3.md).
 - **Impact:** enables trustworthy role and benchmark evidence, not Builder fidelity or proof
   acceptance.
 - **If incomplete:** development may use fake providers and local observations, but cannot claim
@@ -172,10 +178,11 @@ Keeping it as a negative fixture requires no mathematical expert; reviving it do
 - **Support type / priority:** release decision, P3; intentionally last.
 - **Plain meaning:** decide what one exact commit may honestly be called. "No-RC" is a valid,
   useful decision when the authority gates are still open.
-- **Current state:** current draft PR #26 records 1,643 passed, 13 explicit environment skips, zero
-  failures, FATE canary preparation, local T6 preparation, scans, SBOM, and policy checks. It
-  remains `no-RC` because T3/T5, independently operated T6/signer, T7, and provider evaluation are
-  not closed.
+- **Current state:** draft PR #26 at `705f2c192865eae1dbe4151926f92ce61634fddc` records 1,875
+  clean-stage passes, 13 explicit environment/cache/OCI skips, zero failures, FATE canary
+  preparation, local T6 preparation, scans, SBOM, and policy checks; its four-job GitHub Actions run
+  is green. It remains `no-RC` because rights/T5, independently operated T6/signer, real T7, and
+  independently administered provider evaluation are not closed.
 - **Impact:** prevents a public code repository or green CI badge from being mistaken for a verified
   mathematical system.
 - **If incomplete:** development continues; no release-candidate or production claim may be made.

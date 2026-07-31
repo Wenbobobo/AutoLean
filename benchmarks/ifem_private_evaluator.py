@@ -215,7 +215,7 @@ class IFEMPrivateEvaluatorProtocolBindingV1(ContractModel):
     schema_version: Literal["autolean.ifem-private-evaluator-protocol-binding.v1"] = (
         "autolean.ifem-private-evaluator-protocol-binding.v1"
     )
-    protocol_id: Literal["d32-v1", "d34-v2"]
+    protocol_id: Literal["d32-v1", "d34-v2", "d35-v3"]
     profile_content_sha256: str = Field(pattern=_SHA256)
     request_policy_content_sha256: str = Field(pattern=_SHA256)
     response_contract: IFEMSyntheticRoleResponseContractV1
@@ -339,14 +339,14 @@ def build_ifem_private_evaluator_protocol_binding(
 
     if not isinstance(profile_bytes, bytes) or not profile_bytes:
         raise IFEMPrivateEvaluatorError("D33 protocol profile bytes are unavailable")
-    if protocol_id not in {"d32-v1", "d34-v2"}:
+    if protocol_id not in {"d32-v1", "d34-v2", "d35-v3"}:
         raise IFEMPrivateEvaluatorError("D33 protocol identifier is unsupported")
     if type(request_policy) is not IFEMSyntheticRoleRequestPolicyV1:
         raise IFEMPrivateEvaluatorError("D33 protocol request policy has an invalid type")
     if not isinstance(response_contract, IFEMSyntheticRoleResponseContractV1):
         raise IFEMPrivateEvaluatorError("D33 protocol response contract is invalid")
     return IFEMPrivateEvaluatorProtocolBindingV1(
-        protocol_id=cast(Literal["d32-v1", "d34-v2"], protocol_id),
+        protocol_id=cast(Literal["d32-v1", "d34-v2", "d35-v3"], protocol_id),
         profile_content_sha256=hashlib.sha256(profile_bytes).hexdigest(),
         request_policy_content_sha256=_request_policy_content_sha256(request_policy),
         response_contract=response_contract,

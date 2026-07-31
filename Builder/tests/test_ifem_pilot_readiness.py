@@ -495,3 +495,81 @@ def test_decision_is_write_once_and_reloads(tmp_path: Path) -> None:
     assert load_ifem_pilot_readiness_decision(path) == decision
     loaded = json.loads(path.read_text(encoding="utf-8"))
     assert loaded["content_sha256"] == decision.content_sha256
+
+
+def test_tracked_graph_chain_successor_replays_exact_af4_census() -> None:
+    root = Path(__file__).resolve().parents[2]
+    census_path = (
+        root / "docs" / "research" / "ifem-prerequisite-census-not-run-2026-07-31-graph-chain.json"
+    )
+    decision_path = (
+        root
+        / "docs"
+        / "research"
+        / "ifem-pilot-readiness-decision-2026-07-31-graph-chain-successor.json"
+    )
+    graph_path = (
+        root / "Builder" / "pilots" / "discovery" / "ifem-candidate-dependency-graph.v1.json"
+    )
+
+    plan = _plan()
+    census_result = IFEMPrerequisiteCensusResultV1.model_validate_json(
+        census_path.read_text(encoding="utf-8")
+    )
+    decision = load_ifem_pilot_readiness_decision(decision_path)
+    graph = json.loads(graph_path.read_text(encoding="utf-8"))
+
+    assert census_result.content_sha256 == (
+        "af4ae42b2f7d983a98c30195348d4252edf88a0ccca9fa66cf1f4041947293da"
+    )
+    assert graph["source_binding"]["census_result_sha256"] == census_result.content_sha256
+    assert decision.evidence.census_result_content_sha256 == census_result.content_sha256
+    assert decision.content_sha256 == (
+        "b145c82985c7b3fe1b3e3551fad1a6d71f6f369ad0231d18102ba66dfc705202"
+    )
+    assert decision.outcome is IFEMPilotReadinessOutcomeV1.INCOMPLETE
+    assert decision.counts.unknown_count == 21
+    assert decision.profile_evidence_state.value == "not_supplied"
+    assert decision.builder_freeze == "forbidden"
+    assert decision.prover_handoff == "forbidden"
+
+    verify_ifem_pilot_readiness_decision(decision, plan, census_result)
+
+
+def test_tracked_oci_successor_replays_completed_unknown_only_census() -> None:
+    root = Path(__file__).resolve().parents[2]
+    research = root / "docs" / "research"
+    result_path = research / "ifem-prerequisite-census-oci-result-2026-07-31.json"
+    decision_path = research / "ifem-pilot-readiness-decision-2026-07-31-oci-successor.json"
+    observation_path = research / "ifem-prerequisite-census-oci-observation-2026-07-31.json"
+    receipt_path = research / "ifem-prerequisite-census-oci-receipt-2026-07-31.json"
+    execution_path = research / "ifem-prerequisite-census-oci-execution-2026-07-31.json"
+
+    plan = _plan()
+    result = IFEMPrerequisiteCensusResultV1.model_validate_json(
+        result_path.read_text(encoding="utf-8")
+    )
+    decision = load_ifem_pilot_readiness_decision(decision_path)
+    observation = json.loads(observation_path.read_text(encoding="utf-8"))
+    receipt = json.loads(receipt_path.read_text(encoding="utf-8"))
+    execution = json.loads(execution_path.read_text(encoding="utf-8"))
+
+    assert result.execution_state.value == "completed"
+    assert result.content_sha256 == (
+        "fbaf12b9f9979131f1ce2f7075808c0141e4a5933046b6a369a2f75818016165"
+    )
+    assert all(item.evidence.classification.value == "unknown" for item in result.node_results)
+    assert result.query_observation_sha256 == observation["content_sha256"]
+    assert execution["result_content_sha256"] == result.content_sha256
+    assert execution["worker_receipt_content_sha256"] == receipt["content_sha256"]
+    assert decision.evidence.census_result_content_sha256 == result.content_sha256
+    assert decision.content_sha256 == (
+        "07c2655e497d53082448bfc7a7a5997d5480eb6beffcc84f5770b10934fd3732"
+    )
+    assert decision.outcome is IFEMPilotReadinessOutcomeV1.INCOMPLETE
+    assert decision.counts.unknown_count == 21
+    assert decision.profile_evidence_state.value == "not_supplied"
+    assert decision.builder_freeze == "forbidden"
+    assert decision.prover_handoff == "forbidden"
+
+    verify_ifem_pilot_readiness_decision(decision, plan, result)

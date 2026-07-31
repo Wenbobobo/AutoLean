@@ -27,14 +27,14 @@ an authorized ten-trial role bridge, a FATE common executor, a read-only Dashboa
 source/fidelity harnesses, typed T7 module receipts, synthetic chaos coverage, and downstream
 Library workspace documentation. It also has a proposal-only ResearchScout event projection, a
 complete non-authoritative T3 machine packet, and bounded synthetic Builder calibration protocols.
-Remote facts checked on 2026-07-29: public draft
-[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) is open and mergeable at
-`cd42ba76473002cfff9eaf4b8710e90fa3877cd4`, and GitHub Actions
-[CI run #64](https://github.com/Wenbobobo/AutoLean/actions/runs/30364517594) succeeded. Its updated
-PR description records candidate-local validation of 1,438 passed, 15 explicit environment/cache/
-OCI/WSL skips, and 0 failures, plus a retained local synthetic 1,000-job replay. CI success and a
-project-authored PR description do not independently establish semantic fidelity, a Lean result, or
-production authority.
+Remote facts checked on 2026-07-31: public draft
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) is open and `CLEAN` at
+`705f2c192865eae1dbe4151926f92ce61634fddc`, and all four jobs in GitHub Actions
+[run 30612841190](https://github.com/Wenbobobo/AutoLean/actions/runs/30612841190) succeeded. Its PR
+description separately records clean-stage local validation of 1,875 passed, 13 explicit
+environment/cache/OCI skips, and 0 failures. CI success and a project-authored PR description do
+not independently establish semantic fidelity, a Lean result, provider authority, or production
+authority. Earlier `cd42ba7` and `f251e19` candidates remain historical receipts, not current heads.
 
 An earlier local DeepSeek official-profile canary reached only a redacted network refusal, and two
 fresh 256-vs-512 ablation attempts each stopped after one control-arm `network` result. A later,
@@ -43,18 +43,23 @@ saturation was 1/10. Two separately rooted 512-token role-only observations then
 calls and reproduced the same 2/10 local exact-JSON distribution, both passes in task allocation;
 the other four roles passed 0/2 in each run. These records are
 non-promotable local observations under an unpinned model alias and tiny synthetic sample. They
-select 512 as the next observation budget but do not establish endpoint SLA, provider billing,
-general competence, role-floor admission, proof, or Builder fidelity.
-A fresh 2026-07-30 WSL probe returned `Wsl/EnumerateDistros/Service/E_ACCESSDENIED`; no authoritative
-Lean or OCI execution occurred. Fresh authority-host, gateway, and provider results must be retained
-under their own exact execution identities.
+supported a larger bounded follow-up but did not establish endpoint SLA, provider billing, general
+competence, role-floor admission, proof, or Builder fidelity. The D35 follow-up then settled the
+same sixteen public iFEM cases with only the output ceiling changed from 512 to 1,024 tokens. D33
+reported 2 correct, 0 incorrect, 8 abstentions, and 6 invalid outputs. This reduced strict-output
+failure on that fixed fixture, but the alias remains unpinned and the sample is public, tiny, and
+locally evaluated; D35 is not a model ranking, capability floor, or semantic result.
+The 2026-07-30 WSL denial is retained as a historical session-path observation. Later local OCI
+diagnostics do not turn it into authority evidence. Fresh authority-host, gateway, and independently
+administered provider results must still be retained under their own exact execution identities.
 
 A separate iFEM structural-role lane now binds one tracked 25-node candidate graph, one tracked
 sixteen-case project-synthetic corpus, provider request policy, response contract, private D31
-ledger, D32/D34 runner, and independent D33 aggregation through exact hashes. The retained 256-token
+ledger, D32/D34/D35 runner, and independent D33 aggregation through exact hashes. The retained 256-token
 run settled 16/16 calls but produced 16 invalid responses; the 512-token successor settled 16/16,
-with four valid abstentions and twelve invalid responses. This closes reproducible runtime and
-failure-accounting mechanics only. The corpus is public and lookup-recoverable, so neither run is
+with four valid abstentions and twelve invalid responses; the 1,024-token successor produced two
+correct risk selections, eight abstentions, and six invalid responses. This closes reproducible
+runtime and failure-accounting mechanics only. The corpus is public and lookup-recoverable, so none is
 held-out model ranking, a capability floor, textbook fidelity evidence, or promotion authority.
 
 The remaining work is not to invent another runtime. It is to close a narrow vertical path in which
@@ -114,8 +119,8 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P1-23 | External | Retain one real rights-cleared frozen contract through unchanged bundle, Prover, OCI, kernel query, and independent verifier. |
 | P1-24 | Done | Preserve Fake, Codex CLI, OpenAI Responses, and custom-compatible providers; keep Claude/Anthropic absent and prohibit automatic fallback. |
 | P1-25 | Partial | Preserve the DeepSeek official profile, redacted canary, authorized ten-trial role route, and output-budget ablation protocol. After two retained network-failure records, a fresh 20-call comparison settled with saturation 4/10 at 256 and 1/10 at 512. Two separate 512-token scored observations reproduced 2/10 local exact-JSON cases, both task allocation; the second uses the strict V2 scored envelope. The evidence remains non-promotable, locally evaluated, alias-unpinned, and too small for a model or role-floor conclusion. |
-| P1-26 | External | Close `AUTH-PROVIDER-01`: retain one successful real-provider run and independent evaluation without turning it into proof or fidelity evidence. |
-| P1-27 | Partial | Preserve the canonical FATE lock, common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. The current compile canary has not rerun because a fresh 2026-07-30 probe returned `Wsl/EnumerateDistros/Service/E_ACCESSDENIED`; no current Lean/OCI authority result exists, and any earlier canary is historical and nonbinding. |
+| P1-26 | External | D35 now retains one successful, no-retry, 16-case local provider run plus a separately rebuilt D33 aggregate, with raw/private material outside the checkout. This closes neither `AUTH-PROVIDER-01` nor a role floor: the evaluator and provider account are not independently administered, the alias is unpinned, and the public fixture is lookup-recoverable. Close the item only with the independently operated experiment named in the authority worklist. |
+| P1-27 | Partial | Preserve the canonical FATE lock, common executor, stable selections, answer exclusion, deterministic attempt seeds, and separate M/H/X reporting. The fixed `compile-canary-12` passes 12/12 in the current locked LF runtime, and the non-model `agent-smoke-8` route passes 2/8 with one task-independent `aesop`; both are compatibility/harness evidence, not a model, accepted proof, or authority result. |
 | P1-28 | Next | After P1-26, run `regression-48` pass@1 under one frozen model/tool/retrieval/budget contract. |
 
 ### Phase 1: Weeks 7--8, comparison and observation
@@ -147,9 +152,9 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-03 | Partial | Retain PDE and metric/algebraic-geometry lane cards with explicit stop conditions and no production-ingestion claim. |
 | P2-04 | Partial | Thirteen pinned iFEM source files are locally locked and independently replayed under `local_only`, with source-lock receipt SHA-256 `74eca6689fe69dcbf2f34ea524a99cacc2054c0a39cfecfb11887c29e13cf239`. Digest-only indexes bind 161 notebook cells and three `intro.md` heading sections. A deterministic [candidate-only dependency graph](ifem-candidate-dependency-graph.md) now records 25 nodes and 49 planning edges without source text. This closes source/locator and graph-skeleton construction only: there is no semantic source mapping, mathematical dependency claim, FormalGraph, ExecutionGraph, freeze, or Prover handoff. |
 | P2-05 | Done | Preserve the [active discovery-lane manifest](../Builder/pilots/discovery/phase-2-active-lanes.v1.json) with source, rights, overlap, and stop gates for every active lane. This is discovery metadata only; egress remains `local_only` until `AUTH-RIGHTS-01` closes. |
-| P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. Its frozen manifest remains historically `not_started`. A generic-host WSL census under `/mnt/c` reached its 600-second bound, wrote no observation/result, and cleaned its temporary query; it changes neither that manifest nor the absence of a 21-node semantic classification. |
+| P2-06 | Done | Preserve the content-addressed iFEM prerequisite denominator and reject unrelated easy-node additions before any mathlib query. Its frozen manifest remains historically `not_started`, and the generic-host `/mnt/c` timeout remains historical. The separate audit-fixed OCI route completed twice with byte-identical artifacts and passed an exact image-backed rerun. It closes the missing local execution record only: all 21 mappings remain `unknown`, coverage is not authorized, and freeze/handoff are forbidden. |
 | P2-07 | Partial | The active five-profile plan `21bd18f7f8522470247852ef8281f1e4c7016f6415771e4fc0c05ab433247619` built receipt-bound child image `sha256:6c54c3600b2572ddcabae024a3a8b6c533c3defa6d4bda31c90408cb4c61f0ab`. Two runs produced byte-identical observation/result artifacts (file SHA-256 `1900a11003a78ecaa681ad76ab5660762d4f5ca81e28b0b9525a95998131d736` / `ba9ca42865fd385fbf94b922e4111dd76ab9dec4386f28bbba778779dfc52298`), now exposed through a [redacted replay-bound summary](research/ifem-pinned-mathlib-profile-public-summary-2026-07-31.json). This proves only pinned-environment visibility, not mapping, semantic classification, or coverage. Exact direct imports do not establish narrow transitive closures. |
-| P2-08 | Partial | The v2 gate fixes the 21-node 15--16 direct/thin band, distinguishes exact direct imports from transitive closure acceptance, and cannot return `go` while closure policy is unresolved. The real [2026-07-31 decision](research/ifem-pilot-readiness-decision-2026-07-31.json), content SHA-256 `c45cbff7a5efed34e59efbe922729f30f6d25cbe2120bd5cc1825325cb851b90`, is `incomplete`: the profile evidence binds exact imports, while the host census timed out, all 21 semantic classifications remain unknown, and closure policy remains unresolved. It authorizes neither freeze nor Prover handoff. |
+| P2-08 | Partial | The v2 gate fixes the 21-node 15--16 direct/thin band, distinguishes exact direct imports from transitive closure acceptance, and cannot return `go` while closure policy is unresolved. The old `c45cbf`/`d39d` direct-import decision and `b145c829`/`af4ae42b` graph-calibration successor are retained as history. The current public [OCI successor](research/ifem-pilot-readiness-decision-2026-07-31-oci-successor.json), content SHA-256 `07c2655e497d53082448bfc7a7a5997d5480eb6beffcc84f5770b10934fd3732`, binds completed census result `fbaf12b9f9979131f1ce2f7075808c0141e4a5933046b6a369a2f75818016165`, remains `incomplete`, supplies no profile evidence, keeps all 21 classifications unknown, and forbids freeze and Prover handoff. The old graph-chain triage remains a non-semantic D35 work queue, not coverage. |
 
 ### Phase 2: machine-first statement factory
 
@@ -159,7 +164,7 @@ diagnostic; they never outrank the first faithful contract or chapter closure.
 | P2-10 | Done | Keep the required mutation-family coverage locked to the eleven-sample synthetic corpus; source-specific calibration and measured detection performance remain separate next gates. |
 | P2-11 | Partial | Preserve the deterministic [5/3/3 held-out structural protocol](builder-held-out-calibration.md) over the eleven project-synthetic samples, including cross-partition digest isolation and precommitted fake-provider budgets. It measures strict JSON and declared structural-drift detection only; harmful negatives, known formal references, real-model repetitions, false-acceptance/risk-coverage estimates, and semantic calibration remain open. |
 | P2-12 | Partial | Preserve the [source-span synthetic self-calibration harness](builder-source-span-self-calibration.md): two proposers, reverse review, mutation critic, and adjudicator run over the canonical eleven-sample corpus with all authority false. No real textbook candidate, independent real agent execution, semantic-equivalence result, freeze, or Prover handoff has occurred. |
-| P2-13 | Next | Treat any critical dissent, surviving mutation, counterexample, shared lineage, or stale calibration as abstention, not a majority-vote pass. |
+| P2-13 | Partial | The [versioned machine-advisory admission sidecar](builder-machine-advisory-admission.md) now requires complete per-reviewer risk assessments and treats any semantic escalation, critical dissent, surviving mutation, counterexample, a shared declared quorum failure domain, missing or shared model/sidecar-failure-domain lineage, and missing, mismatched, future, or stale calibration as `abstain`. Current quorum execution, declared lineage, and digest-only calibration are also explicitly unverified and therefore cannot produce the reserved continue disposition. Signed completion-bound lineage and a verified calibration-result policy remain open; authority stays `machine_advisory`, freeze is false, and Prover handoff is forbidden. |
 | P2-14 | External | Close source-specific `AUTH-RIGHTS-01`; then create 50--100 real non-frozen `local_calibration` candidates starting from textbook definitions and openings. |
 | P2-15 | Next | Keep machine-screened candidates in a non-promotable sandbox lane until the measured risk-coverage policy and accountable admission boundary are explicit. |
 
@@ -201,9 +206,9 @@ exit condition is never satisfied by a later milestone's evidence.
 | Milestone | Horizon and task frontier | Current truth | Exit condition and non-substitutes |
 | --- | --- | --- | --- |
 | **M0 — Invariants and evidence hygiene** | Continuous: Contract V1, three graphs, immutable artifacts, source/rights policies, provider deny-list, and read-only Dashboard. | Maintained locally. | These are permanent constraints, not a one-time promotion. A passing test or agent consensus cannot weaken Builder -> frozen contract -> Prover. |
-| **M1 — Reproducible Phase 1 architecture** | Weeks 1--12: control plane, fake/provider adapters, FATE boundary, dashboard, chaos receipt, release/public scans. | Substantially complete in local scope; PR #26 at `cd42ba7` is CI-green and records the exact candidate tests. | A no-RC/RC decision names every gate. Local/CI evidence alone is not a semantic, kernel, signer, or model result. |
+| **M1 — Reproducible Phase 1 architecture** | Weeks 1--12: control plane, fake/provider adapters, FATE boundary, dashboard, chaos receipt, release/public scans. | Substantially complete in local scope; PR #26 at `705f2c` is CI-green and records the exact candidate tests. | A no-RC/RC decision names every gate. Local/CI evidence alone is not a semantic, kernel, signer, or model result. |
 | **M2 — Authority-bearing vertical** | First rights-cleared statement through unchanged bundle, T6 OCI/Lean, T7 lease/recovery, kernel query, and independent gateway. | Not closed. | Exact source rights, semantic admission, fixed environment, real image execution, gateway verification, and signer custody must all bind the same revision. Synthetic routes do not substitute. |
-| **M3 — Controlled real Prover baseline** | Authorized DeepSeek/Codex/custom endpoint role runs, then regression-48, compare-90, and FATE-350 under frozen experimental contracts. | The DeepSeek path now has a settled 256/512 saturation comparison and two 512-token ten-case local scores with the same role distribution. Only task allocation passed (2/2 per run); all other roles passed 0/2. This is harness evidence, not a competence baseline. | Provider/evaluator authority, larger held-out samples, source-egress policy, budget reconciliation, and role-separated reports. Benchmark score never establishes Builder fidelity. |
+| **M3 — Controlled real Prover baseline** | Authorized DeepSeek/Codex/custom endpoint role runs, then regression-48, compare-90, and FATE-350 under frozen experimental contracts. | The DeepSeek path has a settled 256/512 saturation comparison, two 512-token ten-case local scores, and a separately bound D35 1,024-token iFEM role observation at 2 correct / 0 incorrect / 8 abstain / 6 invalid. These are harness and failure-accounting observations, not a competence baseline. | Provider/evaluator authority, larger private held-out samples, repeated seeds, source-egress policy, budget reconciliation, and role-separated reports. Benchmark score never establishes Builder fidelity. |
 | **M4 — Builder calibration factory** | Rights-cleared textbook openings; 50--100 non-frozen candidates; independent extraction/formalization/critique/falsification and calibration measurement. | The eleven-sample synthetic opening corpus now has a source-span multi-role fake harness and a deterministic 5/3/3 held-out structural protocol. These are architecture regressions, not real textbook or semantic calibration. | Measured harmful-negative resistance, abstention behavior, and source-specific rights boundary. Machine output remains `machine_advisory`. |
 | **M5 — First chapter closure** | One 20--40 node slice in downstream `Library/`: definitions, examples, counterexamples, reusable lemmas, terminal theorem/gap ledger. | A 25-node/49-edge iFEM candidate-only planning graph exists, and Dependency Closure V2 has Stage A plus fail-closed Stage B mechanics. No node is semantically mapped, reviewed, frozen, proved, or handed to Prover. | Reviewed frozen contracts route unchanged to Prover and verifier; every node has reproducible proof/gap/mutation evidence. Isolated FATE passes do not substitute. |
 | **M6 — Connected downstream library** | Several coherent chapter slices, Dependency Closure V2 Stage B, stable APIs, multi-worker scheduling, and optional small mathlib packets. | Stage B mechanics exist, but nonempty accepted dependencies are blocked pending gateway-owned module/OLean admission binding. | Pinned clean builds, cross-slice dependency and axiom profiles, provenance, migration discipline, and demonstrable closure reduction per budget. |

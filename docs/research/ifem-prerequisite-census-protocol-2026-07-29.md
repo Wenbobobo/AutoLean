@@ -1,7 +1,7 @@
 # iFEM Coercive Prerequisite Census Protocol
 
-Status: bounded P2-06/P2-07 query plan implemented; the generic-host WSL run reached its internal
-600-second bound and produced no census observation or result
+Status: bounded P2-06/P2-07 query plan implemented; the generic-host run produced no observation,
+and the audit-fixed receipt-bound OCI diagnostic completed with all 21 classifications unknown
 
 ## Conclusion
 
@@ -88,6 +88,12 @@ The wrapper renders a temporary query and invokes exactly:
 lake env lean --run <generated-query.lean>
 ```
 
+This fallback now checks all locked local Git packages and exact revisions before Lake starts, and
+passes a Git configuration that disables HTTPS dependency acquisition. It refuses the current
+checkout when `.lake/packages/mathlib` or another dependency is absent instead of silently cloning.
+The preferred route is the separate native OCI worker documented in
+`docs/ifem-prerequisite-census-oci.md`; it does not alter the immutable five-profile P2-07 image.
+
 Successful execution still emits 21 `unknown` classifications with reason
 `builder_semantic_review_not_recorded`. The observation must be reviewed and a
 separate evidence-complete result constructed before any coverage arithmetic.
@@ -107,6 +113,16 @@ does not substitute for this two-import, 21-node census. Fixed exact direct impo
 query roots only; they do not establish a narrow transitive import closure. A closure-width
 acceptance policy remains unresolved pending independent review.
 
+The dedicated two-import OCI census subsequently completed in the fixed Lean/Mathlib environment.
+Its result content SHA-256 is
+`fbaf12b9f9979131f1ce2f7075808c0141e4a5933046b6a369a2f75818016165`; the audit-fixed execution
+envelope content SHA-256 is
+`5b04fca9492a113a9e69060aa58d62f7004a2e5f9b36c7934d6dcbbc4482be32`. Two runs produced
+byte-identical raw, observation, result, and envelope artifacts, and the receipt-bound replay
+verifier passed in WSL against Docker Engine `29.1.3`. This closes only the missing local execution
+record. It does not turn any candidate-name observation into a semantic mapping: every node remains
+`unknown`, coverage is not authorized, and Builder freeze and Prover handoff remain forbidden.
+
 ## Counter-argument
 
 A declaration such as `IsCoercive` may look like an obvious direct match from
@@ -118,10 +134,9 @@ small compiled bridge preserves the intended statement, the right class is
 
 ## Remaining authority gap
 
-The Windows sandbox could validate the Python protocol and pinned metadata but
-could not start the required WSL Lean environment. No Lean declaration was
-observed in this work, no node was classified, and no percentage was computed.
-After a real pinned run, Builder semantic review and, for `missing`, a bounded
+The earlier host attempt did not produce a census observation. No node was classified and no
+percentage was computed from that attempt. The later OCI diagnostic retained its build receipt and
+passed cross-artifact replay, replacing only this execution gap. Builder semantic review and, for `missing`, a bounded
 inventory protocol remain open. Source-span admission, statement freeze,
 Library promotion, proof search, kernel verification, and Prover handoff are
 outside this census and remain forbidden here.

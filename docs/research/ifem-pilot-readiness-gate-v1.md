@@ -111,6 +111,39 @@ The outcome is `incomplete`, with 21 unknown nodes, verified direct imports,
 and unresolved transitive-closure policy. It forbids Builder freeze and Prover
 handoff; it is not a semantic, coverage, or pilot-admission result.
 
+The candidate graph and structural corpus predate that operator timeout record and bind a
+different honest all-unknown census result: content SHA-256
+`af4ae42b2f7d983a98c30195348d4252edf88a0ccca9fa66cf1f4041947293da`, with
+`explicit_unknown_reason: wsl_unavailable`. To make that graph chain publicly replayable without
+rewriting the historical decision, the exact census result is retained as
+[`ifem-prerequisite-census-not-run-2026-07-31-graph-chain.json`](ifem-prerequisite-census-not-run-2026-07-31-graph-chain.json)
+(file SHA-256 `95b7cb520e76a0770e33a3e0f56ee2ab2ba5c7c0c405952c1f6aa8867072be6c`).
+The deterministic successor
+[`ifem-pilot-readiness-decision-2026-07-31-graph-chain-successor.json`](ifem-pilot-readiness-decision-2026-07-31-graph-chain-successor.json)
+has file/content SHA-256
+`e46003c425c6737159f1ea9f8538c2effe41c0b2d870d02883a34ce7e708a747` /
+`b145c82985c7b3fe1b3e3551fad1a6d71f6f369ad0231d18102ba66dfc705202`.
+It is `incomplete`, keeps all 21 classifications `unknown`, and forbids freeze and handoff.
+Because the full P2-07 receipt/observation/result remain outside the repository, this public
+successor conservatively records profile evidence as `not_supplied`; it does not retract or
+reinterpret the separately published pinned-profile visibility summary.
+The `d39d9aef...` census result consumed by the historical decision is also not tracked, so that
+decision remains preserved evidence but cannot be independently recomputed from the public tree
+alone.
+
+The later audit-fixed two-import OCI diagnostic completed and published normalized receipt,
+observation, result, and execution projections. The current immutable
+[`ifem-pilot-readiness-decision-2026-07-31-oci-successor.json`](ifem-pilot-readiness-decision-2026-07-31-oci-successor.json)
+has file/content SHA-256
+`7e380e70a606478f2a926f66abcd75cb9fb3238ca1b37240255f91379e029b30` /
+`07c2655e497d53082448bfc7a7a5997d5480eb6beffcc84f5770b10934fd3732`.
+It binds completed census result content SHA-256
+`fbaf12b9f9979131f1ce2f7075808c0141e4a5933046b6a369a2f75818016165`
+and removes only the `census_execution_not_completed` reason. It remains `incomplete` with 21
+unknown classifications, no supplied profile evidence, and unresolved closure policy; all
+authority fields remain false and freeze/handoff remain forbidden. The old graph-chain successor
+continues to identify the D35 calibration lineage and is not rewritten as OCI evidence.
+
 ## Reproducible route
 
 Use the short scripts rather than platform-specific commands.  First record a
@@ -143,8 +176,9 @@ with `unknown` nodes or without singleton-import evidence.
 1. Preserve and independently replay the completed P2-07 receipt and
    byte-identical observation/result pair without reinterpreting visibility as
    semantic mapping.
-2. Run the P2-06 census in a viable pinned POSIX/WSL environment; the `/mnt/c`
-   timeout produced no reusable evidence.
+2. Preserve the completed audit-fixed P2-06 OCI receipt/raw/observation/result/envelope chain and
+   rerun its exact container argv when verifying execution provenance. The `/mnt/c` timeout remains
+   historical portability evidence only.
 3. Provide independent semantic-review artifacts
    through the existing census classification boundary.
 4. Define a successor closure policy before re-enabling `go`. It must distinguish

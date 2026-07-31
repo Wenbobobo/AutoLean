@@ -49,7 +49,7 @@ complete 16-case denominator, aggregate outcome counts for the three roles and
 eight risk/mutation families, and full-run token totals with coarse buckets.
 The revision-bound v2 projection additionally carries the selected protocol,
 SHA-256 of the exact profile bytes, SHA-256 of the request policy, and response
-contract. That makes D32 and D34 reports distinguishable after export without
+contract. That makes D32, D34, and D35 reports distinguishable after export without
 exposing a secret, oracle, raw response, or per-case result. Usage is emitted
 only after all sixteen authenticated private responses have been recovered; it
 is never emitted per case, per role, or per risk family. The report contains no

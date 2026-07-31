@@ -1,7 +1,7 @@
 # Phase 2 Fractal Roadmap
 
 Status: strategic milestone record, not an execution-order or release authority
-Updated: 2026-07-30
+Updated: 2026-07-31
 
 ## Executive summary
 
@@ -19,10 +19,13 @@ Phase 2 preparation in parallel, while keeping the authority boundary strict:
 This document is fractal: every level repeats the same pattern of mission, milestone, task,
 evidence, and stop condition.
 
-The public candidate does not change this boundary: on 2026-07-29, draft
-[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified at `cd42ba7` with a successful
-GitHub Actions CI run. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
-semantic-admission, kernel, provider, or novelty result for Phase 2.
+The public candidate does not change this boundary: on 2026-07-31, draft
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open and `CLEAN` at `705f2c`,
+with all four jobs in
+[GitHub Actions run 30612841190](https://github.com/Wenbobobo/AutoLean/actions/runs/30612841190)
+successful. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
+semantic-admission, authority-kernel, independently administered provider, or novelty result for
+Phase 2. Earlier `cd42ba7` and `f251e19` candidates remain dated history.
 
 ## M0--M8 alignment
 
@@ -88,9 +91,13 @@ low-confidence overlap signals, not mathematical dependencies. It creates no For
 ExecutionGraph, contract, freeze, or Prover handoff. This closes source-byte acquisition, locator
 construction, and a graph skeleton only, not model egress, source interpretation, textbook
 calibration, pilot admission, a semantic classification, a positive P2-08 decision, or a coverage
-claim. The retained 2026-07-31 P2-08 v2 artifact is explicitly `incomplete`: it binds exact profile
-visibility plus the host-timeout record while leaving all 21 classifications and closure acceptance
-unresolved.
+claim. The old `c45cbf`/`d39d` P2-08 decision and `b145c829`/`af4ae42b` graph-chain successor are
+retained as direct-import and D35 calibration history. The audit-fixed two-import OCI diagnostic
+subsequently completed twice with byte-identical artifacts and passed an image-backed rerun. Its
+current P2-08 successor binds completed census result `fbaf12b9`, is explicitly `incomplete`,
+supplies no profile evidence, and leaves all 21 classifications and closure acceptance unresolved.
+The old graph-chain unknown-only triage remains a deterministic calibration work queue, not a
+semantic mapping, coverage claim, freeze, or Prover handoff.
 
 ## Machine-first review policy
 
@@ -107,6 +114,13 @@ admission, a `frozen` transition, Lean-kernel verification, authority-host/signe
 public novelty decision. Measured harmful false-accept and risk-coverage gates may reduce how often
 an accountable reviewer must intervene, but they do not alter that authority rule. Any future
 exception requires a separately versioned authority policy and an explicit, accountable decision.
+The [P2-13 admission sidecar](builder-machine-advisory-admission.md) makes that negative
+route executable without changing quorum v2: complete response-bound risk
+assessments, shared model/failure-domain lineage, and missing, mismatched, future, or stale
+calibration all produce `abstain`. Current execution, lineage, and digest-only calibration evidence
+is deliberately unverified and therefore also abstains. A signed completion-bound positive route
+remains open. This code/test completion is not admission completion and remains pending a separately
+verified release-stage commit.
 Every remaining external decision is maintained only in
 [operator-and-authority-worklist.md](operator-and-authority-worklist.md).
 
@@ -117,12 +131,14 @@ not mathematical equivalence. They provide no evidence about real models, textbo
 semantic admission, Lean compilation, freeze, or Builder-to-Prover transfer.
 
 The separate iFEM structural-role lane tracks a source-text-free, source-metadata-bound 25-node
-candidate graph and sixteen project-synthetic comparison cases. D31 through D34 now bind those
+candidate graph and sixteen project-synthetic comparison cases. D31 through D35 now bind those
 bytes, provider policy, response contract, private outputs, and public aggregation without reading
 the operator source cache at runtime. Its 256-token observation yielded 16 invalid responses; the
-512-token successor yielded four valid abstentions and twelve invalid responses. Because the
-fixture is public and lookup-recoverable, this is failure-accounting and replay evidence, not
-held-out benchmarking, semantic calibration, or pilot admission.
+512-token successor yielded four valid abstentions and twelve invalid responses; the fixed D35
+1,024-token successor yielded two correct risk selections, eight abstentions, and six invalid
+outputs. Only the output ceiling changed from D34 to D35. Because the fixture is public and
+lookup-recoverable, this is failure-accounting and replay evidence, not held-out benchmarking,
+semantic calibration, a capability floor, or pilot admission.
 
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |

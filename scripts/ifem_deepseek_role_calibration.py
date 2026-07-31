@@ -1,4 +1,4 @@
-"""Run the sixteen-case iFEM synthetic-role calibration as a private D32 operation.
+"""Run the sixteen-case iFEM synthetic-role calibration as a private D32-successor operation.
 
 This runner is intentionally an observation path only.  It loads the hash-pinned redacted iFEM
 corpus, sends exactly the prepared DeepSeek bodies only in explicit ``run`` mode, and stores raw
@@ -79,6 +79,12 @@ _D34_PROFILE_PATH: Final[Path] = (
     / "operator-profiles"
     / "deepseek-v4-pro.ifem-role-calibration.v2.json"
 )
+_D35_PROFILE_PATH: Final[Path] = (
+    _REPOSITORY_ROOT
+    / "Prover"
+    / "operator-profiles"
+    / "deepseek-v4-pro.ifem-role-calibration.v3.json"
+)
 _GRAPH_PATH: Final[Path] = (
     _REPOSITORY_ROOT
     / "Builder"
@@ -114,6 +120,15 @@ _OPERATOR_SEED_FILE: Final[str] = "operator-seed.txt"
 _LEDGER_KEY_FILE: Final[str] = "ledger-hmac-key.txt"
 _SHA256: Final[str] = r"^[0-9a-f]{64}$"
 _SAFE_FAILURE: Final[str] = r"^[a-z][a-z0-9_]{0,63}$"
+_API_KEY_ASSIGNMENT: Final[re.Pattern[str]] = re.compile(
+    r"^(?:export\s+)?(?:AUTOLEAN_DEEPSEEK_API_KEY|DEEPSEEK_API_KEY|API_KEY)"
+    r"\s*(?:=|:)\s*(?P<value>.+?)\s*$",
+    flags=re.IGNORECASE,
+)
+_SENSITIVE_REFERENCE: Final[re.Pattern[str]] = re.compile(
+    r"(?:api[_-]?key|access[_-]?token|auth[_-]?token|secret|password)",
+    flags=re.IGNORECASE,
+)
 _ROLE_COUNTS: Final[dict[str, int]] = {
     IFEMStructuralProbeRoleV1.STATEMENT_FORMALIZER.value: 8,
     IFEMStructuralProbeRoleV1.FIDELITY_REVIEWER.value: 4,
@@ -126,6 +141,7 @@ class IFEMDeepSeekRoleCalibrationProtocolIdV1(StrEnum):
 
     D32_V1 = "d32-v1"
     D34_V2 = "d34-v2"
+    D35_V3 = "d35-v3"
 
 
 @dataclass(frozen=True, slots=True)
@@ -173,6 +189,20 @@ _PROTOCOLS: Final[
         expected_corpus_file_sha256=_CORPUS_V1_FILE_SHA256,
         expected_corpus_content_sha256=_CORPUS_V1_CONTENT_SHA256,
         expected_max_output_tokens=512,
+        response_contract=IFEMSyntheticRoleResponseContractV1.SELECTED_OPTION_ONLY_V2,
+    ),
+    IFEMDeepSeekRoleCalibrationProtocolIdV1.D35_V3: IFEMDeepSeekRoleCalibrationProtocolV1(
+        protocol_id=IFEMDeepSeekRoleCalibrationProtocolIdV1.D35_V3,
+        profile_path=_D35_PROFILE_PATH,
+        expected_profile_id="deepseek-v4-pro-ifem-role-d35",
+        expected_profile_content_sha256=(
+            "d8ee725c9dca99884c69a719e8b458d56163fb75e8b91458697c526b39e24a80"
+        ),
+        expected_graph_file_sha256=_GRAPH_V1_FILE_SHA256,
+        expected_graph_content_sha256=_GRAPH_V1_CONTENT_SHA256,
+        expected_corpus_file_sha256=_CORPUS_V1_FILE_SHA256,
+        expected_corpus_content_sha256=_CORPUS_V1_CONTENT_SHA256,
+        expected_max_output_tokens=1024,
         response_contract=IFEMSyntheticRoleResponseContractV1.SELECTED_OPTION_ONLY_V2,
     ),
 }
@@ -504,24 +534,52 @@ def _physical_file_parent_identities(path: Path, *, label: str) -> tuple[tuple[i
     return tuple(identities)
 
 
-def _read_physical_regular_file(path: Path, *, label: str) -> bytes:
-    try:
-        parents_before = _physical_file_parent_identities(path, label=label)
-        before = path.stat(follow_symlinks=False)
-        if _is_link_or_reparse_metadata(path, before) or not stat.S_ISREG(before.st_mode):
-            raise IFEMDeepSeekRoleCalibrationError(f"{label} must be an unlinked regular file")
-        payload = path.read_bytes()
-        after = path.stat(follow_symlinks=False)
-        parents_after = _physical_file_parent_identities(path, label=label)
-    except OSError as error:
-        raise IFEMDeepSeekRoleCalibrationError(f"{label} is unavailable") from error
-    if (
-        _is_link_or_reparse_metadata(path, after)
-        or not stat.S_ISREG(after.st_mode)
-        or (before.st_dev, before.st_ino, before.st_size)
-        != (after.st_dev, after.st_ino, after.st_size)
-        or parents_before != parents_after
+def _validated_physical_regular_file(
+    path: Path,
+    *,
+    label: str,
+    must_be_outside_checkout: bool = False,
+) -> tuple[tuple[tuple[int, int], ...], tuple[int, int, int], Path]:
+    """Return a no-content-read physical-file snapshot for a supplied path."""
+
+    if must_be_outside_checkout and ".." in path.parts:
+        raise IFEMDeepSeekRoleCalibrationError(
+            f"{label} must not contain parent-directory traversal"
+        )
+    parents = _physical_file_parent_identities(path, label=label)
+    metadata = path.stat(follow_symlinks=False)
+    if _is_link_or_reparse_metadata(path, metadata) or not stat.S_ISREG(metadata.st_mode):
+        raise IFEMDeepSeekRoleCalibrationError(f"{label} must be an unlinked regular file")
+    resolved = path.resolve(strict=True)
+    if must_be_outside_checkout and _is_relative_to(
+        resolved,
+        _REPOSITORY_ROOT.resolve(strict=True),
     ):
+        raise IFEMDeepSeekRoleCalibrationError(f"{label} must be outside the checkout")
+    return parents, (metadata.st_dev, metadata.st_ino, metadata.st_size), resolved
+
+
+def _read_physical_regular_file(
+    path: Path,
+    *,
+    label: str,
+    must_be_outside_checkout: bool = False,
+) -> bytes:
+    try:
+        parents_before, before, resolved_before = _validated_physical_regular_file(
+            path,
+            label=label,
+            must_be_outside_checkout=must_be_outside_checkout,
+        )
+        payload = path.read_bytes()
+        parents_after, after, resolved_after = _validated_physical_regular_file(
+            path,
+            label=label,
+            must_be_outside_checkout=must_be_outside_checkout,
+        )
+    except (OSError, RuntimeError) as error:
+        raise IFEMDeepSeekRoleCalibrationError(f"{label} is unavailable") from error
+    if before != after or parents_before != parents_after or resolved_before != resolved_after:
         raise IFEMDeepSeekRoleCalibrationError(f"{label} changed while loading")
     return payload
 
@@ -868,14 +926,31 @@ def _required_secret(
     return encoded
 
 
-def _read_operator_secret_file(path: Path, *, minimum_bytes: int) -> str:
+def _validate_operator_secret_file_reference(path: object) -> Path:
     if not isinstance(path, Path) or not path.is_absolute():
         raise OperatorSecretUnavailable("operator secret file must be an absolute path")
-    if _is_link_or_reparse_point(path) or not path.is_file():
-        raise OperatorSecretUnavailable("operator secret file must be a physical file")
     try:
-        payload = path.read_bytes()
-    except OSError as error:
+        _validated_physical_regular_file(
+            path,
+            label="operator secret file",
+            must_be_outside_checkout=True,
+        )
+    except (IFEMDeepSeekRoleCalibrationError, OSError, RuntimeError) as error:
+        raise OperatorSecretUnavailable(
+            "operator secret file must be an external physical regular file"
+        ) from error
+    return path
+
+
+def _read_operator_secret_file(path: Path, *, minimum_bytes: int) -> str:
+    secret_path = _validate_operator_secret_file_reference(path)
+    try:
+        payload = _read_physical_regular_file(
+            secret_path,
+            label="operator secret file",
+            must_be_outside_checkout=True,
+        )
+    except IFEMDeepSeekRoleCalibrationError as error:
         raise OperatorSecretUnavailable("operator secret file is unavailable") from error
     if len(payload) > 4096:
         raise OperatorSecretUnavailable("operator secret file is unexpectedly large")
@@ -885,6 +960,60 @@ def _read_operator_secret_file(path: Path, *, minimum_bytes: int) -> str:
         raise OperatorSecretUnavailable("operator secret file is invalid") from error
     _required_secret({"value": value}, "value", minimum_bytes=minimum_bytes)
     return value
+
+
+def _read_operator_api_key_file(path: Path) -> str:
+    """Parse one checkout-external API-key reference without exposing its value."""
+
+    secret_path = _validate_operator_secret_file_reference(path)
+    try:
+        payload = _read_physical_regular_file(
+            secret_path,
+            label="operator API-key file",
+            must_be_outside_checkout=True,
+        )
+    except IFEMDeepSeekRoleCalibrationError as error:
+        raise OperatorSecretUnavailable("operator API-key file is unavailable") from error
+    if not payload or len(payload) > 4096:
+        raise OperatorSecretUnavailable("operator API-key file has an invalid size")
+    try:
+        text = payload.decode("utf-8-sig")
+    except UnicodeDecodeError as error:
+        raise OperatorSecretUnavailable("operator API-key file is invalid") from error
+
+    lines = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    candidates: list[str] = []
+    recognized_lines: set[str] = set()
+    for line in lines:
+        match = _API_KEY_ASSIGNMENT.fullmatch(line)
+        if match is not None:
+            candidates.append(match.group("value"))
+            recognized_lines.add(line)
+    if not candidates and len(lines) == 1:
+        candidates = [lines[0]]
+        recognized_lines.add(lines[0])
+    if len(candidates) != 1:
+        raise OperatorSecretUnavailable("operator API-key file is ambiguous")
+    if any(
+        line not in recognized_lines and _SENSITIVE_REFERENCE.search(line) is not None
+        for line in lines
+    ):
+        raise OperatorSecretUnavailable("operator API-key file contains another secret")
+
+    candidate = candidates[0]
+    if len(candidate) >= 2 and candidate[0] == candidate[-1] and candidate[0] in {"'", '"'}:
+        candidate = candidate[1:-1]
+    if (
+        len(candidate) < 16
+        or len(candidate) > 512
+        or any(character.isspace() or ord(character) < 32 for character in candidate)
+    ):
+        raise OperatorSecretUnavailable("operator API-key file is invalid")
+    return candidate
 
 
 def _write_operator_secret(path: Path, value: str) -> None:
@@ -1320,9 +1449,11 @@ def _parser() -> argparse.ArgumentParser:
 
 def main(argv: Sequence[str] | None = None) -> int:
     mode: Literal["plan", "preflight", "run"] = "plan"
+    protocol_id = IFEMDeepSeekRoleCalibrationProtocolIdV1.D32_V1
     try:
         arguments = _parser().parse_args(argv)
         mode = arguments.mode
+        protocol_id = IFEMDeepSeekRoleCalibrationProtocolIdV1(arguments.protocol)
         config = IFEMDeepSeekRoleCalibrationConfig(
             mode=mode,
             state_root=arguments.state_root,
@@ -1331,16 +1462,20 @@ def main(argv: Sequence[str] | None = None) -> int:
             operator_approved=arguments.operator_approved,
         )
         file_references = (arguments.api_key_file, arguments.operator_material_root)
-        if any(item is not None for item in file_references) and not all(
-            item is not None for item in file_references
-        ):
-            raise OperatorSecretUnavailable("operator file references must be supplied together")
+        if any(item is not None for item in file_references):
+            if mode != "run":
+                raise OperatorSecretUnavailable(
+                    "operator file references are valid only for run mode"
+                )
+            if not all(item is not None for item in file_references):
+                raise OperatorSecretUnavailable(
+                    "operator file references must be supplied together"
+                )
         environment: Mapping[str, str] | None = None
         if arguments.api_key_file is not None and arguments.operator_material_root is not None:
-            api_key = _read_operator_secret_file(
-                arguments.api_key_file,
-                minimum_bytes=1,
-            )
+            # Validate the secret reference before either reading it or creating operator material.
+            _validate_operator_secret_file_reference(arguments.api_key_file)
+            api_key = _read_operator_api_key_file(arguments.api_key_file)
             seed, ledger_key = _load_or_initialize_operator_material(
                 arguments.operator_material_root
             )
@@ -1357,7 +1492,12 @@ def main(argv: Sequence[str] | None = None) -> int:
     except BaseException as error:
         if isinstance(error, (KeyboardInterrupt, SystemExit)):
             raise
-        report = _report(mode, "execution_refused", failure_class=_failure_class(error))
+        report = _report(
+            mode,
+            "execution_refused",
+            protocol_id=protocol_id,
+            failure_class=_failure_class(error),
+        )
     print(canonical_json_bytes(report.model_dump(mode="json")).decode("ascii"))
     return 0 if report.status in {"planned", "preflight_ready", "settled"} else 2
 

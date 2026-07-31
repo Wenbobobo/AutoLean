@@ -3,6 +3,7 @@ from __future__ import annotations
 import copy
 import hashlib
 import json
+import shutil
 from pathlib import Path
 
 import pytest
@@ -20,6 +21,7 @@ from autolean_builder.ifem_prerequisite_census import (
     normalize_query_observation,
     not_run_result,
     render_lean_query,
+    validate_local_library_dependencies,
     validate_plan_bindings,
     validate_result_against_plan,
 )
@@ -118,6 +120,20 @@ def test_rendered_lean_query_observes_metadata_without_classifying() -> None:
     assert "thin_adapter" not in source
     assert '"classification"' not in source
     assert "StatementContractV1" not in source
+
+
+def test_host_preflight_refuses_missing_local_packages_before_lake(tmp_path: Path) -> None:
+    library = tmp_path / "Library"
+    library.mkdir()
+    shutil.copyfile(DEFAULT_LIBRARY_ROOT / "lean-toolchain", library / "lean-toolchain")
+    shutil.copyfile(DEFAULT_LIBRARY_ROOT / "lake-manifest.json", library / "lake-manifest.json")
+
+    with pytest.raises(IFEMPrerequisiteCensusError, match="local package directory"):
+        validate_local_library_dependencies(_plan(), library_root=library)
+
+    (library / ".lake" / "packages").mkdir(parents=True)
+    with pytest.raises(IFEMPrerequisiteCensusError, match="Library package"):
+        validate_local_library_dependencies(_plan(), library_root=library)
 
 
 def test_not_run_result_is_content_addressed_and_all_unknown() -> None:
