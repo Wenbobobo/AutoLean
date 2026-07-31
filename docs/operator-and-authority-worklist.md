@@ -5,19 +5,20 @@ Status: active, canonical external-action register
 Chinese operational copy: [operator-and-authority-worklist.zh-CN.md](operator-and-authority-worklist.zh-CN.md).
 It is a faithful reader-oriented translation, not a second authority source.
 
-Last cross-audit: 2026-07-31. The audit compared this file with every current `AUTH-*`
+Last cross-audit: 2026-08-01. The audit compared this file with every current `AUTH-*`
 reference, the stable `OQ-*` register, the Phase 1 evidence ledger, the active roadmap, and the
 Phase 2 roadmap. All eleven pre-existing `AUTH-*` identifiers are here. Two formerly implicit
 decisions are now explicit: `AUTH-T5-01` (freeze one exact statement contract) and
 `AUTH-DASHBOARD-REMOTE-01` (remote Dashboard access). No ordinary plan may keep a separate
 operator checklist.
 
-Latest remote fact, checked 2026-07-31: draft [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26)
-is open and `CLEAN` at `705f2c192865eae1dbe4151926f92ce61634fddc`; all four jobs in
-[CI run 30612841190](https://github.com/Wenbobobo/AutoLean/actions/runs/30612841190) completed
-successfully. The PR body separately records clean-stage local validation of 1,875 passes, 13
-explicit skips, and zero failures. These are useful engineering records, not an RC, semantic
-admission, signer deployment, provider authority, or mathematical result.
+Latest remote fact, checked 2026-08-01: draft [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26)
+is open and `CLEAN` at `3a2cbfffe2d99689ef4082d5f45bd7a04ebf4e27`; all four jobs in
+[CI run 30669222958](https://github.com/Wenbobobo/AutoLean/actions/runs/30669222958) completed
+successfully. A separately retained project-local clean-stage record for that exact commit reports
+2,154 passes, 13 explicit skips, and zero failures; the current PR body still describes an older
+candidate and is not the source of that count. These are useful engineering records, not an RC,
+semantic admission, signer deployment, provider authority, or mathematical result.
 
 ## What this file is for
 
@@ -178,10 +179,11 @@ Keeping it as a negative fixture requires no mathematical expert; reviving it do
 - **Support type / priority:** release decision, P3; intentionally last.
 - **Plain meaning:** decide what one exact commit may honestly be called. "No-RC" is a valid,
   useful decision when the authority gates are still open.
-- **Current state:** draft PR #26 at `705f2c192865eae1dbe4151926f92ce61634fddc` records 1,875
-  clean-stage passes, 13 explicit environment/cache/OCI skips, zero failures, FATE canary
-  preparation, local T6 preparation, scans, SBOM, and policy checks; its four-job GitHub Actions run
-  is green. It remains `no-RC` because rights/T5, independently operated T6/signer, real T7, and
+- **Current state:** draft PR #26 is green at
+  `3a2cbfffe2d99689ef4082d5f45bd7a04ebf4e27`; a separately retained project-local record reports
+  2,154 clean-stage passes, 13 explicit environment/cache/OCI skips, zero failures, FATE canary
+  preparation, local T6 preparation, scans, SBOM, and policy checks. It remains `no-RC` because
+  rights/T5, independently operated T6/signer, real T7, and
   independently administered provider evaluation are not closed.
 - **Impact:** prevents a public code repository or green CI badge from being mistaken for a verified
   mathematical system.
@@ -217,15 +219,20 @@ Keeping it as a negative fixture requires no mathematical expert; reviving it do
   model. This is about permission and provenance, not whether the mathematics is true.
 - **Current state:** iFEM bytes and CC BY 4.0 license identity are pinned; the current enforced
   policy is `local_only` with no external-model egress. That is evidence, not legal advice or a
-  completed usage decision.
+  completed usage decision. The machine-prepared M4.8 record is deliberately only an unattested
+  `unknown` rights candidate: it embeds the exact plan/request and text-free source identity, rejects
+  arbitrary reviewer strings and added spans/metadata, and grants no local or external endpoint.
 - **Impact:** unlocks the first real `local_calibration` sample only within the chosen scope.
 - **If incomplete:** agents may inspect public metadata and use synthetic fixtures, but may not send
   text to external models, redistribute it, or start real source-backed conversion.
 - **Needed support:** the project/source-rights owner selects one narrow scope. The recommended
   near-term choice is "local cached analysis, attribution retained, no external model egress, no
   public excerpt redistribution." Broader use needs an explicit rights/operational review.
-- **Close with:** `SourceRecordV1`, `RightsRecordV1`, license and attribution hashes, allowed
-  endpoint classes, accountable owner, and review date. This does not approve a statement's meaning.
+- **Close with:** an append-only trusted successor binding the candidate hash, `SourceRecordV1`,
+  `RightsRecordV1`, license and attribution hashes, exact allowed endpoint classes, accountable
+  authority identity, purpose-separated attestation, issue/expiry or review date, and revocation
+  policy. It must not mutate V1 or reuse a reviewer string as authority. This does not approve a
+  statement's meaning, model execution, freeze, or Prover handoff.
 
 ### [ ] AUTH-T5-01 - admit and freeze one exact statement contract
 

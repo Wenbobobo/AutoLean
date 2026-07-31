@@ -21,8 +21,8 @@ evidence, and stop condition.
 
 The last green public baseline does not change this boundary: draft
 [PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open and merge-clean at
-`b49e4b7`, with all four jobs in
-[GitHub Actions run 30665653343](https://github.com/Wenbobobo/AutoLean/actions/runs/30665653343)
+`3a2cbff`, with all four jobs in
+[GitHub Actions run 30669222958](https://github.com/Wenbobobo/AutoLean/actions/runs/30669222958)
 successful. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
 semantic-admission, authority-kernel, independently administered provider, or novelty result for
 Phase 2. Earlier `cd42ba7` and `f251e19` candidates remain dated history.
@@ -134,6 +134,14 @@ self-calibration harness and a deterministic 5/3/3 train/dev/held-out structural
 eleven canonical fixtures. Both use exact local fake providers and measure replayable structure,
 not mathematical equivalence. They provide no evidence about real models, textbook fidelity,
 semantic admission, Lean compilation, freeze, or Builder-to-Prover transfer.
+
+The M4.8 atomic-span successor is narrower still. Its audited local-use object records only an
+unattested `unknown` rights claim and cannot authorize even local processing. A separate
+project-synthetic protocol exercises exact UTF-8 half-open boundaries, two-output equality,
+typed abstention, repository-external private persistence, and a nonce-hardened redacted public
+projection. It has no real iFEM projection, rights-resolution, provider, statement-contract, graph,
+or Prover entry point. Even exact synthetic consensus remains
+`machine_located_pending_semantic_review`, with independence and nonce provenance unverified.
 
 The separate iFEM structural-role lane tracks a source-text-free, source-metadata-bound 25-node
 candidate graph and sixteen project-synthetic comparison cases. D31 through D35 now bind those

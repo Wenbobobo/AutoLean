@@ -197,7 +197,11 @@ runner reports success.
     mathematical claim. The subsequent
     [coarse local calibration plan](research/ifem-coarse-local-calibration-plan-v1.md) binds the
     four opening containers and pending local-use request in a public, text-free, non-executable
-    artifact; it still selects no atomic claim and grants no model, freeze, or handoff authority. The
+    artifact; it still selects no atomic claim and grants no model, freeze, or handoff authority.
+    The follow-on [atomic source-span protocol](research/ifem-atomic-source-span-v1.md) tests exact
+    UTF-8 byte boundaries, dual-output consensus, private persistence, and redacted commitments on
+    project-synthetic Unicode text only. Its local-use record is an unattested `unknown` candidate,
+    and there is intentionally no real iFEM or provider entry point. The
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
     binds the actual 25-node / 21-prerequisite denominator. The pinned Lean query has now run, but
     every mapping remains `unknown` until independent semantic classification evidence exists. The separate
