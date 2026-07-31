@@ -1,7 +1,7 @@
 # Phase 2 Fractal Roadmap
 
 Status: strategic milestone record, not an execution-order or release authority
-Updated: 2026-07-31
+Updated: 2026-08-01
 
 ## Executive summary
 
@@ -19,10 +19,10 @@ Phase 2 preparation in parallel, while keeping the authority boundary strict:
 This document is fractal: every level repeats the same pattern of mission, milestone, task,
 evidence, and stop condition.
 
-The public candidate does not change this boundary: on 2026-07-31, draft
-[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open and `CLEAN` at `705f2c`,
-with all four jobs in
-[GitHub Actions run 30612841190](https://github.com/Wenbobobo/AutoLean/actions/runs/30612841190)
+The last green public baseline does not change this boundary: draft
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open at `c112ebb`, with all
+four jobs in
+[GitHub Actions run 30650661441](https://github.com/Wenbobobo/AutoLean/actions/runs/30650661441)
 successful. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
 semantic-admission, authority-kernel, independently administered provider, or novelty result for
 Phase 2. Earlier `cd42ba7` and `f251e19` candidates remain dated history.
@@ -164,9 +164,11 @@ attestation, held-out worker isolation, live-model eligibility, semantic authori
 Prover handoff. The follow-on
 [private 27-stage ledger V1](research/ifem-source-free-stage-ledger-v1.md) now loads only the
 persisted seed plus exact queue replay, enforces ordered role predecessors, and records at most one
-counting-executor dispatch per coordinate with explicit-quiescence recovery. It still performs no
-provider dispatch and attests no completion verification; the ModelWork/authorization/CAS sidecar
-remains required before any live model use.
+counting-executor dispatch per coordinate with explicit-quiescence recovery. The separate
+[ModelWork sidecar V1](research/ifem-source-free-model-work-sidecar-v1.md) now supplies the missing
+one-attempt authorization, shared EventStore fencing, private CAS settlement, strict predecessor
+projection, and no-redispatch recovery path. Its tests use a counting fake only; external transport,
+held-out isolation, semantic calibration, freeze, and Prover handoff remain unverified.
 
 | Gate | Required before production ingestion | Can proceed in parallel now |
 | --- | --- | --- |

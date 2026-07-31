@@ -1181,6 +1181,66 @@ class ModelExecutionAuthorizationService:
             )
         return self._attest_completion(record)
 
+    def completion_recovery_handle_for_authorization(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+    ) -> ModelExecutionCompletionRecoveryHandleV1 | None:
+        """Find the unique durable settlement for an exact authorization snapshot.
+
+        Discovery is intentionally independent of historical lease liveness and private-output
+        availability.  It reads no CAS object and creates no receipt; callers must pass the
+        returned credential-free handle to ``recover_completion`` for those operations.
+        """
+
+        if not isinstance(authorization, ModelExecutionAuthorizationV1):
+            raise ModelExecutionAuthorizationError(
+                "completion recovery discovery requires a model execution authorization"
+            )
+        with self._events.connection() as connection:
+            connection.execute("BEGIN")
+            stored = self._stored_authorization(
+                connection,
+                authorization.authorization_id.value,
+            )
+            self._assert_same_capability(stored, authorization)
+            rows = connection.execute(
+                """
+                SELECT reservation_id FROM (
+                    SELECT reservation_id
+                    FROM model_execution_completion_settlements
+                    WHERE authorization_id = ?
+                    UNION
+                    SELECT settlements.reservation_id
+                    FROM model_execution_completion_settlements AS settlements
+                    JOIN model_execution_authorization_ledger AS ledger
+                      ON ledger.reservation_id = settlements.reservation_id
+                    WHERE ledger.authorization_id = ?
+                      AND ledger.event_type = 'settled'
+                )
+                ORDER BY reservation_id
+                LIMIT 2
+                """,
+                (
+                    authorization.authorization_id.value,
+                    authorization.authorization_id.value,
+                ),
+            ).fetchall()
+            if not rows:
+                return None
+            if len(rows) != 1:
+                raise ModelExecutionAuthorizationError(
+                    "model execution authorization has multiple output-bound settlements"
+                )
+            record = self._stored_completion_record(
+                connection,
+                str(rows[0]["reservation_id"]),
+            )
+            if record.authorization != stored:
+                raise ModelExecutionAuthorizationError(
+                    "model execution settlement authorization differs from its durable snapshot"
+                )
+        return model_execution_completion_recovery_handle(record)
+
     def verify_completion(self, receipt: ModelExecutionCompletionReceiptV1) -> None:
         """Verify one stored receipt without requiring its historical lease to remain live."""
 
@@ -2338,7 +2398,7 @@ class ModelExecutionAuthorizationService:
     ) -> ModelExecutionCompletionRecordV1:
         row = connection.execute(
             """
-            SELECT completion_id, settlement_event_id, settlement_event_hash,
+            SELECT authorization_id, completion_id, settlement_event_id, settlement_event_hash,
                    completion_record_hash, completion_record_json
             FROM model_execution_completion_settlements
             WHERE reservation_id = ?
@@ -2352,6 +2412,7 @@ class ModelExecutionAuthorizationService:
         if (
             canonical_json(record.model_dump(mode="json")) != serialized
             or record.reservation.reservation_id.value != reservation_id
+            or record.authorization.authorization_id.value != str(row["authorization_id"])
             or record.completion_id.value != str(row["completion_id"])
             or record.settlement_event_id != str(row["settlement_event_id"])
             or record.settlement_event_hash.value != str(row["settlement_event_hash"])

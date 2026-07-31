@@ -21,6 +21,7 @@ from autolean_contracts import (
     ModelResponseArtifactV1,
     build_model_execution_private_output,
     model_execution_completion_public,
+    model_execution_completion_recovery_handle,
     stable_identifier,
 )
 from autolean_control_plane import (
@@ -709,3 +710,148 @@ def test_post_settlement_output_loss_returns_safe_handle_and_recovers_without_pr
     assert completed.response.text == "by rfl"
     assert harness.provider.calls == 1
     harness.service.verify_completion(completed.receipt)
+
+
+def test_completion_recovery_lookup_returns_none_without_settlement(tmp_path: Path) -> None:
+    harness = _completion_harness(tmp_path)
+
+    handle = harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+
+    assert handle is None
+    assert harness.provider.calls == 0
+    assert _table_count(harness.database, "model_execution_completion_settlements") == 0
+    assert _table_count(harness.database, "model_execution_completion_receipts") == 0
+
+
+def test_completion_recovery_lookup_returns_unique_handle_without_cas_read(
+    tmp_path: Path,
+) -> None:
+    harness = _completion_harness(tmp_path)
+    completed = harness.registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+    reference = completed.receipt.record.private_output.artifact
+    artifact = (
+        tmp_path
+        / "private-output"
+        / reference.artifact_digest.value[:2]
+        / reference.artifact_digest.value[2:]
+    )
+    artifact.unlink()
+    table_names = (
+        "model_execution_completion_settlements",
+        "model_execution_completion_receipts",
+        "model_execution_authorization_ledger",
+        "model_execution_provider_health_ledger",
+    )
+    counts_before = tuple(_table_count(harness.database, table) for table in table_names)
+
+    handle = harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+
+    assert handle == model_execution_completion_recovery_handle(completed.receipt.record)
+    assert harness.provider.calls == 1
+    assert tuple(_table_count(harness.database, table) for table in table_names) == counts_before
+
+
+def test_discovered_completion_handle_recovers_without_provider_call(tmp_path: Path) -> None:
+    harness = _completion_harness(tmp_path)
+    completed = harness.registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+    handle = harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+    assert handle is not None
+
+    recovered = harness.registry.recover_completed(
+        handle,
+        output_store=harness.output_store,
+    )
+
+    assert recovered == completed
+    assert harness.provider.calls == 1
+
+
+def test_completion_recovery_lookup_rejects_changed_authorization(tmp_path: Path) -> None:
+    harness = _completion_harness(tmp_path)
+    changed = harness.authorization.model_copy(update={"budget": _budget(attempts=1)})
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="differs from the control-plane"):
+        harness.service.completion_recovery_handle_for_authorization(changed)
+
+    assert harness.provider.calls == 0
+
+
+def test_completion_recovery_lookup_rejects_multiple_settlements(tmp_path: Path) -> None:
+    harness = _completion_harness(tmp_path)
+    harness.registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+    second_provider = CountingFakeProvider([_response()])
+    second_registry = _registry(harness.service, [], provider=second_provider)
+    second_registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="multiple output-bound settlements"):
+        harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+
+    assert harness.provider.calls == 1
+    assert second_provider.calls == 1
+    assert _table_count(harness.database, "model_execution_completion_settlements") == 2
+
+
+def test_completion_recovery_lookup_rejects_corrupt_settlement_row(tmp_path: Path) -> None:
+    harness = _completion_harness(tmp_path)
+    harness.registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+    with sqlite3.connect(harness.database) as connection:
+        connection.execute("DROP TRIGGER model_execution_completion_settlements_forbid_update")
+        connection.execute(
+            """
+            UPDATE model_execution_completion_settlements
+            SET completion_record_json = '{'
+            WHERE authorization_id = ?
+            """,
+            (harness.authorization.authorization_id.value,),
+        )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="record is corrupt"):
+        harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+
+    assert harness.provider.calls == 1
+
+
+def test_completion_recovery_lookup_rejects_misbound_settlement_authorization(
+    tmp_path: Path,
+) -> None:
+    harness = _completion_harness(tmp_path)
+    harness.registry.generate_completed(
+        harness.authorization,
+        harness.request,
+        output_store=harness.output_store,
+    )
+    with sqlite3.connect(harness.database) as connection:
+        connection.execute("DROP TRIGGER model_execution_completion_settlements_forbid_update")
+        connection.execute(
+            """
+            UPDATE model_execution_completion_settlements
+            SET authorization_id = 'misbound-authorization'
+            WHERE authorization_id = ?
+            """,
+            (harness.authorization.authorization_id.value,),
+        )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="record is misbound"):
+        harness.service.completion_recovery_handle_for_authorization(harness.authorization)
+
+    assert harness.provider.calls == 1

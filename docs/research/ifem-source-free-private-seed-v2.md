@@ -143,26 +143,30 @@ progress. File flush plus atomic hard-link publication supports the tested
 process-interruption boundary; without a parent-directory durability receipt,
 V2 does not claim persistence across operating-system or storage power loss.
 
-## Required next interface: private 27-stage ledger
+## Implemented downstream interfaces
 
-The protocol intentionally stops before model dispatch. The next component
-must consume a persisted-and-revalidated manifest, never an in-memory
-pre-persistence candidate. It should define a durable private ledger keyed by
-one exact stage coordinate per `(run_id, case_id, role)` for the fixed role
-order:
+The protocol intentionally stops before model dispatch. The downstream
+[private stage ledger](ifem-source-free-stage-ledger-v1.md) and
+[ModelWork sidecar](ifem-source-free-model-work-sidecar-v1.md) consume this
+persisted-and-revalidated manifest rather than an in-memory pre-persistence
+candidate. The ledger is keyed by one exact stage coordinate per
+`(run_id, case_id, role)` for the fixed role order:
 
 `statement_formalizer -> fidelity_reviewer -> cheating_supervisor`.
 
-There are exactly nine cases times three roles: 27 coordinates. The ledger must
-record each attempted/completed state, immutable request and response artifact
-references, provider/model configuration references, bounded attempt budget,
-and a fencing/recovery identity. A restart must recover completed coordinates
-without redispatching them; a global dispatch cap of 27 and one attempt per
-stage must be enforced by the durable ledger rather than by a caller loop.
+There are exactly nine cases times three roles: 27 coordinates. State ownership
+is deliberately split rather than duplicated: the ledger owns dispatch state,
+the shared control plane owns lease/authorization/reservation/settlement, one
+fenced EventStore event binds the coordinate to its exact authorization, and
+private CAS owns response bytes. Recovery discovers a settled completion by
+authorization and never redispatches an unknown attempt. The one-attempt bound
+is enforced by the authorization plus the unique attempt event, not a caller
+loop.
 
 Its public summary may bind only the V2 commitment and aggregate counts. It
 must not reveal private coordinate mapping, raw model output, oracle, nonce,
-or private storage information. Before any live execution, the ledger needs its
-own provider authorization, private-output retention policy, worker-isolation
-design, and independent evaluation protocol. Those mechanisms are not provided
-by V2 and cannot be inferred from the 3/3/3 split.
+or private storage information. Before any live execution, the composed stack
+still needs a real operator approval, idempotent admission gateway,
+private-output retention policy, worker-isolation decision, and independent
+evaluation protocol. Those mechanisms are not provided by V2 and cannot be
+inferred from the 3/3/3 split.

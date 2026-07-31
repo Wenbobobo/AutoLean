@@ -48,6 +48,14 @@ The current role-benchmark wire format and store are V3. V1/V2 SQLite stores, fi
 records, and reports are intentionally rejected because their missing bindings cannot be
 reconstructed safely. The checked-in V1 file is an answer-free retirement tombstone only.
 
+`ifem_source_free_model_work_sidecar.py` is a separate private Builder-calibration execution
+fixture. It reloads a repository-external seed, uses the normal ModelWork admission, approval,
+lease, one-attempt authorization, private-CAS, settlement, and receipt path, and records one fenced
+coordinate-to-authorization event in the shared control-plane database. Its public report is
+aggregate-only and all authority remains false. The current suite uses a counting fake provider;
+it is not an iFEM statement, real-model result, private held-out score, or Prover task. See the
+[sidecar protocol](../docs/research/ifem-source-free-model-work-sidecar-v1.md).
+
 `tests/test_builder_prover_closed_loop.py` is the one-node offline evidence-closure fixture. It
 persists canonical statement-fidelity evidence, freezes and bridges the reviewed revision, records
 revision-bound failure feedback, requires a fresh Builder review for the next revision, and runs a

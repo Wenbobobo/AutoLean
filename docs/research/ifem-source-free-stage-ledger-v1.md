@@ -1,8 +1,8 @@
 # iFEM Source-Free Stage Ledger V1
 
-Status: internal, source-free execution-journal protocol. It has a counting-fake executor surface
-and is not a provider harness, a ModelWork authorization, a held-out benchmark, or Builder
-semantic evidence.
+Status: internal, source-free execution-journal protocol. Its counting-fake executor surface now
+has a separate ModelWork/CAS sidecar, but the ledger remains neither a provider harness nor a
+held-out benchmark or Builder semantic evidence.
 
 ## Purpose
 
@@ -70,9 +70,10 @@ Because the private plan contains 27 coordinates and each coordinate can create 
 executor callback invocations <= dispatch_started coordinates <= 27
 ```
 
-This is not yet the stronger claim `provider calls <= 27`. The future sidecar must make the
-provider call occur only inside the one claimed executor callback and bind it to one-attempt
-ModelWork authorization.
+The separate [ModelWork sidecar](ifem-source-free-model-work-sidecar-v1.md) now makes the provider
+call occur only after the unique fenced attempt binding and uses a one-attempt ModelWork
+authorization. Its counting-fake concurrency test observes one provider call for two racing
+callers. This is local engineering evidence, not a production transport attestation.
 
 ## Completion-binding boundary
 
@@ -118,18 +119,17 @@ The projection states:
 It is not proof of valid model transport, correct role parsing, semantic fidelity, mathematical
 truth, Lean verification, held-out performance, or a successful Builder run.
 
-## Required successor
+## Implemented successor boundary
 
-The execution sidecar must remain a separate versioned component. It must construct each role card
-only after the prior role's strictly parsed finite response exists, then bind the exact outbound
-bytes to project-synthetic source/rights records, `ModelWorkBundleV2`, admission, a single-attempt
-authorization, private CAS, and completion receipt. Recovery must use `recover_completed` or enter
-reconciliation; it may never redispatch an unknown attempt.
+The execution sidecar remains a separate versioned component. It reloads the exact persisted seed,
+constructs downstream cards only from strictly parsed predecessor responses, and binds exact
+outbound bytes to project-synthetic source/rights records, `ModelWorkBundleV2`, admission, a
+single-attempt authorization, private CAS, and a verified completion receipt.
 
-The control plane still needs an authorization-to-settled-completion recovery lookup for the crash
-window after settlement but before a sidecar retained its recovery handle. Until that interface and
-the real binding resolver exist, V1 remains counting-fake-only and must not receive DeepSeek or any
-other provider callback.
+The control plane now supplies the read-only authorization-to-settlement lookup required for the
+crash window after settlement. Unknown or invalid attempts still enter reconciliation and can never
+redispatch. The implementation remains counting-fake-tested; a DeepSeek or other external canary
+is a later, separately authorized observation.
 
 ## Verification snapshot
 
