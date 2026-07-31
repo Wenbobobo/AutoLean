@@ -194,7 +194,10 @@ runner reports success.
     [private Markdown-cell text projection](research/ifem-notebook-markdown-cell-text-projection-v1.md)
     can replay one explicitly digest-bound cell into the ignored local cache for later source-span
     calibration without changing the source lock, authorizing model egress, or selecting a
-    mathematical claim. The
+    mathematical claim. The subsequent
+    [coarse local calibration plan](research/ifem-coarse-local-calibration-plan-v1.md) binds the
+    four opening containers and pending local-use request in a public, text-free, non-executable
+    artifact; it still selects no atomic claim and grants no model, freeze, or handoff authority. The
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
     binds the actual 25-node / 21-prerequisite denominator. The pinned Lean query has now run, but
     every mapping remains `unknown` until independent semantic classification evidence exists. The separate

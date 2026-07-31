@@ -20,9 +20,9 @@ This document is fractal: every level repeats the same pattern of mission, miles
 evidence, and stop condition.
 
 The last green public baseline does not change this boundary: draft
-[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open at `c112ebb`, with all
-four jobs in
-[GitHub Actions run 30650661441](https://github.com/Wenbobobo/AutoLean/actions/runs/30650661441)
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open and merge-clean at
+`b49e4b7`, with all four jobs in
+[GitHub Actions run 30665653343](https://github.com/Wenbobobo/AutoLean/actions/runs/30665653343)
 successful. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
 semantic-admission, authority-kernel, independently administered provider, or novelty result for
 Phase 2. Earlier `cd42ba7` and `f251e19` candidates remain dated history.
@@ -86,8 +86,10 @@ policy remains pending independent review. The exact 13-file source set has now 
 `local_only`. Text-free indexes bind 10 notebooks and 161 cells plus three ATX-heading sections in
 `intro.md`. Four opening Markdown cells have also been materialized into ignored, write-once
 private logical-text projections and independently replayed against the same source lock and
-index. They are coarse containers, not mathematical claim spans; no mathematical claim span has
-been selected. A deterministic candidate-only
+index. A public, text-free coarse calibration plan now binds exactly those four containers and the
+pending local-use request, with `executable=false` and every authority flag false. They are coarse
+containers, not mathematical claim spans; no mathematical claim span has been selected. A
+deterministic candidate-only
 MathematicalGraph projection now contains 25 nodes and 49 planning edges. Its source anchors are
 index-position locators, not semantic mappings, and its edges are declared-unreviewed or
 low-confidence overlap signals, not mathematical dependencies. It creates no FormalGraph,

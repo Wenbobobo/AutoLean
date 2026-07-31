@@ -246,6 +246,104 @@ def test_overlay_rejects_junction_or_reparse_output_directory(
         )
 
 
+def test_overlay_rejects_reparse_source_lock_parent(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_root = tmp_path / "references"
+    source_receipt = _materialize_source_lock(cache_root)
+    original = repository_text._is_link_or_reparse
+
+    def forged_reparse(
+        path: Path,
+        metadata: os.stat_result | None = None,
+    ) -> bool:
+        return path == source_receipt.parent or original(path, metadata)
+
+    monkeypatch.setattr(repository_text, "_is_link_or_reparse", forged_reparse)
+
+    with pytest.raises(
+        repository_text.IFEMRepositoryTextError,
+        match="directory must not be a link or reparse point",
+    ):
+        repository_text.materialize_ifem_repository_text_overlay(
+            cache_root=cache_root,
+            source_lock_path=source_receipt,
+        )
+
+
+def test_overlay_rejects_reparse_source_lock_file(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_root = tmp_path / "references"
+    source_receipt = _materialize_source_lock(cache_root)
+    original = repository_text._is_link_or_reparse
+
+    def forged_reparse(
+        path: Path,
+        metadata: os.stat_result | None = None,
+    ) -> bool:
+        return path == source_receipt or original(path, metadata)
+
+    monkeypatch.setattr(repository_text, "_is_link_or_reparse", forged_reparse)
+
+    with pytest.raises(
+        repository_text.IFEMRepositoryTextError,
+        match="iFEM source lock must not be a link or reparse point",
+    ):
+        repository_text.materialize_ifem_repository_text_overlay(
+            cache_root=cache_root,
+            source_lock_path=source_receipt,
+        )
+
+
+def test_overlay_rejects_reparse_existing_receipt_target(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_root, source_receipt, plan = _materialized(tmp_path)
+    original = repository_text._is_link_or_reparse
+
+    def forged_reparse(
+        path: Path,
+        metadata: os.stat_result | None = None,
+    ) -> bool:
+        return path == plan.receipt_path or original(path, metadata)
+
+    monkeypatch.setattr(repository_text, "_is_link_or_reparse", forged_reparse)
+
+    with pytest.raises(
+        repository_text.IFEMRepositoryTextError,
+        match="existing local overlay receipt must not be a link or reparse point",
+    ):
+        repository_text.materialize_ifem_repository_text_overlay(
+            cache_root=cache_root,
+            source_lock_path=source_receipt,
+        )
+
+
+def test_secure_reader_rejects_open_identity_drift(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    cache_root = tmp_path / "references"
+    cache_root.mkdir()
+    target = cache_root / "input.txt"
+    target.write_bytes(b"fixed")
+    monkeypatch.setattr(os.path, "samestat", lambda _left, _right: False)
+
+    with pytest.raises(
+        repository_text.IFEMRepositoryTextError,
+        match="input changed while opening",
+    ):
+        repository_text._read_regular_file(
+            target,
+            cache_root=cache_root,
+            label="input",
+        )
+
+
 def test_module_has_no_direct_network_or_provider_imports() -> None:
     tree = ast.parse(Path(repository_text.__file__).read_text(encoding="utf-8"))
     imported_roots = {

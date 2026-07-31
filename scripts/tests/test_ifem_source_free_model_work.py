@@ -11,6 +11,7 @@ from collections.abc import Mapping
 from pathlib import Path
 
 import pytest
+from autolean_builder.ifem_source_free_case_authoring import SourceFreeAuthoringCardV1
 from autolean_builder.ifem_source_free_stage_ledger import (
     LocalSourceFreeStageLedger,
     SourceFreeStageCoordinateV1,
@@ -176,6 +177,44 @@ def test_plan_hash_binds_the_input_envelope_contract(
         sidecar_module,
         "_STAGE_INPUT_SCHEMA_VERSION",
         "autolean.ifem-source-free-stage-input.test-drift",
+    )
+
+    changed = runner.build_source_free_deepseek_plan()
+
+    assert original.prompt_contract_sha256 != changed.prompt_contract_sha256
+    assert original.content_sha256 != changed.content_sha256
+
+
+def test_plan_hash_binds_the_input_envelope_key_structure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = runner.build_source_free_deepseek_plan()
+    monkeypatch.setattr(
+        sidecar_module,
+        "_STAGE_INPUT_TOP_LEVEL_KEYS",
+        ("payload", "role", "schema_version"),
+    )
+
+    changed = runner.build_source_free_deepseek_plan()
+
+    assert original.prompt_contract_sha256 != changed.prompt_contract_sha256
+    assert original.content_sha256 != changed.content_sha256
+
+
+def test_plan_hash_binds_the_formalizer_card_schema(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    original = runner.build_source_free_deepseek_plan()
+    original_schema = SourceFreeAuthoringCardV1.model_json_schema
+
+    def drifted_schema(**_kwargs: object) -> dict[str, object]:
+        schema = original_schema(mode="validation")
+        return {**schema, "autolean_test_drift": True}
+
+    monkeypatch.setattr(
+        SourceFreeAuthoringCardV1,
+        "model_json_schema",
+        staticmethod(drifted_schema),
     )
 
     changed = runner.build_source_free_deepseek_plan()

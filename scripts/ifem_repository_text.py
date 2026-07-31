@@ -42,6 +42,9 @@ OVERLAY_RECEIPT_SCHEMA: Final[str] = "autolean.ifem-repository-text-receipt.v1"
 OVERLAY_ARTIFACT_KIND: Final[str] = "local_only_repository_markdown_text_overlay"
 _SHA256_LENGTH = 64
 _REPARSE_POINT = int(getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400))
+_READ_CHUNK_BYTES = 1024 * 1024
+_DirectoryIdentity = tuple[int, int, int, int]
+_DirectorySnapshot = tuple[tuple[Path, _DirectoryIdentity], ...]
 
 
 class IFEMRepositoryTextError(ValueError):
@@ -87,41 +90,137 @@ def _sha256(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
 
 
-def _is_relative_to(path: Path, root: Path) -> bool:
+def _absolute_lexical(path: Path) -> Path:
+    return Path(os.path.abspath(os.fspath(path)))
+
+
+def _relative_parts(path: Path, root: Path) -> tuple[str, ...]:
     try:
-        path.relative_to(root)
-    except ValueError:
-        return False
-    return True
+        relative = path.relative_to(root)
+    except ValueError as error:
+        raise IFEMRepositoryTextError("local overlay path escapes the iFEM source cache") from error
+    if any(part in {"", ".", ".."} for part in relative.parts):
+        raise IFEMRepositoryTextError("local overlay path contains an unsafe component")
+    return relative.parts
 
 
 def _require_real_directory(path: Path, *, label: str) -> Path:
+    lexical = _absolute_lexical(path)
     try:
-        metadata = path.lstat()
-        resolved = path.resolve(strict=True)
+        metadata = lexical.lstat()
     except OSError as error:
         raise IFEMRepositoryTextError(f"{label} is absent or inaccessible") from error
-    if _is_link_or_reparse(path, metadata) or not stat.S_ISDIR(metadata.st_mode):
+    if _is_link_or_reparse(lexical, metadata):
+        raise IFEMRepositoryTextError(f"{label} must not be a link or reparse point")
+    if not stat.S_ISDIR(metadata.st_mode):
         raise IFEMRepositoryTextError(f"{label} must be a physical directory")
-    return resolved
+    return lexical
 
 
-def _read_regular_file(path: Path, *, label: str) -> bytes:
+def _directory_identity(metadata: os.stat_result) -> _DirectoryIdentity:
+    return (
+        int(metadata.st_dev),
+        int(metadata.st_ino),
+        int(stat.S_IFMT(metadata.st_mode)),
+        int(getattr(metadata, "st_file_attributes", 0)),
+    )
+
+
+def _snapshot_existing_directory_tree(root: Path, destination: Path) -> _DirectorySnapshot:
+    confined_root = _require_real_directory(root, label="iFEM source cache root")
+    target = _absolute_lexical(destination)
+    relative_parts = _relative_parts(target, confined_root)
+    current = confined_root
+    snapshot: list[tuple[Path, _DirectoryIdentity]] = []
+    for part in (None, *relative_parts):
+        if part is not None:
+            current /= part
+        try:
+            metadata = current.lstat()
+        except OSError as error:
+            raise IFEMRepositoryTextError(
+                "local overlay directory is absent or inaccessible"
+            ) from error
+        if _is_link_or_reparse(current, metadata):
+            raise IFEMRepositoryTextError(
+                "local overlay directory must not be a link or reparse point"
+            )
+        if not stat.S_ISDIR(metadata.st_mode):
+            raise IFEMRepositoryTextError("local overlay path component is not a directory")
+        snapshot.append((current, _directory_identity(metadata)))
+    return tuple(snapshot)
+
+
+def _assert_directory_snapshot(snapshot: _DirectorySnapshot) -> None:
+    for path, identity in snapshot:
+        try:
+            metadata = path.lstat()
+        except OSError as error:
+            raise IFEMRepositoryTextError(
+                "local overlay directory changed during file access"
+            ) from error
+        if (
+            _is_link_or_reparse(path, metadata)
+            or not stat.S_ISDIR(metadata.st_mode)
+            or _directory_identity(metadata) != identity
+        ):
+            raise IFEMRepositoryTextError("local overlay directory changed during file access")
+
+
+def _require_regular_stat(path: Path, metadata: os.stat_result, *, label: str) -> None:
+    if _is_link_or_reparse(path, metadata):
+        raise IFEMRepositoryTextError(f"{label} must not be a link or reparse point")
+    if not stat.S_ISREG(metadata.st_mode):
+        raise IFEMRepositoryTextError(f"{label} must be a physical regular file")
+
+
+def _read_regular_file(path: Path, *, cache_root: Path, label: str) -> bytes:
+    target = _absolute_lexical(path)
+    confined_root = _absolute_lexical(cache_root)
+    _relative_parts(target, confined_root)
+    directory_snapshot = _snapshot_existing_directory_tree(confined_root, target.parent)
     try:
-        metadata = path.lstat()
-        if _is_link_or_reparse(path, metadata) or not stat.S_ISREG(metadata.st_mode):
-            raise IFEMRepositoryTextError(f"{label} must be a physical regular file")
-        return path.read_bytes()
+        before = target.lstat()
     except OSError as error:
         raise IFEMRepositoryTextError(f"cannot read {label}") from error
+    _require_regular_stat(target, before, label=label)
+    flags = os.O_RDONLY | getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
+    try:
+        descriptor = os.open(target, flags)
+    except OSError as error:
+        raise IFEMRepositoryTextError(f"cannot open {label}") from error
+    try:
+        opened = os.fstat(descriptor)
+        _require_regular_stat(target, opened, label=label)
+        if not os.path.samestat(before, opened):
+            raise IFEMRepositoryTextError(f"{label} changed while opening")
+        data = bytearray()
+        with os.fdopen(descriptor, "rb", closefd=True) as source:
+            descriptor = -1
+            while chunk := source.read(_READ_CHUNK_BYTES):
+                data.extend(chunk)
+            after_open = os.fstat(source.fileno())
+        if not os.path.samestat(opened, after_open):
+            raise IFEMRepositoryTextError(f"{label} changed while reading")
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    try:
+        after = target.lstat()
+    except OSError as error:
+        raise IFEMRepositoryTextError(f"{label} changed during verification") from error
+    _require_regular_stat(target, after, label=label)
+    if not os.path.samestat(before, after):
+        raise IFEMRepositoryTextError(f"{label} changed during verification")
+    _assert_directory_snapshot(directory_snapshot)
+    return bytes(data)
 
 
 def _ensure_real_directory_tree(root: Path, destination_parent: Path) -> None:
     root = _require_real_directory(root, label="iFEM source cache root")
-    target = destination_parent.resolve(strict=False)
-    if not _is_relative_to(target, root):
-        raise IFEMRepositoryTextError("local overlay output escapes the iFEM source cache")
-    relative_parts = target.relative_to(root).parts
+    target = _absolute_lexical(destination_parent)
+    relative_parts = _relative_parts(target, root)
     current = root
     for part in relative_parts:
         current = current / part
@@ -139,21 +238,38 @@ def _ensure_real_directory_tree(root: Path, destination_parent: Path) -> None:
 
 def _write_once(path: Path, content: bytes, *, cache_root: Path, label: str) -> None:
     _ensure_real_directory_tree(cache_root, path.parent)
+    flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
+    flags |= getattr(os, "O_BINARY", 0) | getattr(os, "O_CLOEXEC", 0)
+    flags |= getattr(os, "O_NOFOLLOW", 0)
     try:
-        descriptor = os.open(path, os.O_CREAT | os.O_EXCL | os.O_WRONLY)
+        descriptor = os.open(path, flags)
     except FileExistsError:
-        if _read_regular_file(path, label=f"existing {label}") != content:
+        if (
+            _read_regular_file(
+                path,
+                cache_root=cache_root,
+                label=f"existing {label}",
+            )
+            != content
+        ):
             raise IFEMRepositoryTextError(
                 f"existing {label} conflicts with this exact replay"
             ) from None
         return
     try:
+        _require_regular_stat(path, os.fstat(descriptor), label=label)
         with os.fdopen(descriptor, "wb") as output:
+            descriptor = -1
             output.write(content)
             output.flush()
             os.fsync(output.fileno())
     except OSError as error:
         raise IFEMRepositoryTextError(f"cannot write {label}") from error
+    finally:
+        if descriptor >= 0:
+            os.close(descriptor)
+    if _read_regular_file(path, cache_root=cache_root, label=label) != content:
+        raise IFEMRepositoryTextError(f"written {label} differs from the exact replay")
 
 
 def _reject_duplicate_keys(pairs: list[tuple[str, object]]) -> dict[str, object]:
@@ -188,15 +304,9 @@ def _canonical_source_lock_path(cache_root: Path) -> Path:
 
 
 def _overlay_paths(cache_root: Path, source_lock_path: Path) -> tuple[Path, Path]:
-    expected_source_lock = _canonical_source_lock_path(cache_root)
-    _require_real_directory(expected_source_lock.parent, label="iFEM source-lock directory")
-    try:
-        actual = source_lock_path.resolve(strict=True)
-        expected = expected_source_lock.resolve(strict=True)
-    except OSError as error:
-        raise IFEMRepositoryTextError(
-            "iFEM source-lock receipt is absent or inaccessible"
-        ) from error
+    expected = _absolute_lexical(_canonical_source_lock_path(cache_root))
+    actual = _absolute_lexical(source_lock_path)
+    _snapshot_existing_directory_tree(cache_root, expected.parent)
     if actual != expected:
         raise IFEMRepositoryTextError(
             "iFEM source-lock receipt is outside its canonical cache path"
@@ -209,11 +319,25 @@ def _locked_intro_parent(
     cache_root: Path,
     source_lock_path: Path,
 ) -> tuple[dict[str, object], str]:
+    source_lock_bytes = _read_regular_file(
+        source_lock_path,
+        cache_root=cache_root,
+        label="iFEM source lock",
+    )
     try:
         receipt, records = ifem_source_lock.inspect_receipt(cache_root, source_lock_path)
     except ifem_source_lock.IFEMSourceLockError as error:
         raise IFEMRepositoryTextError("iFEM source lock did not verify") from error
-    source_lock_sha256 = _sha256(_read_regular_file(source_lock_path, label="iFEM source lock"))
+    if (
+        _read_regular_file(
+            source_lock_path,
+            cache_root=cache_root,
+            label="iFEM source lock",
+        )
+        != source_lock_bytes
+    ):
+        raise IFEMRepositoryTextError("iFEM source lock changed during inspection")
+    source_lock_sha256 = _sha256(source_lock_bytes)
     acquisition = _require_mapping(receipt.get("acquisition"), label="source-lock acquisition")
     retrieved_at = _require_string(
         acquisition.get("retrieved_at"), label="source-lock retrieval time"
@@ -332,7 +456,13 @@ def _receipt_bytes(
 
 
 def _plan(cache_root: Path, source_lock_path: Path) -> _OverlayPlan:
-    resolved_cache_root = _require_real_directory(cache_root, label="iFEM source cache root")
+    lexical_cache_root = _absolute_lexical(cache_root)
+    confinement_root = _require_real_directory(
+        lexical_cache_root.parent,
+        label="iFEM source cache confinement root",
+    )
+    _snapshot_existing_directory_tree(confinement_root, lexical_cache_root)
+    resolved_cache_root = lexical_cache_root
     manifest_path, receipt_path = _overlay_paths(resolved_cache_root, source_lock_path)
     parent, source_lock_sha256 = _locked_intro_parent(resolved_cache_root, source_lock_path)
     derived = _derived_entry(parent)
@@ -359,16 +489,30 @@ def _plan(cache_root: Path, source_lock_path: Path) -> _OverlayPlan:
 
 
 def _load_exact_manifest(plan: _OverlayPlan) -> ReferenceManifestV1:
-    manifest_bytes = _read_regular_file(plan.manifest_path, label="local overlay manifest")
+    manifest_bytes = _read_regular_file(
+        plan.manifest_path,
+        cache_root=plan.cache_root,
+        label="local overlay manifest",
+    )
     if manifest_bytes != plan.manifest_bytes:
         raise IFEMRepositoryTextError("local overlay manifest differs from the fixed source replay")
     try:
-        return ReferenceManifestV1.load(
+        manifest = ReferenceManifestV1.load(
             plan.manifest_path,
             expected_sha256=plan.manifest_sha256,
         )
     except ReferenceCacheError as error:
         raise IFEMRepositoryTextError("local overlay manifest is invalid") from error
+    if (
+        _read_regular_file(
+            plan.manifest_path,
+            cache_root=plan.cache_root,
+            label="local overlay manifest",
+        )
+        != manifest_bytes
+    ):
+        raise IFEMRepositoryTextError("local overlay manifest changed while loading")
+    return manifest
 
 
 def _verify_cached_identity(plan: _OverlayPlan, manifest: ReferenceManifestV1) -> None:
@@ -382,8 +526,16 @@ def _verify_cached_identity(plan: _OverlayPlan, manifest: ReferenceManifestV1) -
         derived = cache.verify(plan.derived_reference_id)
     except ReferenceCacheError as error:
         raise IFEMRepositoryTextError("local overlay cache object did not verify") from error
-    parent_bytes = _read_regular_file(parent.cache_path, label="locked Markdown cache object")
-    derived_bytes = _read_regular_file(derived.cache_path, label="derived text cache object")
+    parent_bytes = _read_regular_file(
+        parent.cache_path,
+        cache_root=plan.cache_root,
+        label="locked Markdown cache object",
+    )
+    derived_bytes = _read_regular_file(
+        derived.cache_path,
+        cache_root=plan.cache_root,
+        label="derived text cache object",
+    )
     try:
         parent_bytes.decode("utf-8", errors="strict")
         derived_bytes.decode("utf-8", errors="strict")
@@ -394,7 +546,11 @@ def _verify_cached_identity(plan: _OverlayPlan, manifest: ReferenceManifestV1) -
 
 
 def _load_exact_receipt(plan: _OverlayPlan) -> None:
-    raw = _read_regular_file(plan.receipt_path, label="local overlay receipt")
+    raw = _read_regular_file(
+        plan.receipt_path,
+        cache_root=plan.cache_root,
+        label="local overlay receipt",
+    )
     try:
         parsed = json.loads(
             raw.decode("utf-8", errors="strict"),
@@ -434,7 +590,11 @@ def materialize_ifem_repository_text_overlay(
         parent = cache.verify(plan.parent_reference_id)
     except ReferenceCacheError as error:
         raise IFEMRepositoryTextError("locked Markdown parent did not verify") from error
-    parent_bytes = _read_regular_file(parent.cache_path, label="locked Markdown cache object")
+    parent_bytes = _read_regular_file(
+        parent.cache_path,
+        cache_root=plan.cache_root,
+        label="locked Markdown cache object",
+    )
     try:
         parent_bytes.decode("utf-8", errors="strict")
     except UnicodeDecodeError as error:
