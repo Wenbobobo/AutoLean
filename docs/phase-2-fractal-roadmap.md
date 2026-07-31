@@ -84,7 +84,10 @@ child image and twice emitted byte-identical visibility artifacts, but it does n
 exact root import is not evidence of a narrow transitive closure, and the closure-width acceptance
 policy remains pending independent review. The exact 13-file source set has now been acquired and replayed as
 `local_only`. Text-free indexes bind 10 notebooks and 161 cells plus three ATX-heading sections in
-`intro.md`; no mathematical claim span has been selected. A deterministic candidate-only
+`intro.md`. Four opening Markdown cells have also been materialized into ignored, write-once
+private logical-text projections and independently replayed against the same source lock and
+index. They are coarse containers, not mathematical claim spans; no mathematical claim span has
+been selected. A deterministic candidate-only
 MathematicalGraph projection now contains 25 nodes and 49 planning edges. Its source anchors are
 index-position locators, not semantic mappings, and its edges are declared-unreviewed or
 low-confidence overlap signals, not mathematical dependencies. It creates no FormalGraph,

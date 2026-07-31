@@ -190,7 +190,11 @@ runner reports success.
     [2026-07-29 source-lock evidence](research/ifem-source-lock-evidence-2026-07-29.md) records the
     exact local hashes and replay while retaining `local_only`, no-freeze, and no-Prover bounds.
     The [digest-only notebook index](research/ifem-notebook-source-span-index-2026-07-29.md)
-    records the 10-notebook / 161-cell locator replay without source text, while the
+    records the 10-notebook / 161-cell locator replay without source text. The separate
+    [private Markdown-cell text projection](research/ifem-notebook-markdown-cell-text-projection-v1.md)
+    can replay one explicitly digest-bound cell into the ignored local cache for later source-span
+    calibration without changing the source lock, authorizing model egress, or selecting a
+    mathematical claim. The
     [prerequisite census protocol](research/ifem-prerequisite-census-protocol-2026-07-29.md)
     binds the actual 25-node / 21-prerequisite denominator. The pinned Lean query has now run, but
     every mapping remains `unknown` until independent semantic classification evidence exists. The separate
