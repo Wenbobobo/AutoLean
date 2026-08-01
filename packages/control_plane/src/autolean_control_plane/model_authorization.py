@@ -14,16 +14,35 @@ import uuid
 from collections.abc import Callable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
-from typing import Literal
+from typing import Literal, Protocol
 
 from autolean_contracts import (
     AttestationError,
     AttestationPurposeV1,
     AttestationSignerV1,
+    AttestationV1,
     AttestationVerifierV1,
     DigestV1,
     FormalizationTaskBundleV1,
+    HashKindV1,
+    ModelExecutionActualUsageV1,
+    ModelExecutionCompletionPendingError,
+    ModelExecutionCompletionReceiptV1,
+    ModelExecutionCompletionRecordV1,
+    ModelExecutionCompletionRecoveryHandleV1,
+    ModelExecutionCompletionRecoveryReasonV1,
+    ModelExecutionPrivateOutputBindingV1,
+    ModelResponseArtifactRefV1,
+    ModelResponseArtifactV1,
+    ModelWorkBundleV2,
     StableIdentifierV1,
+    build_model_execution_completion_record,
+    digest_model,
+    model_execution_completion_attestation_payload,
+    model_execution_completion_evidence_identity,
+    model_execution_completion_recovery_handle,
+    model_work_admission_evidence_identity,
+    model_work_admission_payload,
     stable_identifier,
 )
 from autolean_contracts.authorization import (
@@ -35,6 +54,7 @@ from autolean_contracts.authorization import (
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
     ModelExecutionReservationV1,
+    ModelExecutionSubjectKindV1,
     model_execution_authorization_payload,
 )
 
@@ -44,6 +64,7 @@ from .leases import Lease
 from .service import ControlPlane, TaskBinding
 
 _REVOCATION_CODE = re.compile(r"^[a-z][a-z0-9_-]{0,63}$")
+_MODEL_WORK_NONCE = re.compile(r"^[0-9a-f]{48}$")
 _PROVIDER_FAILURE_CODES = frozenset(
     {
         "probe_failed_v1",
@@ -51,6 +72,9 @@ _PROVIDER_FAILURE_CODES = frozenset(
         "probe_capability_mismatch_v1",
         "generation_failed_v1",
         "response_invalid_v1",
+        "output_persistence_failed_v1",
+        "completion_invalid_v1",
+        "completion_recovery_required_v1",
         "settlement_rejected_v1",
         "local_policy_rejected_v1",
     }
@@ -89,6 +113,38 @@ class _UsageTotals:
     cost_microusd: int
 
 
+@dataclass(frozen=True, slots=True)
+class _StoredModelWorkRegistration:
+    bundle: ModelWorkBundleV2
+    admission: AttestationV1
+    admission_hash: str
+
+
+@dataclass(frozen=True, slots=True)
+class _AuthorizationSubject:
+    """The fields carried unchanged by the existing authorization wire schema."""
+
+    subject_kind: ModelExecutionSubjectKindV1
+    bundle_id: StableIdentifierV1
+    bundle_hash: DigestV1
+    contract_id: StableIdentifierV1
+    revision: int
+    contract_hash: DigestV1
+    environment_hash: DigestV1
+    egress_policy: ModelEgressPolicyV1
+    parent_admission_hash: DigestV1 | None = None
+    parent_admission_expires_at: datetime | None = None
+
+
+class _PrivateModelOutputVerifier(Protocol):
+    """Return one parsed response after verifying the exact referenced CAS bytes."""
+
+    def read_artifact(
+        self,
+        reference: ModelResponseArtifactRefV1,
+    ) -> ModelResponseArtifactV1: ...
+
+
 class ModelExecutionAuthorizationService:
     """Issue, revoke, reserve, and settle model authority against one ControlPlane database.
 
@@ -113,6 +169,10 @@ class ModelExecutionAuthorizationService:
         control_plane: ControlPlane,
         signer: AttestationSignerV1,
         verifier: AttestationVerifierV1,
+        admission_verifier: AttestationVerifierV1 | None = None,
+        completion_signer: AttestationSignerV1 | None = None,
+        completion_verifier: AttestationVerifierV1 | None = None,
+        private_output_verifier: _PrivateModelOutputVerifier | None = None,
         clock: Callable[[], datetime] | None = None,
         max_ttl_seconds: float = _DEFAULT_MAX_TTL_SECONDS,
         provider_failure_threshold: int = _DEFAULT_PROVIDER_FAILURE_THRESHOLD,
@@ -122,6 +182,10 @@ class ModelExecutionAuthorizationService:
         self._events = control_plane.events
         self._signer = signer
         self._verifier = verifier
+        self._admission_verifier = admission_verifier
+        self._completion_signer = completion_signer
+        self._completion_verifier = completion_verifier
+        self._private_output_verifier = private_output_verifier
         self._clock = clock or (lambda: datetime.now(UTC))
         self._max_ttl_seconds = self._validate_max_ttl_seconds(max_ttl_seconds)
         self._provider_failure_threshold = self._validate_provider_failure_threshold(
@@ -215,6 +279,189 @@ class ModelExecutionAuthorizationService:
             )
         return approval
 
+    def preflight_operator_approval(
+        self,
+        approval: ModelExecutionProviderApprovalV1,
+    ) -> None:
+        """Read-only exact-snapshot check for orchestration-wide dry runs."""
+
+        if not approval.enabled:
+            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
+        with self._events.connection() as connection:
+            stored = self._stored_provider_approval(connection, approval.approval_id.value)
+        if canonical_json(stored.model_dump(mode="json")) != canonical_json(
+            approval.model_dump(mode="json")
+        ):
+            raise ModelExecutionAuthorizationError(
+                "provider approval differs from its immutable registered snapshot"
+            )
+
+    def preflight_model_work_registration(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        admission: AttestationV1,
+        required_validity_seconds: float | None = None,
+    ) -> None:
+        """Validate a ModelWork registration with no database or lease mutation."""
+
+        validated = self._validated_model_work(bundle)
+        self._verify_model_work_admission(validated, admission)
+        if required_validity_seconds is not None:
+            if (
+                isinstance(required_validity_seconds, bool)
+                or not isinstance(required_validity_seconds, int | float)
+                or not math.isfinite(required_validity_seconds)
+                or required_validity_seconds <= 0
+            ):
+                raise ModelExecutionAuthorizationError(
+                    "required parent-admission validity must be finite and positive"
+                )
+            remaining = (admission.expires_at - self._now()).total_seconds()
+            if remaining < required_validity_seconds:
+                raise ModelExecutionAuthorizationError(
+                    "model work admission does not cover the required execution window"
+                )
+        admission_hash = self._model_work_admission_hash(admission)
+        with self._events.connection() as connection:
+            existing = connection.execute(
+                """
+                SELECT 1
+                FROM model_execution_work_bundles
+                WHERE bundle_id = ?
+                """,
+                (validated.bundle_id.value,),
+            ).fetchone()
+            if existing is not None:
+                stored = self._stored_model_work(connection, validated.bundle_id.value)
+                self._assert_exact_model_work_registration(
+                    stored,
+                    bundle=validated,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(stored.bundle, stored.admission)
+
+    def preflight_authorization_ttl(self, ttl_seconds: float) -> None:
+        """Apply the configured authorization TTL policy without mutating state."""
+
+        self._validate_ttl(ttl_seconds)
+
+    def register_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        admission: AttestationV1,
+    ) -> ModelWorkBundleV2:
+        """Register independently admitted non-theorem work before it can obtain a lease."""
+
+        bundle = self._validated_model_work(bundle)
+        self._verify_model_work_admission(bundle, admission)
+        bundle_hash = bundle.handoff_hash().value
+        admission_hash = self._model_work_admission_hash(admission)
+        registration_request = self._model_work_registration_request(
+            bundle=bundle,
+            admission_hash=admission_hash,
+        )
+        request_digest = request_hash(registration_request)
+        serialized = canonical_json(bundle.model_dump(mode="json"))
+        serialized_admission = canonical_json(admission.model_dump(mode="json"))
+        with self._events.write_transaction() as connection:
+            # The lock-time verification closes the expiry/revocation race between validation
+            # and durable insertion. Exact replay is allowed only while this parent remains valid.
+            self._verify_model_work_admission(bundle, admission)
+            replay = self._idempotent_model_work(
+                connection,
+                key=request_digest,
+                request_digest=request_digest,
+            )
+            if replay is not None:
+                self._assert_exact_model_work_registration(
+                    replay,
+                    bundle=bundle,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(replay.bundle, replay.admission)
+                return replay.bundle
+            existing = connection.execute(
+                """
+                SELECT bundle_hash, admission_attestation_hash
+                FROM model_execution_work_bundles
+                WHERE bundle_id = ?
+                """,
+                (bundle.bundle_id.value,),
+            ).fetchone()
+            if existing is not None:
+                if (
+                    str(existing["bundle_hash"]) != bundle_hash
+                    or str(existing["admission_attestation_hash"]) != admission_hash
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "model work bundle ID is already bound to different immutable work "
+                        "or admission"
+                    )
+                stored = self._stored_model_work(connection, bundle.bundle_id.value)
+                self._assert_exact_model_work_registration(
+                    stored,
+                    bundle=bundle,
+                    admission=admission,
+                    admission_hash=admission_hash,
+                )
+                self._verify_model_work_admission(stored.bundle, stored.admission)
+                self._record_model_work_idempotency(
+                    connection,
+                    key=request_digest,
+                    request_digest=request_digest,
+                    bundle_id=stored.bundle.bundle_id.value,
+                )
+                return stored.bundle
+            connection.execute(
+                """
+                INSERT INTO model_execution_work_bundles (
+                    bundle_id, bundle_hash, bundle_json,
+                    admission_attestation_hash, admission_attestation_json,
+                    registration_request_hash, registered_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    bundle.bundle_id.value,
+                    bundle_hash,
+                    serialized,
+                    admission_hash,
+                    serialized_admission,
+                    request_digest,
+                    self._timestamp(self._now()),
+                ),
+            )
+            self._record_model_work_idempotency(
+                connection,
+                key=request_digest,
+                request_digest=request_digest,
+                bundle_id=bundle.bundle_id.value,
+            )
+        return bundle
+
+    def claim_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        ttl_seconds: float,
+    ) -> Lease:
+        """Claim the existing fenced lease primitive for registered non-theorem work."""
+
+        validated = self._validated_model_work(bundle)
+        self._assert_model_work_binding(validated)
+        worker_id = self._model_work_worker_id(validated)
+        try:
+            return self._control_plane.leases.claim(
+                validated.bundle_id.value,
+                worker_id,
+                ttl_seconds=ttl_seconds,
+            )
+        except ValueError as error:
+            raise ModelExecutionAuthorizationError("model work lease claim is invalid") from error
+
     def issue(
         self,
         bundle: FormalizationTaskBundleV1,
@@ -241,55 +488,194 @@ class ModelExecutionAuthorizationService:
             context_pack_hash=context_pack_hash,
             outbound_request_hash=outbound_request_hash,
         )
-        with self._events.connection() as connection:
-            approval = self._stored_provider_approval(connection, approval_id.value)
-        if not approval.enabled:
-            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
         egress_policy = ModelEgressPolicyV1(
             rights_id=bundle.contract.rights.rights_id,
             overall_decision=bundle.contract.rights.overall_decision,
             model_egress=bundle.contract.rights.model_egress,
             allowed_endpoint_classes=bundle.contract.rights.allowed_endpoint_classes,
         )
-        if not egress_policy.permits(approval.binding.endpoint_class):
+        return self._issue_bound(
+            subject=_AuthorizationSubject(
+                subject_kind=ModelExecutionSubjectKindV1.THEOREM,
+                bundle_id=bundle.bundle_id,
+                bundle_hash=bundle.handoff_hash(),
+                contract_id=bundle.contract.contract_id,
+                revision=bundle.contract.revision,
+                contract_hash=bundle.contract.semantic_hash(),
+                environment_hash=bundle.contract.formal.environment.environment_hash,
+                egress_policy=egress_policy,
+            ),
+            registered_bundle_hash=binding.bundle_hash,
+            authorization_id=authorization_id,
+            approval_id=approval_id,
+            budget=budget,
+            lease=lease,
+            context_pack_hash=context_pack_hash,
+            outbound_request_hash=outbound_request_hash,
+            ttl_seconds=ttl_seconds,
+            idempotency_key=idempotency_key,
+        )
+
+    def issue_model_work(
+        self,
+        bundle: ModelWorkBundleV2,
+        *,
+        approval_id: StableIdentifierV1,
+        budget: ModelExecutionBudgetV1,
+        lease: Lease,
+        ttl_seconds: float,
+    ) -> ModelExecutionAuthorizationV1:
+        """Issue the normal wire capability for one registered, rights-bound role trial."""
+
+        self._validate_ttl(ttl_seconds)
+        bundle = self._validated_model_work(bundle)
+        registration = self._assert_model_work_binding(bundle)
+        self._assert_current_model_work_lease(bundle, lease)
+        self._validate_request_hashes(
+            context_pack_hash=bundle.context_pack_hash,
+            outbound_request_hash=bundle.request_hash,
+        )
+        egress_policy = ModelEgressPolicyV1(
+            rights_id=stable_identifier(
+                "model-work-rights",
+                bundle.rights.rights_record_hash.value,
+            ),
+            overall_decision=bundle.rights.overall_decision,
+            model_egress=bundle.rights.model_egress,
+            allowed_endpoint_classes=bundle.rights.allowed_endpoint_classes,
+        )
+        return self._issue_bound(
+            subject=_AuthorizationSubject(
+                subject_kind=ModelExecutionSubjectKindV1.MODEL_WORK,
+                bundle_id=bundle.bundle_id,
+                bundle_hash=bundle.handoff_hash(),
+                contract_id=bundle.work_contract_id,
+                revision=bundle.revision,
+                contract_hash=bundle.semantic_hash(),
+                environment_hash=bundle.role_environment_hash,
+                egress_policy=egress_policy,
+                parent_admission_hash=DigestV1(
+                    kind=HashKindV1.ATTESTATION,
+                    value=registration.admission_hash,
+                ),
+                parent_admission_expires_at=registration.admission.expires_at,
+            ),
+            registered_bundle_hash=registration.bundle.handoff_hash().value,
+            authorization_id=None,
+            approval_id=approval_id,
+            budget=budget,
+            lease=lease,
+            context_pack_hash=bundle.context_pack_hash,
+            outbound_request_hash=bundle.request_hash,
+            ttl_seconds=ttl_seconds,
+            idempotency_key=None,
+        )
+
+    def _issue_bound(
+        self,
+        *,
+        subject: _AuthorizationSubject,
+        registered_bundle_hash: str,
+        authorization_id: StableIdentifierV1 | None,
+        approval_id: StableIdentifierV1,
+        budget: ModelExecutionBudgetV1,
+        lease: Lease,
+        context_pack_hash: DigestV1,
+        outbound_request_hash: DigestV1,
+        ttl_seconds: float,
+        idempotency_key: str | None,
+    ) -> ModelExecutionAuthorizationV1:
+        """Shared signed-capability path for theorem and non-theorem model work."""
+
+        with self._events.connection() as connection:
+            approval = self._stored_provider_approval(connection, approval_id.value)
+        if not approval.enabled:
+            raise ModelExecutionAuthorizationError("selected provider approval is disabled")
+        if not subject.egress_policy.permits(approval.binding.endpoint_class):
             raise ModelExecutionAuthorizationError(
                 "frozen source rights do not permit the selected model endpoint"
             )
         now = self._now()
         expires_at = now + timedelta(seconds=ttl_seconds)
+        if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK:
+            if subject.parent_admission_hash is None or subject.parent_admission_expires_at is None:
+                raise ModelExecutionAuthorizationError(
+                    "model work authorization requires an exact parent admission"
+                )
+            if subject.parent_admission_expires_at <= now:
+                raise ModelExecutionAuthorizationError("model work parent admission has expired")
+            if expires_at > subject.parent_admission_expires_at:
+                raise ModelExecutionAuthorizationError(
+                    "requested model-work authorization TTL exceeds its parent admission"
+                )
+            if authorization_id is not None or idempotency_key is not None:
+                raise ModelExecutionAuthorizationError(
+                    "model work authorization identities are system-derived"
+                )
+            authorization_id = stable_identifier(
+                "model-work-authorization",
+                request_hash(
+                    {
+                        "schema_version": "autolean.model-work-authorization-identity.v1",
+                        "bundle_hash": subject.bundle_hash.model_dump(mode="json"),
+                        "parent_admission_hash": subject.parent_admission_hash.model_dump(
+                            mode="json"
+                        ),
+                        "approval_hash": approval.approval_hash().model_dump(mode="json"),
+                        "budget": budget.model_dump(mode="json"),
+                        "lease": {
+                            "worker_id": lease.holder_id,
+                            "fencing_token": lease.fencing_token,
+                            "expires_at": self._timestamp(lease.expires_at),
+                        },
+                        "context_pack_hash": context_pack_hash.model_dump(mode="json"),
+                        "request_hash": outbound_request_hash.model_dump(mode="json"),
+                        "ttl_seconds": ttl_seconds,
+                    }
+                ),
+            )
+        elif authorization_id is None or idempotency_key is None:
+            raise ModelExecutionAuthorizationError(
+                "theorem authorization requires caller-owned operation identities"
+            )
         if expires_at > lease.expires_at:
             raise ModelExecutionAuthorizationError(
                 "model execution authorization must expire no later than its current worker lease"
             )
         unsigned = ModelExecutionAuthorizationV1(
+            subject_kind=subject.subject_kind,
             authorization_id=authorization_id,
-            bundle_id=bundle.bundle_id,
-            bundle_hash=bundle.handoff_hash(),
-            contract_id=bundle.contract.contract_id,
-            revision=bundle.contract.revision,
-            contract_hash=bundle.contract.semantic_hash(),
-            environment_hash=bundle.contract.formal.environment.environment_hash,
+            bundle_id=subject.bundle_id,
+            bundle_hash=subject.bundle_hash,
+            contract_id=subject.contract_id,
+            revision=subject.revision,
+            contract_hash=subject.contract_hash,
+            environment_hash=subject.environment_hash,
             lease=ModelExecutionLeaseBindingV1(
-                bundle_id=bundle.bundle_id,
+                bundle_id=subject.bundle_id,
                 worker_id=lease.holder_id,
                 fencing_token=lease.fencing_token,
                 expires_at=lease.expires_at,
             ),
             context_pack_hash=context_pack_hash,
             request_hash=outbound_request_hash,
-            egress_policy=egress_policy,
+            egress_policy=subject.egress_policy,
             approval_snapshot=approval,
             budget=budget,
             issued_at=now,
             expires_at=expires_at,
+            parent_admission_hash=subject.parent_admission_hash,
+            parent_admission_expires_at=subject.parent_admission_expires_at,
         )
         payload = model_execution_authorization_payload(unsigned)
         try:
             attestation = self._signer.issue(
                 purpose=AttestationPurposeV1.MODEL_EXECUTION,
                 payload=payload,
-                evidence_identity=("model-execution-authorization:" + authorization_id.value),
-                ttl_seconds=ttl_seconds,
+                evidence_identity=(
+                    "model-execution-authorization:" + unsigned.authorization_hash().value
+                ),
+                ttl_seconds=(expires_at - now).total_seconds(),
             )
         except AttestationError as error:
             raise ModelExecutionAuthorizationError(
@@ -298,9 +684,10 @@ class ModelExecutionAuthorizationService:
         authorization = unsigned.model_copy(update={"attestation": attestation})
         self._verify_capability(authorization)
         issue_request = {
-            "schema_version": "autolean.model-execution-issue-request.v1",
+            "schema_version": "autolean.model-execution-issue-request.v2",
+            "subject_kind": subject.subject_kind.value,
             "authorization_id": authorization_id.value,
-            "bundle_hash": binding.bundle_hash,
+            "bundle_hash": registered_bundle_hash,
             "approval_id": approval.approval_id.value,
             "approval_hash": approval.approval_hash().value,
             "budget": budget.model_dump(mode="json"),
@@ -308,14 +695,33 @@ class ModelExecutionAuthorizationService:
             "context_pack_hash": context_pack_hash.model_dump(mode="json"),
             "request_hash": outbound_request_hash.model_dump(mode="json"),
             "ttl_seconds": ttl_seconds,
+            "parent_admission_hash": (
+                None
+                if subject.parent_admission_hash is None
+                else subject.parent_admission_hash.model_dump(mode="json")
+            ),
+            "parent_admission_expires_at": (
+                None
+                if subject.parent_admission_expires_at is None
+                else self._timestamp(subject.parent_admission_expires_at)
+            ),
         }
         request_digest = request_hash(issue_request)
+        effective_idempotency_key = (
+            request_digest
+            if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK
+            else idempotency_key
+        )
+        if effective_idempotency_key is None:
+            raise ModelExecutionAuthorizationError("authorization idempotency identity is missing")
         serialized = canonical_json(authorization.model_dump(mode="json"))
         with self._events.write_transaction() as connection:
+            if subject.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK:
+                self._assert_parent_admission(connection, authorization)
             replay = self._idempotent_authorization(
                 connection,
                 scope=self._ISSUE_SCOPE,
-                key=idempotency_key,
+                key=effective_idempotency_key,
                 request_digest=request_digest,
             )
             if replay is not None:
@@ -337,7 +743,7 @@ class ModelExecutionAuthorizationService:
                 self._record_idempotency(
                     connection,
                     scope=self._ISSUE_SCOPE,
-                    key=idempotency_key,
+                    key=effective_idempotency_key,
                     request_digest=request_digest,
                     authorization_id=stored.authorization_id.value,
                 )
@@ -363,7 +769,7 @@ class ModelExecutionAuthorizationService:
             self._record_idempotency(
                 connection,
                 scope=self._ISSUE_SCOPE,
-                key=idempotency_key,
+                key=effective_idempotency_key,
                 request_digest=request_digest,
                 authorization_id=authorization.authorization_id.value,
             )
@@ -444,7 +850,27 @@ class ModelExecutionAuthorizationService:
             stored = self._stored_authorization(connection, authorization.authorization_id.value)
             self._assert_same_capability(stored, authorization)
             self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
             self._assert_provider_circuit_closed(connection, provider)
+
+    def preflight_completion(self, authorization: ModelExecutionAuthorizationV1) -> None:
+        """Require the complete private-output and signing boundary before provider I/O."""
+
+        if (
+            self._completion_signer is None
+            or self._completion_verifier is None
+            or self._private_output_verifier is None
+            or not callable(getattr(self._private_output_verifier, "read_artifact", None))
+        ):
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        self._verify_capability(authorization)
+        with self._events.connection() as connection:
+            stored = self._stored_authorization(connection, authorization.authorization_id.value)
+            self._assert_same_capability(stored, authorization)
+            self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
 
     def reserve(
         self,
@@ -471,6 +897,7 @@ class ModelExecutionAuthorizationService:
             stored = self._stored_authorization(connection, authorization.authorization_id.value)
             self._assert_same_capability(stored, authorization)
             self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
             self._assert_provider_circuit_closed(connection, provider)
             states = self._reservation_states(connection, authorization.authorization_id.value)
             totals = self._usage_totals(states)
@@ -594,6 +1021,253 @@ class ModelExecutionAuthorizationService:
                 event_type="success",
             )
 
+    def settle_completed(
+        self,
+        reservation: ModelExecutionReservationV1,
+        *,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+        private_output: ModelExecutionPrivateOutputBindingV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        """Atomically bind settled usage to a verified private response artifact."""
+
+        self._validate_actual_usage(
+            input_tokens=input_tokens,
+            cached_input_tokens=cached_input_tokens,
+            output_tokens=output_tokens,
+        )
+        if not isinstance(private_output, ModelExecutionPrivateOutputBindingV1):
+            raise ModelExecutionAuthorizationError(
+                "model execution private output binding is invalid"
+            )
+        verifier = self._private_output_verifier
+        if self._completion_signer is None or self._completion_verifier is None or verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        artifact = self._read_private_output_artifact(private_output.artifact)
+
+        completion_record: ModelExecutionCompletionRecordV1
+        with self._events.write_transaction() as connection:
+            authorization = self._stored_authorization(
+                connection,
+                reservation.authorization_id.value,
+            )
+            self._verify_capability(authorization)
+            self._assert_active(connection, authorization)
+            self._assert_parent_admission(connection, authorization)
+            self._assert_private_output_artifact_binding(
+                artifact,
+                authorization=authorization,
+                input_tokens=input_tokens,
+                cached_input_tokens=cached_input_tokens,
+                output_tokens=output_tokens,
+            )
+            states = self._reservation_states(connection, authorization.authorization_id.value)
+            state = states.get(reservation.reservation_id.value)
+            self._assert_reservation_matches(reservation, state)
+            if state is not None and state.state == "settled":
+                completion_record = self._stored_completion_record(
+                    connection,
+                    reservation.reservation_id.value,
+                )
+                if (
+                    completion_record.authorization != authorization
+                    or completion_record.reservation != reservation
+                    or completion_record.private_output != private_output
+                    or (
+                        completion_record.actual_usage.input_tokens,
+                        completion_record.actual_usage.cached_input_tokens,
+                        completion_record.actual_usage.output_tokens,
+                    )
+                    != (input_tokens, cached_input_tokens, output_tokens)
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "model execution completion replay differs from its settled record"
+                    )
+            else:
+                if state is None or state.state != "reserved":
+                    raise ModelExecutionAuthorizationError(
+                        "model execution reservation is not active"
+                    )
+                actual_cost = authorization.pricing.cost_for_usage(
+                    input_tokens=input_tokens,
+                    cached_input_tokens=cached_input_tokens,
+                    output_tokens=output_tokens,
+                )
+                if (
+                    input_tokens > state.reserved_input_tokens
+                    or output_tokens > state.reserved_output_tokens
+                    or actual_cost > state.reserved_cost_microusd
+                ):
+                    raise ModelExecutionAuthorizationError(
+                        "provider usage exceeded the pre-authorized model execution reservation"
+                    )
+                settled_at = self._now()
+                settlement_event_id = str(uuid.uuid4())
+                completion_record = build_model_execution_completion_record(
+                    authorization=authorization,
+                    reservation=reservation,
+                    actual_usage=ModelExecutionActualUsageV1(
+                        input_tokens=input_tokens,
+                        cached_input_tokens=cached_input_tokens,
+                        output_tokens=output_tokens,
+                        actual_cost_microusd=actual_cost,
+                    ),
+                    private_output=private_output,
+                    settled_at=settled_at,
+                    settlement_event_id=settlement_event_id,
+                )
+                self._append_ledger_event(
+                    connection,
+                    authorization_id=authorization.authorization_id.value,
+                    reservation_id=reservation.reservation_id.value,
+                    attempt_number=reservation.attempt_number,
+                    event_type="settled",
+                    actual_input_tokens=input_tokens,
+                    actual_cached_input_tokens=cached_input_tokens,
+                    actual_output_tokens=output_tokens,
+                    actual_cost_microusd=actual_cost,
+                    event_id=settlement_event_id,
+                    recorded_at=settled_at,
+                )
+                connection.execute(
+                    """
+                    INSERT INTO model_execution_completion_settlements (
+                        reservation_id, authorization_id, completion_id,
+                        settlement_event_id, settlement_event_hash,
+                        completion_record_hash, completion_record_json, settled_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        reservation.reservation_id.value,
+                        authorization.authorization_id.value,
+                        completion_record.completion_id.value,
+                        completion_record.settlement_event_id,
+                        completion_record.settlement_event_hash.value,
+                        completion_record.record_hash().value,
+                        canonical_json(completion_record.model_dump(mode="json")),
+                        self._timestamp(settled_at),
+                    ),
+                )
+                self._append_provider_health_event(
+                    connection,
+                    provider=authorization.provider,
+                    authorization_id=authorization.authorization_id.value,
+                    reservation_id=reservation.reservation_id.value,
+                    event_type="success",
+                )
+        return self._attest_completion(completion_record)
+
+    def recover_completion(
+        self,
+        recovery_handle: ModelExecutionCompletionRecoveryHandleV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        """Retry only CAS validation and signing for an already-settled completion."""
+
+        if not isinstance(recovery_handle, ModelExecutionCompletionRecoveryHandleV1):
+            raise ModelExecutionAuthorizationError(
+                "completion recovery requires a stable credential-free recovery handle"
+            )
+        with self._events.connection() as connection:
+            record = self._stored_completion_record(
+                connection,
+                recovery_handle.reservation_id.value,
+            )
+        if model_execution_completion_recovery_handle(record) != recovery_handle:
+            raise ModelExecutionAuthorizationError(
+                "completion recovery handle does not match its durable settlement"
+            )
+        return self._attest_completion(record)
+
+    def completion_recovery_handle_for_authorization(
+        self,
+        authorization: ModelExecutionAuthorizationV1,
+    ) -> ModelExecutionCompletionRecoveryHandleV1 | None:
+        """Find the unique durable settlement for an exact authorization snapshot.
+
+        Discovery is intentionally independent of historical lease liveness and private-output
+        availability.  It reads no CAS object and creates no receipt; callers must pass the
+        returned credential-free handle to ``recover_completion`` for those operations.
+        """
+
+        if not isinstance(authorization, ModelExecutionAuthorizationV1):
+            raise ModelExecutionAuthorizationError(
+                "completion recovery discovery requires a model execution authorization"
+            )
+        with self._events.connection() as connection:
+            connection.execute("BEGIN")
+            stored = self._stored_authorization(
+                connection,
+                authorization.authorization_id.value,
+            )
+            self._assert_same_capability(stored, authorization)
+            rows = connection.execute(
+                """
+                SELECT reservation_id FROM (
+                    SELECT reservation_id
+                    FROM model_execution_completion_settlements
+                    WHERE authorization_id = ?
+                    UNION
+                    SELECT settlements.reservation_id
+                    FROM model_execution_completion_settlements AS settlements
+                    JOIN model_execution_authorization_ledger AS ledger
+                      ON ledger.reservation_id = settlements.reservation_id
+                    WHERE ledger.authorization_id = ?
+                      AND ledger.event_type = 'settled'
+                )
+                ORDER BY reservation_id
+                LIMIT 2
+                """,
+                (
+                    authorization.authorization_id.value,
+                    authorization.authorization_id.value,
+                ),
+            ).fetchall()
+            if not rows:
+                return None
+            if len(rows) != 1:
+                raise ModelExecutionAuthorizationError(
+                    "model execution authorization has multiple output-bound settlements"
+                )
+            record = self._stored_completion_record(
+                connection,
+                str(rows[0]["reservation_id"]),
+            )
+            if record.authorization != stored:
+                raise ModelExecutionAuthorizationError(
+                    "model execution settlement authorization differs from its durable snapshot"
+                )
+        return model_execution_completion_recovery_handle(record)
+
+    def verify_completion(self, receipt: ModelExecutionCompletionReceiptV1) -> None:
+        """Verify one stored receipt without requiring its historical lease to remain live."""
+
+        self._verify_completion_receipt(receipt)
+        artifact = self._read_private_output_artifact(receipt.record.private_output.artifact)
+        usage = receipt.record.actual_usage
+        self._assert_private_output_artifact_binding(
+            artifact,
+            authorization=receipt.record.authorization,
+            input_tokens=usage.input_tokens,
+            cached_input_tokens=usage.cached_input_tokens,
+            output_tokens=usage.output_tokens,
+        )
+        with self._events.connection() as connection:
+            stored_record = self._stored_completion_record(
+                connection,
+                receipt.record.reservation.reservation_id.value,
+            )
+            stored_receipt = self._stored_completion_receipt(
+                connection,
+                receipt.record.completion_id.value,
+            )
+        if stored_record != receipt.record or stored_receipt != receipt:
+            raise ModelExecutionAuthorizationError(
+                "model execution completion differs from its control-plane record"
+            )
+
     def abandon(
         self,
         reservation: ModelExecutionReservationV1,
@@ -663,6 +1337,22 @@ class ModelExecutionAuthorizationService:
                     approval_id TEXT NOT NULL
                 ) WITHOUT ROWID;
 
+                CREATE TABLE IF NOT EXISTS model_execution_work_bundles (
+                    bundle_id TEXT PRIMARY KEY,
+                    bundle_hash TEXT NOT NULL,
+                    bundle_json TEXT NOT NULL,
+                    admission_attestation_hash TEXT NOT NULL,
+                    admission_attestation_json TEXT NOT NULL,
+                    registration_request_hash TEXT NOT NULL,
+                    registered_at TEXT NOT NULL
+                ) WITHOUT ROWID;
+
+                CREATE TABLE IF NOT EXISTS model_execution_work_idempotency (
+                    key TEXT PRIMARY KEY,
+                    request_hash TEXT NOT NULL,
+                    bundle_id TEXT NOT NULL
+                ) WITHOUT ROWID;
+
                 CREATE TABLE IF NOT EXISTS model_execution_authorization_idempotency (
                     scope TEXT NOT NULL,
                     key TEXT NOT NULL,
@@ -693,6 +1383,30 @@ class ModelExecutionAuthorizationService:
 
                 CREATE INDEX IF NOT EXISTS model_execution_authorization_ledger_auth
                     ON model_execution_authorization_ledger (authorization_id, event_sequence);
+
+                CREATE TABLE IF NOT EXISTS model_execution_completion_settlements (
+                    reservation_id TEXT PRIMARY KEY,
+                    authorization_id TEXT NOT NULL,
+                    completion_id TEXT NOT NULL UNIQUE,
+                    settlement_event_id TEXT NOT NULL UNIQUE,
+                    settlement_event_hash TEXT NOT NULL UNIQUE,
+                    completion_record_hash TEXT NOT NULL,
+                    completion_record_json TEXT NOT NULL,
+                    settled_at TEXT NOT NULL
+                ) WITHOUT ROWID;
+
+                CREATE INDEX IF NOT EXISTS model_execution_completion_settlements_auth
+                    ON model_execution_completion_settlements (
+                        authorization_id, settled_at
+                    );
+
+                CREATE TABLE IF NOT EXISTS model_execution_completion_receipts (
+                    completion_id TEXT PRIMARY KEY,
+                    reservation_id TEXT NOT NULL UNIQUE,
+                    receipt_hash TEXT NOT NULL,
+                    receipt_json TEXT NOT NULL,
+                    issued_at TEXT NOT NULL
+                ) WITHOUT ROWID;
 
                 CREATE TABLE IF NOT EXISTS model_execution_provider_health_ledger (
                     event_sequence INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -753,6 +1467,30 @@ class ModelExecutionAuthorizationService:
                     SELECT RAISE(ABORT, 'provider approval idempotency is immutable');
                 END;
 
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_bundles_forbid_update
+                BEFORE UPDATE ON model_execution_work_bundles
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work bundles are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_bundles_forbid_delete
+                BEFORE DELETE ON model_execution_work_bundles
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work bundles are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_idempotency_forbid_update
+                BEFORE UPDATE ON model_execution_work_idempotency
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work idempotency is immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_work_idempotency_forbid_delete
+                BEFORE DELETE ON model_execution_work_idempotency
+                BEGIN
+                    SELECT RAISE(ABORT, 'model work idempotency is immutable');
+                END;
+
                 CREATE TRIGGER IF NOT EXISTS model_execution_authorization_idempotency_forbid_update
                 BEFORE UPDATE ON model_execution_authorization_idempotency
                 BEGIN
@@ -777,6 +1515,30 @@ class ModelExecutionAuthorizationService:
                     SELECT RAISE(ABORT, 'model execution ledger is append-only');
                 END;
 
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_settlements_forbid_update
+                BEFORE UPDATE ON model_execution_completion_settlements
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion settlements are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_settlements_forbid_delete
+                BEFORE DELETE ON model_execution_completion_settlements
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion settlements are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_receipts_forbid_update
+                BEFORE UPDATE ON model_execution_completion_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion receipts are immutable');
+                END;
+
+                CREATE TRIGGER IF NOT EXISTS model_execution_completion_receipts_forbid_delete
+                BEFORE DELETE ON model_execution_completion_receipts
+                BEGIN
+                    SELECT RAISE(ABORT, 'model execution completion receipts are immutable');
+                END;
+
                 CREATE TRIGGER IF NOT EXISTS model_execution_provider_health_ledger_forbid_update
                 BEFORE UPDATE ON model_execution_provider_health_ledger
                 BEGIN
@@ -789,6 +1551,28 @@ class ModelExecutionAuthorizationService:
                     SELECT RAISE(ABORT, 'model execution provider health ledger is append-only');
                 END;
                 """
+            )
+            self._ensure_model_work_admission_columns(connection)
+
+    @staticmethod
+    def _ensure_model_work_admission_columns(connection: sqlite3.Connection) -> None:
+        """Migrate an older ledger without treating its unsigned rows as admitted work."""
+
+        columns = {
+            str(row["name"])
+            for row in connection.execute(
+                "PRAGMA table_info(model_execution_work_bundles)"
+            ).fetchall()
+        }
+        if "admission_attestation_hash" not in columns:
+            connection.execute(
+                "ALTER TABLE model_execution_work_bundles "
+                "ADD COLUMN admission_attestation_hash TEXT"
+            )
+        if "admission_attestation_json" not in columns:
+            connection.execute(
+                "ALTER TABLE model_execution_work_bundles "
+                "ADD COLUMN admission_attestation_json TEXT"
             )
 
     def _assert_provider_circuit_closed(
@@ -934,6 +1718,108 @@ class ModelExecutionAuthorizationService:
             )
         return binding
 
+    @staticmethod
+    def _validated_model_work(bundle: ModelWorkBundleV2) -> ModelWorkBundleV2:
+        """Revalidate serialized fields so ``model_copy(update=...)`` cannot bypass V2."""
+
+        try:
+            return ModelWorkBundleV2.model_validate(bundle.model_dump(mode="json"))
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "model work bundle is not a valid V2 public projection"
+            ) from error
+
+    @staticmethod
+    def _model_work_worker_id(bundle: ModelWorkBundleV2) -> str:
+        return "model-work-worker-" + request_hash(
+            {
+                "schema_version": "autolean.model-work-worker-reference.v1",
+                "bundle_hash": bundle.handoff_hash().value,
+            }
+        )
+
+    def _assert_model_work_binding(
+        self,
+        bundle: ModelWorkBundleV2,
+    ) -> _StoredModelWorkRegistration:
+        with self._events.connection() as connection:
+            registration = self._stored_model_work(connection, bundle.bundle_id.value)
+        self._verify_model_work_admission(
+            registration.bundle,
+            registration.admission,
+        )
+        if canonical_json(registration.bundle.model_dump(mode="json")) != canonical_json(
+            bundle.model_dump(mode="json")
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work does not match its registered immutable bundle"
+            )
+        return registration
+
+    def _verify_model_work_admission(
+        self,
+        bundle: ModelWorkBundleV2,
+        admission: AttestationV1,
+    ) -> None:
+        if self._admission_verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "model work registration requires a trusted admission verifier"
+            )
+        if _MODEL_WORK_NONCE.fullmatch(admission.nonce) is None:
+            raise ModelExecutionAuthorizationError(
+                "model work admission nonce must be a signer-generated 48-digit hex value"
+            )
+        if admission.evidence_identity != model_work_admission_evidence_identity(bundle):
+            raise ModelExecutionAuthorizationError(
+                "model work admission evidence identity does not bind the exact payload"
+            )
+        try:
+            self._admission_verifier.verify(
+                admission,
+                expected_purpose=AttestationPurposeV1.MODEL_WORK_ADMISSION,
+                payload=model_work_admission_payload(bundle),
+            )
+        except AttestationError as error:
+            raise ModelExecutionAuthorizationError(
+                "model work admission attestation was rejected"
+            ) from error
+
+    @staticmethod
+    def _model_work_admission_hash(admission: AttestationV1) -> str:
+        return digest_model(HashKindV1.ATTESTATION, admission).value
+
+    @staticmethod
+    def _model_work_registration_request(
+        *,
+        bundle: ModelWorkBundleV2,
+        admission_hash: str,
+    ) -> dict[str, object]:
+        return {
+            "schema_version": "autolean.model-work-registration-request.v3",
+            "bundle_id": bundle.bundle_id.value,
+            "bundle_hash": bundle.handoff_hash().value,
+            "admission_attestation_hash": admission_hash,
+        }
+
+    @staticmethod
+    def _assert_exact_model_work_registration(
+        registration: _StoredModelWorkRegistration,
+        *,
+        bundle: ModelWorkBundleV2,
+        admission: AttestationV1,
+        admission_hash: str,
+    ) -> None:
+        if (
+            registration.admission_hash != admission_hash
+            or canonical_json(registration.bundle.model_dump(mode="json"))
+            != canonical_json(bundle.model_dump(mode="json"))
+            or canonical_json(registration.admission.model_dump(mode="json"))
+            != canonical_json(admission.model_dump(mode="json"))
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work registration differs from its immutable bundle or admission"
+            )
+
     def _assert_current_issue_lease(
         self,
         bundle: FormalizationTaskBundleV1,
@@ -949,6 +1835,51 @@ class ModelExecutionAuthorizationService:
             raise ModelExecutionAuthorizationError(
                 "model execution lease is stale or expired"
             ) from error
+
+    def _assert_current_model_work_lease(
+        self,
+        bundle: ModelWorkBundleV2,
+        lease: Lease,
+    ) -> None:
+        if lease.job_id != bundle.bundle_id.value:
+            raise ModelExecutionAuthorizationError(
+                "model execution lease belongs to different registered model work"
+            )
+        if lease.holder_id != self._model_work_worker_id(bundle):
+            raise ModelExecutionAuthorizationError(
+                "model work lease holder is not its opaque system reference"
+            )
+        try:
+            self._control_plane.leases.assert_current(lease)
+        except StaleFence as error:
+            raise ModelExecutionAuthorizationError(
+                "model execution lease is stale or expired"
+            ) from error
+
+    def _assert_parent_admission(
+        self,
+        connection: sqlite3.Connection,
+        authorization: ModelExecutionAuthorizationV1,
+    ) -> None:
+        if authorization.subject_kind is ModelExecutionSubjectKindV1.THEOREM:
+            return
+        registration = self._stored_model_work(connection, authorization.bundle_id.value)
+        expected_hash = authorization.parent_admission_hash
+        expected_expiry = authorization.parent_admission_expires_at
+        if expected_hash is None or expected_expiry is None:
+            raise ModelExecutionAuthorizationError(
+                "model work authorization has no parent admission binding"
+            )
+        if (
+            registration.admission_hash != expected_hash.value
+            or registration.admission.expires_at != expected_expiry
+            or registration.bundle.handoff_hash() != authorization.bundle_hash
+            or registration.bundle.semantic_hash() != authorization.contract_hash
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model work authorization parent admission binding differs from storage"
+            )
+        self._verify_model_work_admission(registration.bundle, registration.admission)
 
     @staticmethod
     def _validate_request_hashes(
@@ -1167,6 +2098,55 @@ class ModelExecutionAuthorizationService:
             )
         return approval
 
+    def _stored_model_work(
+        self,
+        connection: sqlite3.Connection,
+        bundle_id: str,
+    ) -> _StoredModelWorkRegistration:
+        row = connection.execute(
+            """
+            SELECT bundle_hash, bundle_json,
+                   admission_attestation_hash, admission_attestation_json,
+                   registration_request_hash
+            FROM model_execution_work_bundles
+            WHERE bundle_id = ?
+            """,
+            (bundle_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model work bundle is not registered")
+        try:
+            bundle = ModelWorkBundleV2.model_validate_json(str(row["bundle_json"]))
+            admission = AttestationV1.model_validate_json(str(row["admission_attestation_json"]))
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model work bundle or admission is corrupt"
+            ) from error
+        admission_hash = self._model_work_admission_hash(admission)
+        if (
+            bundle.bundle_id.value != bundle_id
+            or str(row["bundle_hash"]) != bundle.handoff_hash().value
+            or str(row["admission_attestation_hash"]) != admission_hash
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model work bundle or admission hash is corrupt"
+            )
+        expected_registration_hash = request_hash(
+            self._model_work_registration_request(
+                bundle=bundle,
+                admission_hash=admission_hash,
+            )
+        )
+        if str(row["registration_request_hash"]) != expected_registration_hash:
+            raise ModelExecutionAuthorizationError(
+                "stored model work registration request hash is corrupt"
+            )
+        return _StoredModelWorkRegistration(
+            bundle=bundle,
+            admission=admission,
+            admission_hash=admission_hash,
+        )
+
     @staticmethod
     def _parse_authorization(serialized: str) -> ModelExecutionAuthorizationV1:
         try:
@@ -1175,6 +2155,321 @@ class ModelExecutionAuthorizationService:
             raise ModelExecutionAuthorizationError(
                 "stored model execution authorization is corrupt"
             ) from error
+
+    def _read_private_output_artifact(
+        self,
+        reference: ModelResponseArtifactRefV1,
+    ) -> ModelResponseArtifactV1:
+        reader = self._private_output_verifier
+        if reader is None or not callable(getattr(reader, "read_artifact", None)):
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion has no private artifact reader"
+            )
+        try:
+            artifact = reader.read_artifact(reference)
+        except Exception:
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact verification failed"
+            ) from None
+        if (
+            not isinstance(artifact, ModelResponseArtifactV1)
+            or artifact.artifact_digest() != reference.artifact_digest
+            or len(artifact.canonical_bytes()) != reference.size_bytes
+        ):
+            raise ModelExecutionAuthorizationError(
+                "private model response reader returned a mismatched artifact"
+            )
+        return artifact
+
+    @staticmethod
+    def _assert_private_output_artifact_binding(
+        artifact: ModelResponseArtifactV1,
+        *,
+        authorization: ModelExecutionAuthorizationV1,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        if (
+            artifact.provider_id != authorization.provider.provider_id
+            or artifact.model_id != authorization.provider.model_id
+        ):
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact provider or model differs from authorization"
+            )
+        if (
+            artifact.usage.input_tokens,
+            artifact.usage.cached_input_tokens,
+            artifact.usage.output_tokens,
+        ) != (input_tokens, cached_input_tokens, output_tokens):
+            raise ModelExecutionAuthorizationError(
+                "private model response artifact usage differs from settlement"
+            )
+
+    def _ensure_completion_artifact_available(
+        self,
+        record: ModelExecutionCompletionRecordV1,
+    ) -> None:
+        try:
+            artifact = self._read_private_output_artifact(record.private_output.artifact)
+            usage = record.actual_usage
+            self._assert_private_output_artifact_binding(
+                artifact,
+                authorization=record.authorization,
+                input_tokens=usage.input_tokens,
+                cached_input_tokens=usage.cached_input_tokens,
+                output_tokens=usage.output_tokens,
+            )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                model_execution_completion_recovery_handle(record),
+                reason=ModelExecutionCompletionRecoveryReasonV1.PRIVATE_OUTPUT_UNAVAILABLE,
+            ) from error
+
+    def _attest_completion(
+        self,
+        record: ModelExecutionCompletionRecordV1,
+    ) -> ModelExecutionCompletionReceiptV1:
+        signer = self._completion_signer
+        verifier = self._completion_verifier
+        recovery_handle = model_execution_completion_recovery_handle(record)
+        if signer is None or verifier is None:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE,
+            )
+        self._ensure_completion_artifact_available(record)
+        try:
+            with self._events.connection() as connection:
+                stored_record = self._stored_completion_record(
+                    connection,
+                    record.reservation.reservation_id.value,
+                )
+                if stored_record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "completion signing record differs from durable settlement"
+                    )
+                existing = connection.execute(
+                    """
+                    SELECT receipt_json
+                    FROM model_execution_completion_receipts
+                    WHERE completion_id = ?
+                    """,
+                    (record.completion_id.value,),
+                ).fetchone()
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=(ModelExecutionCompletionRecoveryReasonV1.RECEIPT_PERSISTENCE_UNAVAILABLE),
+            ) from error
+        if existing is not None:
+            try:
+                receipt = self._parse_completion_receipt(str(existing["receipt_json"]))
+                self._verify_completion_receipt(receipt)
+                if receipt.record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "stored completion receipt differs from its settlement"
+                    )
+            except Exception as error:
+                raise ModelExecutionCompletionPendingError(
+                    recovery_handle,
+                    reason=(ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE),
+                ) from error
+            self._ensure_completion_artifact_available(record)
+            return receipt
+        try:
+            attestation = signer.issue(
+                purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(record),
+                evidence_identity=model_execution_completion_evidence_identity(record),
+                ttl_seconds=self._max_ttl_seconds,
+            )
+            receipt = ModelExecutionCompletionReceiptV1(
+                record=record,
+                receipt_hash=record.record_hash(),
+                completion_attestation=attestation,
+            )
+            verifier.verify(
+                attestation,
+                expected_purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(record),
+            )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=ModelExecutionCompletionRecoveryReasonV1.ATTESTATION_UNAVAILABLE,
+            ) from error
+        self._ensure_completion_artifact_available(record)
+        serialized = canonical_json(receipt.model_dump(mode="json"))
+        selected_receipt = receipt
+        try:
+            with self._events.write_transaction() as connection:
+                stored_record = self._stored_completion_record(
+                    connection,
+                    record.reservation.reservation_id.value,
+                )
+                if stored_record != record:
+                    raise ModelExecutionAuthorizationError(
+                        "completion settlement changed before receipt persistence"
+                    )
+                existing = connection.execute(
+                    """
+                    SELECT receipt_json
+                    FROM model_execution_completion_receipts
+                    WHERE completion_id = ?
+                    """,
+                    (record.completion_id.value,),
+                ).fetchone()
+                if existing is not None:
+                    replay = self._parse_completion_receipt(str(existing["receipt_json"]))
+                    if replay.record != record:
+                        raise ModelExecutionAuthorizationError(
+                            "completion receipt identity is already bound to another settlement"
+                        )
+                    self._verify_completion_receipt(replay)
+                    selected_receipt = replay
+                else:
+                    connection.execute(
+                        """
+                        INSERT INTO model_execution_completion_receipts (
+                            completion_id, reservation_id, receipt_hash, receipt_json, issued_at
+                        ) VALUES (?, ?, ?, ?, ?)
+                        """,
+                        (
+                            record.completion_id.value,
+                            record.reservation.reservation_id.value,
+                            receipt.receipt_hash.value,
+                            serialized,
+                            self._timestamp(receipt.completion_attestation.issued_at),
+                        ),
+                    )
+        except Exception as error:
+            raise ModelExecutionCompletionPendingError(
+                recovery_handle,
+                reason=(ModelExecutionCompletionRecoveryReasonV1.RECEIPT_PERSISTENCE_UNAVAILABLE),
+            ) from error
+        self._ensure_completion_artifact_available(record)
+        return selected_receipt
+
+    def _verify_completion_receipt(
+        self,
+        receipt: ModelExecutionCompletionReceiptV1,
+    ) -> None:
+        verifier = self._completion_verifier
+        if verifier is None:
+            raise ModelExecutionAuthorizationError(
+                "output-bound model completion is not configured"
+            )
+        if not isinstance(receipt, ModelExecutionCompletionReceiptV1):
+            raise ModelExecutionAuthorizationError("model execution completion receipt is invalid")
+        try:
+            verifier.verify(
+                receipt.completion_attestation,
+                expected_purpose=AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
+                payload=model_execution_completion_attestation_payload(receipt.record),
+            )
+        except AttestationError as error:
+            raise ModelExecutionAuthorizationError(
+                "model execution completion attestation was rejected"
+            ) from error
+
+    @staticmethod
+    def _parse_completion_record(serialized: str) -> ModelExecutionCompletionRecordV1:
+        try:
+            return ModelExecutionCompletionRecordV1.model_validate_json(serialized)
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion record is corrupt"
+            ) from error
+
+    @staticmethod
+    def _parse_completion_receipt(serialized: str) -> ModelExecutionCompletionReceiptV1:
+        try:
+            return ModelExecutionCompletionReceiptV1.model_validate_json(serialized)
+        except Exception as error:
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion receipt is corrupt"
+            ) from error
+
+    def _stored_completion_record(
+        self,
+        connection: sqlite3.Connection,
+        reservation_id: str,
+    ) -> ModelExecutionCompletionRecordV1:
+        row = connection.execute(
+            """
+            SELECT authorization_id, completion_id, settlement_event_id, settlement_event_hash,
+                   completion_record_hash, completion_record_json
+            FROM model_execution_completion_settlements
+            WHERE reservation_id = ?
+            """,
+            (reservation_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model execution has no output-bound settlement")
+        serialized = str(row["completion_record_json"])
+        record = self._parse_completion_record(serialized)
+        if (
+            canonical_json(record.model_dump(mode="json")) != serialized
+            or record.reservation.reservation_id.value != reservation_id
+            or record.authorization.authorization_id.value != str(row["authorization_id"])
+            or record.completion_id.value != str(row["completion_id"])
+            or record.settlement_event_id != str(row["settlement_event_id"])
+            or record.settlement_event_hash.value != str(row["settlement_event_hash"])
+            or record.record_hash().value != str(row["completion_record_hash"])
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion record is misbound"
+            )
+        return record
+
+    def _stored_completion_receipt(
+        self,
+        connection: sqlite3.Connection,
+        completion_id: str,
+    ) -> ModelExecutionCompletionReceiptV1:
+        row = connection.execute(
+            """
+            SELECT reservation_id, receipt_hash, receipt_json
+            FROM model_execution_completion_receipts
+            WHERE completion_id = ?
+            """,
+            (completion_id,),
+        ).fetchone()
+        if row is None:
+            raise ModelExecutionAuthorizationError("model execution completion receipt is unknown")
+        serialized = str(row["receipt_json"])
+        receipt = self._parse_completion_receipt(serialized)
+        if (
+            canonical_json(receipt.model_dump(mode="json")) != serialized
+            or receipt.record.completion_id.value != completion_id
+            or receipt.record.reservation.reservation_id.value != str(row["reservation_id"])
+            or receipt.receipt_hash.value != str(row["receipt_hash"])
+        ):
+            raise ModelExecutionAuthorizationError(
+                "stored model execution completion receipt is misbound"
+            )
+        self._verify_completion_receipt(receipt)
+        return receipt
+
+    @staticmethod
+    def _validate_actual_usage(
+        *,
+        input_tokens: int,
+        cached_input_tokens: int,
+        output_tokens: int,
+    ) -> None:
+        values = (input_tokens, cached_input_tokens, output_tokens)
+        if any(
+            isinstance(value, bool) or not isinstance(value, int) or value < 0 for value in values
+        ):
+            raise ModelExecutionAuthorizationError(
+                "model execution usage must contain non-negative integers"
+            )
+        if input_tokens < 1:
+            raise ModelExecutionAuthorizationError("model execution input usage must be positive")
+        if cached_input_tokens > input_tokens:
+            raise ModelExecutionAuthorizationError("cached input tokens cannot exceed input tokens")
 
     @staticmethod
     def _assert_same_capability(
@@ -1386,6 +2681,8 @@ class ModelExecutionAuthorizationService:
         actual_output_tokens: int | None = None,
         actual_cost_microusd: int | None = None,
         reason: str | None = None,
+        event_id: str | None = None,
+        recorded_at: datetime | None = None,
     ) -> None:
         connection.execute(
             """
@@ -1397,7 +2694,7 @@ class ModelExecutionAuthorizationService:
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
-                str(uuid.uuid4()),
+                event_id or str(uuid.uuid4()),
                 authorization_id,
                 reservation_id,
                 attempt_number,
@@ -1410,7 +2707,7 @@ class ModelExecutionAuthorizationService:
                 actual_output_tokens,
                 actual_cost_microusd,
                 reason,
-                self._timestamp(self._now()),
+                self._timestamp(recorded_at or self._now()),
             ),
         )
 
@@ -1461,6 +2758,29 @@ class ModelExecutionAuthorizationService:
             )
         return self._stored_provider_approval(connection, str(row["approval_id"]))
 
+    def _idempotent_model_work(
+        self,
+        connection: sqlite3.Connection,
+        *,
+        key: str,
+        request_digest: str,
+    ) -> _StoredModelWorkRegistration | None:
+        row = connection.execute(
+            """
+            SELECT request_hash, bundle_id
+            FROM model_execution_work_idempotency
+            WHERE key = ?
+            """,
+            (key,),
+        ).fetchone()
+        if row is None:
+            return None
+        if str(row["request_hash"]) != request_digest:
+            raise ModelExecutionAuthorizationError(
+                "model work idempotency key was reused for a different request"
+            )
+        return self._stored_model_work(connection, str(row["bundle_id"]))
+
     @staticmethod
     def _record_idempotency(
         connection: sqlite3.Connection,
@@ -1494,6 +2814,23 @@ class ModelExecutionAuthorizationService:
             ) VALUES (?, ?, ?)
             """,
             (key, request_digest, approval_id),
+        )
+
+    @staticmethod
+    def _record_model_work_idempotency(
+        connection: sqlite3.Connection,
+        *,
+        key: str,
+        request_digest: str,
+        bundle_id: str,
+    ) -> None:
+        connection.execute(
+            """
+            INSERT INTO model_execution_work_idempotency (
+                key, request_hash, bundle_id
+            ) VALUES (?, ?, ?)
+            """,
+            (key, request_digest, bundle_id),
         )
 
     def _now(self) -> datetime:

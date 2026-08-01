@@ -11,7 +11,8 @@ from pydantic import Field, model_validator
 
 from .attestation import AttestationPurposeV1, AttestationV1
 from .base import ContractModel, utc_now
-from .graphs import GraphBundleV1
+from .dependency_closure import DependencyClosureRefV1
+from .graphs import FormalEdgeKindV1, FormalNodeKindV1, GraphBundleV1
 from .hashing import (
     DigestV1,
     HashKindV1,
@@ -58,6 +59,33 @@ class AxiomProfileV1(StrEnum):
     STRICT = "strict"
     MATHLIB = "mathlib"
     EXPLICIT_ALLOWLIST = "explicit_allowlist"
+
+
+MATHLIB_AXIOMS_V1: tuple[str, ...] = (
+    "Classical.choice",
+    "Quot.sound",
+    "propext",
+)
+
+
+def validate_axiom_policy_v1(
+    profile: AxiomProfileV1,
+    axioms_allowlist: tuple[str, ...],
+) -> None:
+    """Validate the exact V1 axiom policy shared by Builder and verifier."""
+
+    allowed = set(axioms_allowlist)
+    if "sorryAx" in allowed:
+        raise ValueError("sorryAx is prohibited in every axiom profile")
+    if profile is AxiomProfileV1.STRICT and allowed:
+        raise ValueError("the strict axiom profile requires an empty allowlist")
+    if profile is AxiomProfileV1.MATHLIB:
+        unsupported = allowed - set(MATHLIB_AXIOMS_V1)
+        if unsupported:
+            raise ValueError(
+                "the mathlib axiom profile contains non-baseline axioms: "
+                + ", ".join(sorted(unsupported))
+            )
 
 
 class FidelityRiskV1(StrEnum):
@@ -411,12 +439,30 @@ class DependencyKindV1(StrEnum):
     TASK = "task"
 
 
+class DependencyModeV2(StrEnum):
+    INDEPENDENT_REPROOF = "independent_reproof"
+    COMPOSITIONAL_BRIDGE = "compositional_bridge"
+
+
+class FormalDependencySupplyV2(StrEnum):
+    IMAGE_OWNED = "image_owned"
+    CLOSURE = "closure"
+
+
 class DependencyReferenceV1(ContractModel):
     dependency_id: StableIdentifierV1
     kind: DependencyKindV1
     target: str = Field(min_length=1)
     required: bool = True
     rationale: str | None = None
+
+
+class FormalDependencyBindingV2(ContractModel):
+    """Bind one frozen formal-body dependency to its only permitted runtime supply."""
+
+    dependency_id: StableIdentifierV1
+    formal_node_id: StableIdentifierV1
+    supply: FormalDependencySupplyV2
 
 
 class EditRegionV1(ContractModel):
@@ -702,6 +748,52 @@ class StatementContractV1(ContractModel):
         return self
 
 
+class StatementContractV2(StatementContractV1):
+    """V2 statement contract with an explicit formal target and dependency supply policy."""
+
+    schema_version: Literal["2.0"] = "2.0"  # type: ignore[assignment]
+    formal_target_node_id: StableIdentifierV1
+    dependency_mode: DependencyModeV2
+    formal_dependency_bindings: tuple[FormalDependencyBindingV2, ...] = ()
+
+    @model_validator(mode="after")
+    def validate_dependency_policy(self) -> StatementContractV2:
+        # Axiom-profile enforcement was introduced with the V2 handoff.  V1 payloads remain
+        # byte-and-meaning stable; execution still independently enforces their declared policy.
+        validate_axiom_policy_v1(
+            self.policy.axiom_profile,
+            self.formal.axioms_allowlist,
+        )
+        all_dependency_ids = tuple(item.dependency_id.value for item in self.dependencies)
+        if len(all_dependency_ids) != len(set(all_dependency_ids)):
+            raise ValueError("V2 contract dependency identifiers must be unique")
+        dependency_ids = tuple(item.dependency_id.value for item in self.formal_dependency_bindings)
+        if dependency_ids != tuple(sorted(dependency_ids)) or len(dependency_ids) != len(
+            set(dependency_ids)
+        ):
+            raise ValueError("V2 formal dependency bindings must be sorted and unique")
+        formal_node_ids = tuple(
+            item.formal_node_id.value for item in self.formal_dependency_bindings
+        )
+        if len(formal_node_ids) != len(set(formal_node_ids)):
+            raise ValueError("V2 formal dependency binding nodes must be unique")
+        expected_body_dependencies = {
+            item.dependency_id.value
+            for item in self.dependencies
+            if item.kind is DependencyKindV1.FORMAL_BODY
+        }
+        if set(dependency_ids) != expected_body_dependencies:
+            raise ValueError(
+                "V2 formal dependency bindings must exactly cover required formal-body dependencies"
+            )
+        if self.dependency_mode is DependencyModeV2.INDEPENDENT_REPROOF and any(
+            item.supply is FormalDependencySupplyV2.CLOSURE
+            for item in self.formal_dependency_bindings
+        ):
+            raise ValueError("independent_reproof cannot use closure-backed formal dependencies")
+        return self
+
+
 class ProofBoundaryV1(ContractModel):
     """The immutable solver boundary generated from a frozen statement contract.
 
@@ -799,6 +891,42 @@ class ProofBoundaryV1(ContractModel):
         return self
 
 
+class ProofBoundaryV2(ProofBoundaryV1):
+    """Proof boundary that binds the exact external dependency closure."""
+
+    schema_version: Literal["2.0"] = "2.0"  # type: ignore[assignment]
+    comparator_id: Literal["lean-exact-declaration-boundary.v2"] = (
+        "lean-exact-declaration-boundary.v2"  # type: ignore[assignment]
+    )
+    closure_manifest_hash: DigestV1
+    dependency_tree_hash: DigestV1
+
+    def solver_manifest_payload(self) -> dict[str, object]:
+        payload = super().solver_manifest_payload()
+        payload.update(
+            {
+                "schema_version": "autolean.solver-workspace-manifest.v2",
+                "closure_manifest_hash": self.closure_manifest_hash.value,
+                "dependency_tree_hash": self.dependency_tree_hash.value,
+            }
+        )
+        return payload
+
+    @model_validator(mode="after")
+    def validate_closure_hashes(self) -> ProofBoundaryV2:
+        require_digest_kind(
+            self.closure_manifest_hash,
+            HashKindV1.DEPENDENCY_CLOSURE,
+            "closure_manifest_hash",
+        )
+        require_digest_kind(
+            self.dependency_tree_hash,
+            HashKindV1.DEPENDENCY_TREE,
+            "dependency_tree_hash",
+        )
+        return self
+
+
 def render_trusted_statement(contract: StatementContractV1) -> str:
     """Render the exact declaration header a solver/verifier is permitted to compile."""
 
@@ -875,6 +1003,62 @@ def build_proof_boundary(contract: StatementContractV1) -> ProofBoundaryV1:
     return ProofBoundaryV1.model_validate(payload)
 
 
+def build_proof_boundary_v2(
+    contract: StatementContractV2,
+    dependency_closure: DependencyClosureRefV1,
+) -> ProofBoundaryV2:
+    """Create a V2 proof boundary whose manifest binds one exact dependency tree."""
+
+    if dependency_closure.environment_hash != contract.formal.environment.environment_hash:
+        raise ValueError("dependency closure does not bind the contract environment")
+    base = build_proof_boundary(contract)
+    payload = base.model_dump(mode="json")
+    payload.pop("boundary_hash", None)
+    payload.update(
+        {
+            "schema_version": "2.0",
+            "comparator_id": "lean-exact-declaration-boundary.v2",
+            "closure_manifest_hash": dependency_closure.closure_manifest_hash.model_dump(
+                mode="json"
+            ),
+            "dependency_tree_hash": dependency_closure.tree_hash.model_dump(mode="json"),
+        }
+    )
+    manifest_payload = {
+        "schema_version": "autolean.solver-workspace-manifest.v2",
+        "contract_hash": base.contract_hash.value,
+        "environment_hash": base.environment_hash.value,
+        "trusted_statement_path": base.trusted_statement_path,
+        "trusted_statement_hash": base.trusted_statement_hash.value,
+        "allowed_write_paths": list(base.allowed_write_paths),
+        "candidate_path": base.candidate_path,
+        "comparator_id": "lean-exact-declaration-boundary.v2",
+        "expected_declaration": base.expected_declaration,
+        "expected_elaborated_type_hash": base.expected_elaborated_type_hash.value,
+        "closure_manifest_hash": dependency_closure.closure_manifest_hash.value,
+        "dependency_tree_hash": dependency_closure.tree_hash.value,
+    }
+    manifest_source = (
+        json.dumps(
+            manifest_payload,
+            ensure_ascii=True,
+            sort_keys=True,
+            separators=(",", ":"),
+        )
+        + "\n"
+    )
+    payload["solver_manifest_hash"] = digest_text(
+        HashKindV1.WORKSPACE_MANIFEST,
+        manifest_source,
+    ).model_dump(mode="json")
+    payload["boundary_hash"] = digest_model(
+        HashKindV1.PROOF_BOUNDARY,
+        payload,
+        exclude={"boundary_hash"},
+    ).model_dump(mode="json")
+    return ProofBoundaryV2.model_validate(payload)
+
+
 class FormalizationTaskBundleV1(ContractModel):
     schema_version: Literal["1.0"] = "1.0"
     bundle_id: StableIdentifierV1
@@ -940,6 +1124,113 @@ class FormalizationTaskBundleV1(ContractModel):
         return self
 
 
+class FormalizationTaskBundleV2(FormalizationTaskBundleV1):
+    """Builder handoff that makes a dependency closure part of the immutable bundle."""
+
+    schema_version: Literal["2.0"] = "2.0"  # type: ignore[assignment]
+    contract: StatementContractV2
+    proof_boundary: ProofBoundaryV2
+    dependency_closure: DependencyClosureRefV1
+
+    @model_validator(mode="after")
+    def validate_dependency_closure_binding(self) -> FormalizationTaskBundleV2:
+        contract = self.contract
+        closure = self.dependency_closure
+        if contract.policy.allowed_edit_regions:
+            raise ValueError(
+                "V2 bundles do not support line-ranged editable regions; "
+                "Proof.lean is the complete write boundary"
+            )
+        if closure.environment_hash != contract.formal.environment.environment_hash:
+            raise ValueError("dependency closure does not bind the frozen contract environment")
+        if self.proof_boundary.environment_hash != closure.environment_hash:
+            raise ValueError("V2 proof boundary and dependency closure use different environments")
+        if self.proof_boundary.closure_manifest_hash != closure.closure_manifest_hash:
+            raise ValueError("V2 proof boundary does not bind the dependency manifest")
+        if self.proof_boundary.dependency_tree_hash != closure.tree_hash:
+            raise ValueError("V2 proof boundary does not bind the dependency tree")
+        formal_nodes = {node.node_id.value: node for node in self.graphs.formal.nodes}
+        target = formal_nodes.get(contract.formal_target_node_id.value)
+        if target is None:
+            raise ValueError("V2 contract target node is absent from the formal graph")
+        expected_target = f"{contract.formal.namespace}.{contract.formal.declaration_name}"
+        if target.declaration_name != expected_target:
+            raise ValueError("V2 formal target node declaration differs from the contract")
+        # FormalNodeKindV1 uses THEOREM as the proof-bearing class for Lean `theorem` and
+        # `lemma` declarations.  V2 must not let an import, definition, instance, or notation
+        # masquerade as the frozen target.  Keep this check here (rather than in the V1 graph)
+        # so the V1 graph protocol remains unchanged.
+        if target.kind is not FormalNodeKindV1.THEOREM:
+            raise ValueError("V2 formal target node must be a theorem declaration")
+
+        formal_body_dependencies = {
+            dependency.dependency_id.value: dependency
+            for dependency in contract.dependencies
+            if dependency.kind is DependencyKindV1.FORMAL_BODY
+        }
+        binding_node_ids: set[str] = set()
+        for binding in contract.formal_dependency_bindings:
+            node = formal_nodes.get(binding.formal_node_id.value)
+            if node is None:
+                raise ValueError("V2 dependency binding references an unknown formal node")
+            dependency = formal_body_dependencies.get(binding.dependency_id.value)
+            if dependency is None:
+                # StatementContractV2 validates the same relationship without graph context;
+                # retain this local check so the graph/name relation is total at this boundary.
+                raise ValueError("V2 dependency binding lacks a formal-body contract dependency")
+            if not _LEAN_NAMESPACE.fullmatch(dependency.target):
+                raise ValueError(
+                    "V2 formal-body dependency target must be a canonical Lean declaration"
+                )
+            if node.declaration_name != dependency.target:
+                raise ValueError(
+                    "V2 dependency binding formal node does not match the contract target"
+                )
+            binding_node_ids.add(binding.formal_node_id.value)
+
+        # BODY_DEPENDS_ON edges are directed from a prerequisite declaration to the declaration
+        # whose body uses it.  The target's complete upstream closure is therefore the exact set
+        # of transitive predecessors in this directed acyclic graph.  Do not infer dependencies
+        # from signature/import/instance edges: they are intentionally outside this body-supply
+        # contract.
+        body_predecessors: dict[str, set[str]] = {}
+        for edge in self.graphs.formal.edges:
+            if edge.kind is FormalEdgeKindV1.BODY_DEPENDS_ON:
+                body_predecessors.setdefault(edge.target.value, set()).add(edge.source.value)
+        expected_binding_node_ids: set[str] = set()
+        pending = list(body_predecessors.get(target.node_id.value, ()))
+        while pending:
+            node_id = pending.pop()
+            if node_id in expected_binding_node_ids:
+                continue
+            expected_binding_node_ids.add(node_id)
+            pending.extend(body_predecessors.get(node_id, ()))
+        if binding_node_ids != expected_binding_node_ids:
+            missing = sorted(expected_binding_node_ids - binding_node_ids)
+            unrelated = sorted(binding_node_ids - expected_binding_node_ids)
+            details: list[str] = []
+            if missing:
+                details.append("missing=" + ",".join(missing))
+            if unrelated:
+                details.append("unrelated=" + ",".join(unrelated))
+            raise ValueError(
+                "V2 formal-body bindings must exactly cover transitive BODY_DEPENDS_ON "
+                "predecessors (" + "; ".join(details) + ")"
+            )
+        closure_ids = tuple(item.value for item in closure.formal_body_dependency_ids)
+        supplied_ids = tuple(
+            item.dependency_id.value
+            for item in contract.formal_dependency_bindings
+            if item.supply is FormalDependencySupplyV2.CLOSURE
+        )
+        if closure_ids != supplied_ids:
+            raise ValueError(
+                "dependency closure IDs must exactly match closure-backed "
+                "formal dependency bindings"
+            )
+        return self
+
+
 def freeze_evidence_hash(contract: StatementContractV1) -> DigestV1:
     """Hash the freeze record and fidelity evidence which authorized a Builder handoff."""
 
@@ -958,12 +1249,18 @@ def freeze_evidence_hash(contract: StatementContractV1) -> DigestV1:
     return digest_model(HashKindV1.FREEZE_EVIDENCE, payload)
 
 
-def builder_attestation_payload(bundle: FormalizationTaskBundleV1) -> dict[str, object]:
+def builder_attestation_payload(
+    bundle: FormalizationTaskBundleV1 | FormalizationTaskBundleV2,
+) -> dict[str, object]:
     """Return the exact semantic payload a Builder authority must attest."""
 
     contract = bundle.contract
-    return {
-        "schema_version": "autolean.builder-freeze-attestation-payload.v1",
+    payload: dict[str, object] = {
+        "schema_version": (
+            "autolean.builder-freeze-attestation-payload.v2"
+            if isinstance(bundle, FormalizationTaskBundleV2)
+            else "autolean.builder-freeze-attestation-payload.v1"
+        ),
         "bundle_id": bundle.bundle_id.value,
         "bundle_hash": bundle.handoff_hash().value,
         "contract_id": contract.contract_id.value,
@@ -973,6 +1270,14 @@ def builder_attestation_payload(bundle: FormalizationTaskBundleV1) -> dict[str, 
         "environment_hash": contract.formal.environment.environment_hash.value,
         "freeze_evidence_hash": freeze_evidence_hash(contract).value,
     }
+    if isinstance(bundle, FormalizationTaskBundleV2):
+        payload.update(
+            {
+                "closure_manifest_hash": bundle.dependency_closure.closure_manifest_hash.value,
+                "dependency_tree_hash": bundle.dependency_closure.tree_hash.value,
+            }
+        )
+    return payload
 
 
 class AttemptMetricsV1(ContractModel):

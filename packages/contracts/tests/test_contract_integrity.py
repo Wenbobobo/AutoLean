@@ -6,6 +6,8 @@ import pytest
 from pydantic import ValidationError
 
 from autolean_contracts import (
+    MATHLIB_AXIOMS_V1,
+    AxiomProfileV1,
     ContractChangeV1,
     EventEnvelopeV1,
     FidelityRiskV1,
@@ -33,6 +35,7 @@ from autolean_contracts import (
     digest_model,
     digest_text,
     stable_identifier,
+    validate_axiom_policy_v1,
 )
 
 
@@ -114,6 +117,20 @@ def _event_with_payload(payload: dict[str, object]) -> EventEnvelopeV1:
         payload=payload,
         event_hash=digest_model(HashKindV1.EVENT, preimage),
     )
+
+
+def _contract_with_axiom_policy(
+    profile: AxiomProfileV1,
+    allowlist: tuple[str, ...],
+) -> StatementContractV1:
+    payload = _draft_contract().model_dump(mode="python", round_trip=True)
+    formal = payload["formal"]
+    policy = payload["policy"]
+    assert isinstance(formal, dict)
+    assert isinstance(policy, dict)
+    formal["axioms_allowlist"] = allowlist
+    policy["axiom_profile"] = profile
+    return StatementContractV1.model_validate(payload)
 
 
 def test_oci_v1_policy_round_trip_hash_and_argv_remain_frozen() -> None:
@@ -377,3 +394,58 @@ def test_mathematical_graph_checks_duplicate_edge_ids_across_all_edge_kinds() ->
                 ),
             ),
         )
+
+
+@pytest.mark.parametrize(
+    "allowlist",
+    [
+        (),
+        ("Classical.choice",),
+        MATHLIB_AXIOMS_V1,
+    ],
+)
+def test_mathlib_axiom_profile_accepts_only_baseline_subsets(
+    allowlist: tuple[str, ...],
+) -> None:
+    contract = _contract_with_axiom_policy(AxiomProfileV1.MATHLIB, allowlist)
+
+    assert contract.formal.axioms_allowlist == allowlist
+
+
+def test_mathlib_axiom_profile_rejects_nonbaseline_axioms() -> None:
+    with pytest.raises(ValueError, match="non-baseline axioms: unsafeAxiom"):
+        validate_axiom_policy_v1(
+            AxiomProfileV1.MATHLIB,
+            ("Classical.choice", "unsafeAxiom"),
+        )
+
+
+def test_strict_axiom_profile_requires_an_empty_allowlist() -> None:
+    with pytest.raises(ValueError, match="strict axiom profile requires an empty allowlist"):
+        validate_axiom_policy_v1(
+            AxiomProfileV1.STRICT,
+            ("Classical.choice",),
+        )
+
+
+def test_explicit_axiom_profile_accepts_custom_axioms() -> None:
+    contract = _contract_with_axiom_policy(
+        AxiomProfileV1.EXPLICIT_ALLOWLIST,
+        ("AutoLean.CustomAxiom",),
+    )
+    assert contract.formal.axioms_allowlist == ("AutoLean.CustomAxiom",)
+
+
+@pytest.mark.parametrize("profile", tuple(AxiomProfileV1))
+def test_every_axiom_profile_rejects_sorry_ax(profile: AxiomProfileV1) -> None:
+    with pytest.raises(ValueError, match="sorryAx is prohibited"):
+        validate_axiom_policy_v1(profile, ("sorryAx",))
+
+
+def test_v1_contract_keeps_axiom_policy_payload_compatible() -> None:
+    contract = _contract_with_axiom_policy(
+        AxiomProfileV1.MATHLIB,
+        ("Classical.choice", "unsafeAxiom"),
+    )
+
+    assert contract.formal.axioms_allowlist == ("Classical.choice", "unsafeAxiom")

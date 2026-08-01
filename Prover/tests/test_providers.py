@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 from collections.abc import Mapping
 from datetime import UTC, datetime, timedelta
 
@@ -16,6 +17,7 @@ from autolean_contracts import (
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
     ModelExecutionReservationV1,
+    ModelExecutionSubjectKindV1,
     PermissionDecisionV1,
     digest_text,
     stable_identifier,
@@ -26,7 +28,7 @@ from autolean_prover.errors import (
     PolicyViolation,
     ProviderResponseError,
 )
-from autolean_prover.execution import ProcessResult
+from autolean_prover.execution import ProcessRequest, ProcessResult
 from autolean_prover.providers import (
     Capability,
     ChatCompletionsProvider,
@@ -34,6 +36,7 @@ from autolean_prover.providers import (
     CodexCliProvider,
     CodexCliSettings,
     FakeProvider,
+    ModelExecutionTimeoutPolicyV1,
     ModelProvider,
     ModelRequest,
     ModelResponse,
@@ -70,11 +73,87 @@ class RecordingTransport:
         )
         return self.response
 
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        payload = json.loads(body.decode("utf-8"))
+        assert isinstance(payload, dict)
+        self.calls.append(
+            {
+                "url": url,
+                "headers": dict(headers),
+                "payload": payload,
+                "timeout_seconds": timeout_seconds,
+            }
+        )
+        return self.response
+
+
+class FailingTransport:
+    def __init__(self, message: str) -> None:
+        self.message = message
+
+    def post_json(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        payload: Mapping[str, object],
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, payload, timeout_seconds
+        raise TimeoutError(self.message)
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        del url, headers, body, timeout_seconds
+        raise TimeoutError(self.message)
+
+
+class RecordingCodexHarness:
+    def __init__(self) -> None:
+        self.requests: list[ProcessRequest] = []
+
+    def execute(self, request: ProcessRequest) -> ProcessResult:
+        self.requests.append(request)
+        return ProcessResult(
+            argv=("codex",),
+            returncode=0,
+            stdout=(
+                '{"type":"item.completed","item":{"type":"agent_message","text":"by rfl"}}\n'
+                '{"usage":{"input_tokens":1,"output_tokens":1}}\n'
+            ),
+            stderr="",
+            duration_seconds=0.01,
+        )
+
 
 class FailingProbe:
     def probe(self, provider: ModelProvider) -> ProviderCapabilities:
         del provider
         raise RuntimeError("capability endpoint unavailable")
+
+
+class CountingProbe:
+    def __init__(self, observed: ProviderCapabilities) -> None:
+        self.observed = observed
+        self.calls = 0
+
+    def probe(self, provider: ModelProvider) -> ProviderCapabilities:
+        del provider
+        self.calls += 1
+        return self.observed
 
 
 class MutableProvider:
@@ -96,11 +175,14 @@ class MutableProvider:
             model_id=self.model_id,
             capabilities=self.capabilities,
         ).configuration_hash
+        self.execution_timeout_policy = ModelExecutionTimeoutPolicyV1(3600)
         self._response_model_id = response_model_id
         self._generation_error = generation_error
+        self.generation_calls = 0
 
     def generate(self, request: ModelRequest) -> ModelResponse:
         del request
+        self.generation_calls += 1
         if self._generation_error is not None:
             raise self._generation_error
         return ModelResponse(
@@ -206,6 +288,7 @@ def _authorization(
     model_revision: str = "fixture-v1",
     endpoint_class: EndpointClassV1 = EndpointClassV1.LOCAL,
     capabilities: ProviderCapabilities | None = None,
+    provider_timeout_seconds: float = 3600,
 ) -> ModelExecutionAuthorizationV1:
     now = datetime.now(UTC)
     provider_capabilities = capabilities or ProviderCapabilities.of(
@@ -217,6 +300,7 @@ def _authorization(
     request = ModelRequest(prompt="prove it", context_pack_hash=context_pack_hash)
     return ModelExecutionAuthorizationV1(
         authorization_id=stable_identifier("provider-test", f"authorization-{registry_name}"),
+        subject_kind=ModelExecutionSubjectKindV1.THEOREM,
         bundle_id=bundle_id,
         bundle_hash=digest_text(HashKindV1.BUNDLE, "bundle"),
         contract_id=stable_identifier("provider-test", "contract"),
@@ -248,6 +332,7 @@ def _authorization(
                     [],
                     model_id=model_id,
                     capabilities=provider_capabilities,
+                    timeout_seconds=provider_timeout_seconds,
                 ).configuration_hash,
             ),
             pricing=ModelExecutionPricingV1(),
@@ -291,6 +376,67 @@ def test_registry_rejects_run_when_capability_probe_fails() -> None:
             ModelRequest(prompt="prove it"),
         )
     assert gate.abandoned[0][1] == ProviderFailureCodeV1.PROBE_FAILED
+
+
+def test_registry_preflight_validates_binding_without_probe_reservation_or_provider_io() -> None:
+    provider = MutableProvider()
+    gate = PermitGate()
+    probe = CountingProbe(provider.capabilities)
+    registry = _registry(gate)
+    registry.register(
+        "model-a",
+        provider=provider,
+        probe=probe,
+        endpoint_class=EndpointClassV1.LOCAL,
+        model_revision="fixture-v1",
+    )
+    authorization = _authorization(
+        registry_name="model-a",
+        model_id="model-a",
+        capabilities=provider.capabilities,
+    )
+
+    registry.preflight_generate(authorization, ModelRequest(prompt="prove it"))
+
+    assert probe.calls == 0
+    assert provider.generation_calls == 0
+    assert gate.reserved == []
+
+
+def test_registry_exposes_local_effective_timeout_without_probe_or_provider_io() -> None:
+    capabilities = ProviderCapabilities.of(
+        Capability.TEXT_GENERATION,
+        Capability.USAGE_ACCOUNTING,
+    )
+    provider = FakeProvider(
+        ["proof"],
+        capabilities=capabilities,
+        timeout_seconds=12,
+    )
+    gate = PermitGate()
+    probe = CountingProbe(capabilities)
+    registry = _registry(gate)
+    registry.register(
+        "fake",
+        provider=provider,
+        probe=probe,
+        endpoint_class=EndpointClassV1.LOCAL,
+        model_revision="fixture-v1",
+    )
+    authorization = _authorization(
+        registry_name="fake",
+        capabilities=capabilities,
+        provider_timeout_seconds=12,
+    )
+    request = ModelRequest(prompt="prove it", timeout_seconds=30)
+
+    policy = registry.execution_timeout_policy(authorization.provider)
+    effective = registry.effective_timeout_seconds(authorization.provider, request)
+
+    assert policy.configured_ceiling_seconds == 12
+    assert effective == 12
+    assert probe.calls == 0
+    assert gate.reserved == []
 
 
 def test_registry_requires_observed_capability_not_just_declared_capability() -> None:
@@ -601,7 +747,201 @@ def test_custom_chat_adapter_keeps_secret_as_environment_reference() -> None:
         "Content-Type": "application/json",
         "Authorization": "Bearer unit-test-token",
     }
+    assert transport.calls[0]["timeout_seconds"] == 120.0
+    assert "thinking" not in transport.calls[0]["payload"]
     assert "unit-test-token" not in repr(provider._settings)
+
+
+def test_model_request_timeout_is_bounded_hashed_and_legacy_optional() -> None:
+    legacy = ModelRequest(prompt="prove it")
+    bounded = ModelRequest(prompt="prove it", timeout_seconds=17.5)
+    structured = ModelRequest(prompt="prove it", response_format="json_object")
+
+    assert legacy.timeout_seconds is None
+    assert legacy.outbound_request_hash() != bounded.outbound_request_hash()
+    assert legacy.outbound_request_hash() != structured.outbound_request_hash()
+    assert Capability.STRUCTURED_JSON in structured.inferred_capabilities()
+    for invalid in (True, 0, -1, float("nan"), float("inf"), 3600.1):
+        with pytest.raises(ConfigurationError):
+            ModelRequest(prompt="prove it", timeout_seconds=invalid)
+
+
+def test_chat_adapter_enforces_request_timeout_below_provider_ceiling() -> None:
+    transport = RecordingTransport(
+        {
+            "id": "response-timeout-chat",
+            "choices": [{"message": {"content": "by rfl"}}],
+        }
+    )
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="local-chat",
+            model_id="open-model",
+            base_url="http://127.0.0.1:8080/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+            endpoint_class=EndpointClassV1.LOCAL,
+            timeout_seconds=120,
+        ),
+        transport=transport,
+    )
+
+    provider.generate(ModelRequest(prompt="prove it", timeout_seconds=17.5))
+
+    assert transport.calls[0]["timeout_seconds"] == 17.5
+
+
+def test_http_timeout_failure_is_sanitized() -> None:
+    secret_marker = "credential-adjacent-timeout-detail"
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="local-chat",
+            model_id="open-model",
+            base_url="http://127.0.0.1:8080/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+            endpoint_class=EndpointClassV1.LOCAL,
+        ),
+        transport=FailingTransport(secret_marker),
+    )
+
+    with pytest.raises(ProviderResponseError) as error:
+        provider.generate(ModelRequest(prompt="prove it", timeout_seconds=1))
+
+    assert secret_marker not in str(error.value)
+    assert error.value.__cause__ is None
+
+
+def test_chat_adapter_rejects_mismatched_response_model() -> None:
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+        ),
+        transport=RecordingTransport(
+            {
+                "model": "substituted-model",
+                "choices": [{"message": {"content": "by rfl"}}],
+            }
+        ),
+    )
+    with pytest.raises(ProviderResponseError, match="does not match"):
+        provider.generate(ModelRequest(prompt="prove it"))
+
+
+def test_chat_adapter_settles_reasoning_only_response_as_empty_candidate() -> None:
+    private_reasoning = "private-reasoning-must-not-become-final-text"
+    transport = RecordingTransport(
+        {
+            "id": "reasoning-only-response",
+            "model": "open-model",
+            "choices": [
+                {
+                    "message": {
+                        "content": None,
+                        "reasoning_content": private_reasoning,
+                    }
+                }
+            ],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+        }
+    )
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(
+                Capability.TEXT_GENERATION,
+                Capability.USAGE_ACCOUNTING,
+            ),
+        ),
+        transport=transport,
+    )
+
+    response = provider.generate(ModelRequest(prompt="prove it"))
+
+    assert response.text == ""
+    assert private_reasoning not in response.text
+    assert response.usage == TokenUsage(input_tokens=3, output_tokens=2)
+
+
+def test_chat_adapter_binds_structured_json_to_the_hashed_request_and_payload() -> None:
+    transport = RecordingTransport(
+        {
+            "id": "json-response",
+            "model": "open-model",
+            "choices": [{"message": {"content": "{}"}}],
+            "usage": {"prompt_tokens": 3, "completion_tokens": 2},
+        }
+    )
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(
+                Capability.TEXT_GENERATION,
+                Capability.USAGE_ACCOUNTING,
+                Capability.STRUCTURED_JSON,
+            ),
+        ),
+        transport=transport,
+    )
+
+    response = provider.generate(ModelRequest(prompt="return JSON", response_format="json_object"))
+
+    assert response.text == "{}"
+    assert transport.calls[0]["payload"]["response_format"] == {"type": "json_object"}
+
+
+def test_chat_adapter_rejects_structured_json_without_declared_capability() -> None:
+    transport = RecordingTransport({"choices": [{"message": {"content": "{}"}}]})
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+        ),
+        transport=transport,
+    )
+
+    with pytest.raises(CapabilityError):
+        provider.generate(ModelRequest(prompt="return JSON", response_format="json_object"))
+
+    assert transport.calls == []
+
+
+def test_chat_adapter_rejects_cached_tokens_above_prompt_tokens() -> None:
+    provider = ChatCompletionsProvider(
+        ChatCompletionsSettings(
+            provider_id="custom-chat",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+        ),
+        transport=RecordingTransport(
+            {
+                "model": "open-model",
+                "choices": [{"message": {"content": "by rfl"}}],
+                "usage": {
+                    "prompt_tokens": 2,
+                    "completion_tokens": 1,
+                    "prompt_cache_hit_tokens": 3,
+                },
+            }
+        ),
+    )
+    with pytest.raises(ProviderResponseError, match="cannot exceed"):
+        provider.generate(ModelRequest(prompt="prove it"))
 
 
 def test_custom_responses_adapter_supports_explicit_https_model_switching() -> None:
@@ -638,6 +978,35 @@ def test_custom_responses_adapter_supports_explicit_https_model_switching() -> N
         "input": [{"role": "user", "content": [{"type": "input_text", "text": "prove it"}]}],
         "max_output_tokens": 4096,
     }
+
+
+def test_responses_adapter_keeps_provider_timeout_as_upper_bound() -> None:
+    transport = RecordingTransport(
+        {
+            "id": "response-timeout-responses",
+            "output": [
+                {
+                    "type": "message",
+                    "content": [{"type": "output_text", "text": "by rfl"}],
+                }
+            ],
+        }
+    )
+    provider = ResponsesProvider(
+        ResponsesSettings(
+            provider_id="operator-model",
+            model_id="open-model",
+            base_url="https://models.example/v1",
+            api_key_env=None,
+            capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
+            timeout_seconds=12,
+        ),
+        transport=transport,
+    )
+
+    provider.generate(ModelRequest(prompt="prove it", timeout_seconds=30))
+
+    assert transport.calls[0]["timeout_seconds"] == 12
 
 
 def test_openai_responses_configuration_is_bound_to_the_official_endpoint() -> None:
@@ -816,3 +1185,22 @@ def test_codex_cli_failure_does_not_surface_stderr(tmp_path) -> None:
         provider.generate(ModelRequest(prompt="prove it", working_directory=tmp_path))
     assert "17" in str(error.value)
     assert "credential-like-stderr-must-not-escape" not in str(error.value)
+
+
+def test_codex_cli_enforces_request_timeout_below_provider_ceiling(tmp_path) -> None:
+    harness = RecordingCodexHarness()
+    provider = CodexCliProvider(
+        CodexCliSettings(model_id="gpt-test-model", timeout_seconds=900),
+        harness=harness,
+    )
+
+    provider.generate(
+        ModelRequest(
+            prompt="prove it",
+            working_directory=tmp_path,
+            timeout_seconds=11,
+        )
+    )
+
+    assert len(harness.requests) == 1
+    assert harness.requests[0].timeout_seconds == 11

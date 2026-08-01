@@ -1,0 +1,50 @@
+# syntax=docker/dockerfile:1
+
+# The parent is a fixed locally-attested Mathlib worker.  This child remains a local query
+# profile until a separately recorded digest-pinned build is available.
+FROM autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6
+
+LABEL org.autolean.ifem.parent-image="autolean/mathlib-worker@sha256:3237192cf627a05367c75d46e61ec9034fefe43a4fd0c06139e38c80358648d6" \
+      org.autolean.ifem.profile-protocol="autolean.ifem-pinned-profile-query.v1"
+
+USER root
+
+WORKDIR /opt/mathlib
+RUN set -eu; \
+    lake build \
+      +Mathlib.Analysis.InnerProductSpace.Defs:olean \
+      +Mathlib.Analysis.InnerProductSpace.Dual:olean \
+      +Mathlib.Analysis.InnerProductSpace.LaxMilgram:olean \
+      +Mathlib.Analysis.Normed.Operator.Basic:olean \
+      +Mathlib.Analysis.Normed.Operator.Bilinear:olean
+
+# Keep the expensive pinned Mathlib closure independent from query-source changes.
+COPY AutoleanIFEMPinnedProfileQuery.lean /opt/mathlib/AutoLean/AutoleanIFEMPinnedProfileQuery.lean
+COPY autolean-ifem-pinned-profile-query /opt/autolean/bin/autolean-ifem-pinned-profile-query
+
+RUN set -eu; \
+    mkdir -p /opt/mathlib/.lake/build/lib/lean/AutoLean; \
+    LEAN_PATH="$(lake env printenv LEAN_PATH)" lean \
+      -o /opt/mathlib/.lake/build/lib/lean/AutoLean/AutoleanIFEMPinnedProfileQuery.olean \
+      /opt/mathlib/AutoLean/AutoleanIFEMPinnedProfileQuery.lean; \
+    mkdir -p /opt/autolean/attestations; \
+    sha256sum \
+      /opt/mathlib/.lake/build/lib/lean/AutoLean/AutoleanIFEMPinnedProfileQuery.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Defs.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Dual.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/LaxMilgram.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Basic.olean \
+      /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Bilinear.olean \
+      | LC_ALL=C sort \
+      > /opt/autolean/attestations/ifem-pinned-profile-built-oleans.sha256; \
+    test -s /opt/autolean/attestations/ifem-pinned-profile-built-oleans.sha256; \
+    sha256sum --check --strict --status \
+      /opt/autolean/attestations/ifem-pinned-profile-built-oleans.sha256; \
+    chmod 0444 \
+      /opt/mathlib/AutoLean/AutoleanIFEMPinnedProfileQuery.lean \
+      /opt/mathlib/.lake/build/lib/lean/AutoLean/AutoleanIFEMPinnedProfileQuery.olean \
+      /opt/autolean/attestations/ifem-pinned-profile-built-oleans.sha256; \
+    chmod 0555 /opt/autolean/bin/autolean-ifem-pinned-profile-query
+
+USER 65532:65532
+WORKDIR /work

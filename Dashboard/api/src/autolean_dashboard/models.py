@@ -92,6 +92,9 @@ WorkRecordCategory = Literal[
     "gap",
     "contract_change",
     "verification",
+    "synthetic_execution",
+    "benchmark",
+    "research_advisory",
     "other",
 ]
 

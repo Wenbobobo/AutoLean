@@ -14,6 +14,7 @@ from benchmarks.role_benchmark import (
     FakeRoleBenchmarkFixtureV1,
     RoleBenchmarkError,
     RoleBenchmarkHarness,
+    RoleBenchmarkPrivateManifestStore,
     RoleBenchmarkRawOutputStore,
     RoleBenchmarkReportV1,
     RoleBenchmarkStore,
@@ -21,6 +22,7 @@ from benchmarks.role_benchmark import (
     compare_report_suite,
     compare_reports,
     load_fake_fixture,
+    operator_private_benchmark_paths,
     stable_case_selection,
 )
 
@@ -33,12 +35,17 @@ def _run_fixture(
     root: Path,
 ) -> RoleBenchmarkReportV1:
     root.mkdir()
+    private_paths = operator_private_benchmark_paths(
+        "role-calibration-pairs-replay",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(root / "operator-private")},
+    )
     with RoleBenchmarkStore(root / "roles.sqlite3") as store:
         return RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(root / "raw-outputs"),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="role-calibration-pairs-replay",
         )
@@ -178,20 +185,24 @@ def test_calibration_pair_comparison_suite_keeps_roles_separate(
         )
 
 
-def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
+def test_compare_suite_cli_preset_emits_all_role_pairs(tmp_path: Path) -> None:
     fixture = load_fake_fixture(FIXTURE_PATH)
     database = tmp_path / "roles.sqlite3"
-    raw_root = tmp_path / "operator-private-raw"
     environment = {
         **os.environ,
         "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
     }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-run",
+        environment=environment,
+    )
     with RoleBenchmarkStore(database) as store:
         report = RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(raw_root),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="suite-cli-run",
         )
@@ -208,12 +219,11 @@ def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
         report.run.run_id,
         "--candidate-run",
         report.run.run_id,
+        "--preset",
+        "calibration-pairs-v3",
         "--output",
         str(output),
     ]
-    for role in BenchmarkRoleV1:
-        slug = role.value.replace("_", "-")
-        command.extend(["--cell-pair", f"fake.oracle.{slug}=fake.mutant.{slug}"])
 
     subprocess.run(command, cwd=PROJECT_ROOT, check=True, env=environment)
     payload = json.loads(output.read_text(encoding="ascii"))
@@ -224,3 +234,105 @@ def test_compare_suite_cli_emits_all_role_pairs(tmp_path: Path) -> None:
     ]
     assert {item["comparison_kind"] for item in payload["comparisons"]} == {"controlled_ablation"}
     assert {item["pass_rate_delta_ppm"] for item in payload["comparisons"]} == {-500000}
+
+
+def test_compare_suite_cli_preset_appends_explicit_pairs_and_rejects_duplicate_role(
+    tmp_path: Path,
+) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    database = tmp_path / "roles.sqlite3"
+    environment = {
+        **os.environ,
+        "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
+    }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-preset-duplicate-run",
+        environment=environment,
+    )
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=ScriptedFakeRoleExecutor(fixture),
+            store=store,
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id="suite-cli-preset-duplicate-run",
+        )
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "role_benchmark.py"),
+        "compare-suite",
+        "--database",
+        str(database),
+        "--baseline-run",
+        report.run.run_id,
+        "--candidate-run",
+        report.run.run_id,
+        "--preset",
+        "calibration-pairs-v3",
+        "--cell-pair",
+        "fake.mutant.prover=fake.oracle.prover",
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "RoleBenchmarkComparisonSuiteV1" in result.stderr
+
+
+def test_compare_suite_cli_rejects_cross_role_pair(tmp_path: Path) -> None:
+    fixture = load_fake_fixture(FIXTURE_PATH)
+    database = tmp_path / "roles.sqlite3"
+    environment = {
+        **os.environ,
+        "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private"),
+    }
+    private_paths = operator_private_benchmark_paths(
+        "suite-cli-cross-role-run",
+        environment=environment,
+    )
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=ScriptedFakeRoleExecutor(fixture),
+            store=store,
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id="suite-cli-cross-role-run",
+        )
+
+    command = [
+        sys.executable,
+        str(PROJECT_ROOT / "scripts" / "role_benchmark.py"),
+        "compare-suite",
+        "--database",
+        str(database),
+        "--baseline-run",
+        report.run.run_id,
+        "--candidate-run",
+        report.run.run_id,
+        "--cell-pair",
+        "fake.oracle.prover=fake.mutant.task-allocator",
+    ]
+
+    result = subprocess.run(
+        command,
+        cwd=PROJECT_ROOT,
+        check=False,
+        capture_output=True,
+        env=environment,
+        text=True,
+    )
+
+    assert result.returncode != 0
+    assert "cross-role comparisons are not meaningful" in result.stderr

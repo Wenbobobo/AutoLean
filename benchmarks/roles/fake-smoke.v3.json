@@ -100,7 +100,7 @@
           "provider_id": "fake",
           "model_id": "fake-model",
           "model_revision": "fixture-v1",
-          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "provider_configuration_hash": "6680b60f99aea61f5c472d2f0bc554fc4f15547809f264daa812a5a72a94e358",
           "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "prompt": {
@@ -136,7 +136,7 @@
           "provider_id": "fake",
           "model_id": "fake-model",
           "model_revision": "fixture-v1",
-          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "provider_configuration_hash": "6680b60f99aea61f5c472d2f0bc554fc4f15547809f264daa812a5a72a94e358",
           "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "prompt": {
@@ -172,7 +172,7 @@
           "provider_id": "fake",
           "model_id": "fake-model",
           "model_revision": "fixture-v1",
-          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "provider_configuration_hash": "6680b60f99aea61f5c472d2f0bc554fc4f15547809f264daa812a5a72a94e358",
           "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "prompt": {
@@ -208,7 +208,7 @@
           "provider_id": "fake",
           "model_id": "fake-model",
           "model_revision": "fixture-v1",
-          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "provider_configuration_hash": "6680b60f99aea61f5c472d2f0bc554fc4f15547809f264daa812a5a72a94e358",
           "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "prompt": {
@@ -244,7 +244,7 @@
           "provider_id": "fake",
           "model_id": "fake-model",
           "model_revision": "fixture-v1",
-          "provider_configuration_hash": "810e07b353d59f8264783d8d893870625a0a726ccd4f5958c79ce33ca5486a73",
+          "provider_configuration_hash": "6680b60f99aea61f5c472d2f0bc554fc4f15547809f264daa812a5a72a94e358",
           "generation_parameters_hash": "dddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddddd"
         },
         "prompt": {

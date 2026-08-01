@@ -6,7 +6,7 @@ fail() {
   exit 2
 }
 
-[ "$#" -eq 12 ] || fail "expected the frozen build argument profile"
+[ "$#" -eq 14 ] || fail "expected the frozen build argument profile"
 build_input_sha256=$1
 build_tool_sha256=$2
 dockerfile_sha256=$3
@@ -19,6 +19,8 @@ runtime_source_checksum_manifest_sha256=$9
 runtime_source_tree_sha256=${10}
 v2_facade_query_helper_sha256=${11}
 v2_facade_wrapper_sha256=${12}
+builder_query_helper_sha256=${13}
+builder_query_wrapper_sha256=${14}
 
 for digest in "$@"; do
   case "$digest" in
@@ -56,6 +58,10 @@ test "$(sha256sum "$tools/AutoleanLibrarySubstrateV2Query.lean" | awk '{print $1
   "$v2_facade_query_helper_sha256"
 test "$(sha256sum "$tools/autolean-library-substrate-v2-facade" | awk '{print $1}')" = \
   "$v2_facade_wrapper_sha256"
+test "$(sha256sum "$tools/AutoleanLibrarySubstrateBuilderQuery.lean" | awk '{print $1}')" = \
+  "$builder_query_helper_sha256"
+test "$(sha256sum "$tools/autolean-library-substrate-builder-query" | awk '{print $1}')" = \
+  "$builder_query_wrapper_sha256"
 test "$(sha256sum "$parent_receipt" | awk '{print $1}')" = \
   "$parent_receipt_file_sha256"
 test "$(
@@ -82,6 +88,22 @@ input_hash() {
   field=$1
   LC_ALL=C sed -n "s/^.*\"$field\":\"\\([0-9a-f]\\{64\\}\)\".*$/\\1/p" "$input"
 }
+for asset_and_digest in \
+  "BUILD_TOOL_SHA256:$build_tool_sha256" \
+  "BUILDER_QUERY_HELPER_SHA256:$builder_query_helper_sha256" \
+  "BUILDER_QUERY_WRAPPER_SHA256:$builder_query_wrapper_sha256" \
+  "DOCKERFILE_SHA256:$dockerfile_sha256" \
+  "INVENTORY_HELPER_SHA256:$inventory_helper_sha256" \
+  "QUERY_WRAPPER_SHA256:$query_wrapper_sha256" \
+  "RECEIPT_TOOL_SHA256:$receipt_tool_sha256" \
+  "V2_FACADE_QUERY_HELPER_SHA256:$v2_facade_query_helper_sha256" \
+  "V2_FACADE_WRAPPER_SHA256:$v2_facade_wrapper_sha256"
+do
+  asset=${asset_and_digest%%:*}
+  digest=${asset_and_digest#*:}
+  test "$(input_hash "$asset")" = "$digest" ||
+    fail "build input asset binding differs from the staged helper"
+done
 source_record() {
   module=$1
   relative=$2
@@ -191,6 +213,8 @@ cp "$input" "$final/attestations/build-input.v1.json"
 cp "$source_checksums" "$final/attestations/runtime-sources.sha256"
 cp "$tools/autolean-library-substrate-independent-query" \
   "$final/bin/autolean-library-substrate-independent-query"
+cp "$tools/autolean-library-substrate-builder-query" \
+  "$final/bin/autolean-library-substrate-builder-query"
 cp "$tools/autolean-library-substrate-build-receipt" \
   "$final/bin/autolean-library-substrate-build-receipt"
 cp "$tools/autolean-library-substrate-v2-facade" \
@@ -247,6 +271,8 @@ runtime_manifest_sha256=$(
   printf '{'
   printf '"build_input_sha256":"%s",' "$build_input_sha256"
   printf '"build_tool_sha256":"%s",' "$build_tool_sha256"
+  printf '"builder_query_helper_sha256":"%s",' "$builder_query_helper_sha256"
+  printf '"builder_query_wrapper_sha256":"%s",' "$builder_query_wrapper_sha256"
   printf '"compiled_tree_sha256":"%s",' "$compiled_tree_sha256"
   printf '"declaration_inventory_sha256":"%s",' "$inventory_sha256"
   printf '"dockerfile_sha256":"%s",' "$dockerfile_sha256"
@@ -264,10 +290,10 @@ runtime_manifest_sha256=$(
   printf '"runtime_source_tree_sha256":"%s",' "$runtime_source_tree_sha256"
   printf '"v2_facade_query_helper_sha256":"%s",' "$v2_facade_query_helper_sha256"
   printf '"v2_facade_wrapper_sha256":"%s",' "$v2_facade_wrapper_sha256"
-  printf '"schema_version":"autolean.library-substrate-image-receipt.v1",'
+  printf '"schema_version":"autolean.library-substrate-image-receipt.v2",'
   printf '"task_mode":"independent_reproof"'
   printf '}\n'
-} >"$final/attestations/library-substrate-image-receipt.v1.json"
+} >"$final/attestations/library-substrate-image-receipt.v2.json"
 chmod 0444 "$final/attestations/"*
 
 test -z "$(find "$final" -name '*.lean' -o -name '*.ilean')"

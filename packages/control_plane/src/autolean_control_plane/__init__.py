@@ -5,6 +5,11 @@ from .events import AttestationNonce, EventStore, Idempotency, NewEvent, StoredE
 from .leases import Lease, LeaseStore
 from .model_authorization import ModelExecutionAuthorizationService
 from .projection import DashboardProjection, export_dashboard_projection
+from .research_advisory import (
+    RESEARCH_ADVISORY_ENTITY_TYPE,
+    RESEARCH_ADVISORY_EVENT_TYPES,
+    validate_research_advisory_event,
+)
 from .service import ClaimReceipt, ControlPlane, TaskBinding, VerificationOutcome
 from .verifier_signing_gateway import (
     FixtureHmacIndependentExecutionReceiptAuthenticator,
@@ -24,6 +29,8 @@ from .verifier_signing_gateway import (
 )
 
 __all__ = [
+    "RESEARCH_ADVISORY_ENTITY_TYPE",
+    "RESEARCH_ADVISORY_EVENT_TYPES",
     "ArtifactRef",
     "ArtifactStore",
     "AttestationNonce",
@@ -55,4 +62,5 @@ __all__ = [
     "VerifierSigningGateway",
     "export_dashboard_projection",
     "request_hash",
+    "validate_research_advisory_event",
 ]

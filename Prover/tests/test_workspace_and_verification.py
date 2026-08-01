@@ -4,7 +4,13 @@ from dataclasses import dataclass
 from pathlib import Path
 
 import pytest
-from autolean_contracts import HashKindV1, ProofSubmissionV1, digest_text
+from autolean_contracts import (
+    MATHLIB_AXIOMS_V1,
+    AxiomProfileV1,
+    HashKindV1,
+    ProofSubmissionV1,
+    digest_text,
+)
 from autolean_prover.errors import ValidationError
 from autolean_prover.execution import (
     MaterializedWorkspace,
@@ -219,3 +225,27 @@ def test_verifier_fails_closed_when_runner_tampers_with_a_protected_file(tmp_pat
     assert not report.build_passed
     assert not report.dependency_check_passed
     assert "protected workspace file changed" in report.details
+
+
+def test_verifier_rechecks_mathlib_axiom_policy_after_contract_validation(tmp_path) -> None:
+    bundle = frozen_bundle(
+        axiom_profile=AxiomProfileV1.MATHLIB,
+        axioms_allowlist=MATHLIB_AXIOMS_V1,
+    )
+    workspace = WorkspaceMaterializer().materialize(bundle, tmp_path / "mathlib-attempt")
+    assert TrustedLeanVerifier._axiom_failures(workspace, MATHLIB_AXIOMS_V1) == []
+    assert "sorryAx is prohibited" in TrustedLeanVerifier._axiom_failures(
+        workspace,
+        ("sorryAx",),
+    )
+
+    object.__setattr__(
+        bundle.contract.formal,
+        "axioms_allowlist",
+        (*MATHLIB_AXIOMS_V1, "AutoLean.UnsafeAxiom"),
+    )
+    failures = TrustedLeanVerifier._axiom_failures(
+        workspace,
+        (*MATHLIB_AXIOMS_V1, "AutoLean.UnsafeAxiom"),
+    )
+    assert any("axiom policy is invalid" in failure for failure in failures)

@@ -78,6 +78,10 @@ class ParentLocatorAuthority(StrEnum):
 
 _LOCAL_PDF_TEXT_METHOD = "pypdf-pdfreader-extract-text-plain-form-feed-v1"
 _LOCAL_PDF_TEXT_TOOL_NAME = "pypdf"
+# A Markdown source can be exposed to the local text-only harness without a parser only when
+# the derived object is the exact same UTF-8 byte sequence.  Keep this recipe separate from
+# repository-provided PDF companion text, which has its own historical provenance semantics.
+REPOSITORY_MARKDOWN_TEXT_IDENTITY_METHOD = "utf8-markdown-byte-identity-v1"
 
 
 @dataclass(frozen=True, slots=True)
@@ -416,12 +420,7 @@ class ReferenceCache:
             self._validate_download_observation(entry, observation)
             inspection = _inspect_regular_file(temporary_path)
             self._validate_inspection(entry, inspection, cached=False)
-            self._require_existing_directory_tree(target.parent)
-            existing_target = _lstat_optional(target)
-            if existing_target is not None:
-                _require_regular_stat(target, existing_target)
-            os.replace(temporary_path, target)
-            temporary_path = None
+            self._install_verified_temporary(entry, temporary_path, target)
             _fsync_directory_if_supported(target.parent)
             return ReferenceFetchResult(
                 verified=self.verify(entry.reference_id),
@@ -502,12 +501,7 @@ class ReferenceCache:
                 os.fsync(destination.fileno())
             inspection = _inspect_regular_file(temporary_path)
             self._validate_inspection(entry, inspection, cached=False)
-            self._require_existing_directory_tree(target.parent)
-            existing_target = _lstat_optional(target)
-            if existing_target is not None:
-                _require_regular_stat(target, existing_target)
-            os.replace(temporary_path, target)
-            temporary_path = None
+            self._install_verified_temporary(entry, temporary_path, target)
             _fsync_directory_if_supported(target.parent)
             return ReferenceFetchResult(
                 verified=self.verify(entry.reference_id),
@@ -541,6 +535,31 @@ class ReferenceCache:
         for part in relative:
             current = current / part
             _require_directory(current)
+
+    def _install_verified_temporary(
+        self,
+        entry: ReferenceEntryV1,
+        temporary_path: Path,
+        target: Path,
+    ) -> None:
+        """Install one verified CAS object without replacing an existing target."""
+
+        self._require_existing_directory_tree(target.parent)
+        try:
+            os.link(temporary_path, target)
+        except FileExistsError:
+            try:
+                inspection = _inspect_regular_file(target)
+                self._validate_inspection(entry, inspection, cached=True)
+            except ReferenceCacheError as error:
+                raise ReferenceCacheError(
+                    f"content-addressed reference target conflicts with verified acquisition: "
+                    f"{entry.reference_id}"
+                ) from error
+        except OSError as error:
+            raise ReferenceCacheError(
+                f"cannot install content-addressed reference: {entry.reference_id}"
+            ) from error
 
     @staticmethod
     def _validate_download_observation(
@@ -835,8 +854,6 @@ def _validate_derivations(entries: tuple[ReferenceEntryV1, ...]) -> None:
             raise ReferenceCacheError(f"{entry.reference_id}: derivation parent is absent")
         if parent.artifact_kind is not ReferenceArtifactKind.SOURCE_DOCUMENT:
             raise ReferenceCacheError(f"{entry.reference_id}: derivation parent is not a source")
-        if parent.media_type != "application/pdf":
-            raise ReferenceCacheError(f"{entry.reference_id}: derivation parent must be a PDF")
         if derivation.parent_sha256 != parent.sha256:
             raise ReferenceCacheError(
                 f"{entry.reference_id}: parent digest does not match manifest"
@@ -860,6 +877,10 @@ def _validate_derivations(entries: tuple[ReferenceEntryV1, ...]) -> None:
                 f"{entry.reference_id}: derived text egress exceeds its parent policy"
             )
         if derivation.kind is ReferenceDerivationKind.LOCAL_PDF_TEXT_EXTRACTION:
+            if parent.media_type != "application/pdf" or parent.file_extension != ".pdf":
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: local PDF extraction parent must be a PDF"
+                )
             if entry.acquisition_policy is not ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
                 raise ReferenceCacheError(
                     f"{entry.reference_id}: local PDF extraction must be local-derivation-only"
@@ -880,10 +901,50 @@ def _validate_derivations(entries: tuple[ReferenceEntryV1, ...]) -> None:
                 raise ReferenceCacheError(
                     f"{entry.reference_id}: local PDF extraction parent must be manifest-bound"
                 )
-        elif entry.acquisition_policy is ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
-            raise ReferenceCacheError(
-                f"{entry.reference_id}: local-derivation-only requires local PDF extraction"
-            )
+        elif derivation.kind is ReferenceDerivationKind.REPOSITORY_TEXT_EXTRACTION:
+            if parent.media_type == "text/markdown" and parent.file_extension == ".md":
+                if entry.acquisition_policy is not ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: Markdown byte identity must be "
+                        "local-derivation-only"
+                    )
+                if (
+                    parent.model_egress_policy is not ReferenceEgressPolicy.LOCAL_ONLY
+                    or entry.model_egress_policy is not ReferenceEgressPolicy.LOCAL_ONLY
+                ):
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: Markdown byte identity must remain local-only"
+                    )
+                if entry.sha256 != parent.sha256 or entry.size_bytes != parent.size_bytes:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: Markdown byte identity must retain "
+                        "parent hash and size"
+                    )
+                if derivation.method != REPOSITORY_MARKDOWN_TEXT_IDENTITY_METHOD:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: unsupported Markdown byte-identity method"
+                    )
+                if derivation.tool_name is not None or derivation.tool_version is not None:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: Markdown byte identity must not declare a tool"
+                    )
+                if derivation.parent_locator_authority is not ParentLocatorAuthority.HUMAN_DECLARED:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: Markdown byte identity parent must be "
+                        "human-declared"
+                    )
+            elif parent.media_type == "application/pdf" and parent.file_extension == ".pdf":
+                # Historical repository-provided PDF companion text remains a fetched artifact;
+                # it is not a local byte-identity derivation and cannot become one by replay.
+                if entry.acquisition_policy is ReferenceAcquisitionPolicy.LOCAL_DERIVATION_ONLY:
+                    raise ReferenceCacheError(
+                        f"{entry.reference_id}: local-derivation-only requires local PDF extraction"
+                    )
+            else:
+                raise ReferenceCacheError(
+                    f"{entry.reference_id}: repository text extraction requires "
+                    "Markdown or PDF parent"
+                )
 
 
 def _validate_https_url(value: str, label: str) -> str:

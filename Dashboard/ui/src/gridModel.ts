@@ -52,7 +52,15 @@ export interface GridSummary {
   unknown: number;
 }
 
-export type DagEventState = "attempt" | "gap" | "contract_change" | "verification" | "other" | null;
+export type DagEventState =
+  | "attempt"
+  | "gap"
+  | "contract_change"
+  | "verification"
+  | "synthetic_execution"
+  | "benchmark"
+  | "other"
+  | null;
 
 export interface DagHealthCell {
   attempts: number;
@@ -126,7 +134,7 @@ const tonePriority: Record<HealthTone, number> = {
 
 export function healthForStatus(status: string): HealthSignal {
   const normalized = status.trim().toLowerCase();
-  if (["blocked", "critical", "failed", "rejected", "expired", "stale"].includes(normalized)) {
+  if (["blocked", "critical", "failed", "rejected", "expired", "stale", "synthetic_failed"].includes(normalized)) {
     return {
       color: "#dc6156",
       edgeColor: "#e37a70",
@@ -146,7 +154,18 @@ export function healthForStatus(status: string): HealthSignal {
       tone: "active"
     };
   }
-  if (["attention", "queued", "candidate", "review", "pending"].includes(normalized)) {
+  if ([
+    "attention",
+    "queued",
+    "candidate",
+    "review",
+    "pending",
+    "synthetic_complete",
+    "synthetic_reused",
+    "benchmark_running",
+    "benchmark_verified",
+    "benchmark_rejected"
+  ].includes(normalized)) {
     return {
       color: "#d7ae54",
       edgeColor: "#cbb36f",
@@ -332,10 +351,18 @@ function eventStateForType(eventType: string): Exclude<DagEventState, null> {
   if (eventType === "contract_change.requested") return "contract_change";
   if (eventType === "proof.submitted") return "attempt";
   if (eventType.startsWith("verification.")) return "verification";
+  if (eventType.startsWith("t7_synthetic_node_v2.")) return "synthetic_execution";
+  if (eventType.startsWith("fate.attempt.")) return "benchmark";
   return "other";
 }
 
 function eventMatchesNode(event: EventView, node: GraphNode): boolean {
+  if (node.kind === "synthetic_execution") {
+    return (
+      event.task_id === node.task_id &&
+      event.event_type.startsWith("t7_synthetic_node_v2.")
+    );
+  }
   return (
     event.task_id === node.task_id ||
     event.entity_id === node.id ||
@@ -364,6 +391,10 @@ function dominantEventState(events: EventView[]): DagEventState {
   }
   if (events.some((event) => event.event_type === "proof.submitted")) return "attempt";
   if (events.some((event) => event.event_type.startsWith("verification."))) return "verification";
+  if (events.some((event) => event.event_type.startsWith("t7_synthetic_node_v2."))) {
+    return "synthetic_execution";
+  }
+  if (events.some((event) => event.event_type.startsWith("fate.attempt."))) return "benchmark";
   return events.length > 0 ? eventStateForType(events[0]!.event_type) : null;
 }
 

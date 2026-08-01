@@ -37,7 +37,7 @@ from benchmarks.fate_adapter import (  # noqa: E402
 REPORT_SCHEMA: Final = "autolean.fate-compile-canary-report.v1"
 REPORT_ENVELOPE_SCHEMA: Final = "autolean.fate-compile-canary-envelope.v1"
 SUITE: Final = "compile-canary-12"
-EXPECTED_MANIFEST_SHA256: Final = "3187bac80d3aeb2dac8f5da878fe21580a4c11540a0c7db3c14a34c2e0bdc748"
+EXPECTED_MANIFEST_SHA256: Final = "dc52f40fdede4c4e2290580d9dfdecb9e017b8cd3ed961e2ad13e9a0accb54a2"
 EXPECTED_LEAN_VERSION: Final = "4.28.0"
 EXPECTED_LAKE_VERSION: Final = "5.0.0"
 DEFAULT_WSL_DISTRIBUTION: Final = "Ubuntu-24.04"

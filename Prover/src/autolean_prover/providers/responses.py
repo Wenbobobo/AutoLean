@@ -6,15 +6,25 @@ from dataclasses import dataclass
 from typing import Protocol
 
 import httpx
-from autolean_contracts import DigestV1, EndpointClassV1, HashKindV1, digest_model
+from autolean_contracts import (
+    DigestV1,
+    EndpointClassV1,
+    HashKindV1,
+    digest_model,
+    outbound_request_body_binding,
+)
 
 from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.providers.base import (
+    CanonicalJsonRequestBody,
+    ModelExecutionTimeoutPolicyV1,
     ModelRequest,
     ModelResponse,
     ProviderCapabilities,
     TokenUsage,
     ToolCall,
+    canonical_json_request_body,
+    effective_model_timeout_seconds,
     require_request_capabilities,
 )
 from autolean_prover.providers.policy import (
@@ -29,6 +39,15 @@ from autolean_prover.providers.policy import (
 
 
 class ResponsesTransport(Protocol):
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]: ...
+
     def post_json(
         self,
         *,
@@ -53,14 +72,37 @@ class HttpxResponsesTransport:
         payload: Mapping[str, object],
         timeout_seconds: float,
     ) -> Mapping[str, object]:
+        return self.post_json_bytes(
+            url=url,
+            headers=headers,
+            body=canonical_json_request_body(payload).body,
+            timeout_seconds=timeout_seconds,
+        )
+
+    def post_json_bytes(
+        self,
+        *,
+        url: str,
+        headers: Mapping[str, str],
+        body: bytes,
+        timeout_seconds: float,
+    ) -> Mapping[str, object]:
+        if not isinstance(body, bytes):
+            raise ProviderResponseError("JSON request body must be bytes")
+        try:
+            outbound_request_body_binding(body)
+        except ValueError:
+            raise ProviderResponseError(
+                "JSON request body must use canonical UTF-8 object bytes"
+            ) from None
         if self._client is None:
             with httpx.Client(timeout=timeout_seconds) as client:
-                response = client.post(url, headers=dict(headers), json=dict(payload))
+                response = client.post(url, headers=dict(headers), content=body)
         else:
             response = self._client.post(
                 url,
                 headers=dict(headers),
-                json=dict(payload),
+                content=body,
                 timeout=timeout_seconds,
             )
         response.raise_for_status()
@@ -138,20 +180,37 @@ class ResponsesProvider:
     def capabilities(self) -> ProviderCapabilities:
         return self._settings.capabilities
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1:
+        return ModelExecutionTimeoutPolicyV1(self._settings.timeout_seconds)
+
     def generate(self, request: ModelRequest) -> ModelResponse:
-        require_request_capabilities(self, request)
-        payload = self._request_payload(request)
+        prepared_body = self.prepare_request_body(request)
         headers = {"Content-Type": "application/json"}
         api_key = resolve_secret_reference(self._settings.api_key_env, self._environment)
         if api_key is not None:
             headers["Authorization"] = f"Bearer {api_key}"
-        raw = self._transport.post_json(
-            url=f"{self._settings.base_url.rstrip('/')}/responses",
-            headers=headers,
-            payload=payload,
-            timeout_seconds=self._settings.timeout_seconds,
-        )
+        try:
+            raw = self._transport.post_json_bytes(
+                url=f"{self._settings.base_url.rstrip('/')}/responses",
+                headers=headers,
+                body=prepared_body.body,
+                timeout_seconds=effective_model_timeout_seconds(
+                    request,
+                    provider_timeout_seconds=self._settings.timeout_seconds,
+                ),
+            )
+        except ProviderResponseError:
+            raise
+        except Exception:
+            raise ProviderResponseError("Responses request failed") from None
         return self._parse_response(raw)
+
+    def prepare_request_body(self, request: ModelRequest) -> CanonicalJsonRequestBody:
+        """Build the exact credential-free JSON body without resolving an API key."""
+
+        require_request_capabilities(self, request)
+        return canonical_json_request_body(self._request_payload(request))
 
     def _request_payload(self, request: ModelRequest) -> dict[str, object]:
         inputs: list[dict[str, object]] = []

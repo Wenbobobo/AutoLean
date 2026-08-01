@@ -1,0 +1,16 @@
+{
+  "schema_version": "autolean.project-synthetic-fixture-release-manifest.v1",
+  "fixture_path": "Builder/pilots/local-calibration/project-synthetic-opening-corpus.v1.json",
+  "fixture_sha256": "a8d9ae4faf4d376686e7e209c0ab8bce4c23d0647b81d142244feea9abcd30d7",
+  "fixture_schema_version": "autolean.builder-local-calibration-fixture-corpus.v1",
+  "fixture_record_kind": "local_calibration_fixture",
+  "renderer_path": "Builder/pilots/local-calibration/render_opening_corpus.py",
+  "renderer_sha256": "4c329e23e6c67c024427522b50963ab99c3aaf4c02bc5acf90f4bd740c07e7f0",
+  "repository_license_path": "LICENSE",
+  "repository_license_sha256": "5c9817c129b98e7bb966bca028c43c19107102ef8e03fe799bffb4354f4ef015",
+  "repository_license_expression": "Apache-2.0",
+  "provenance_class": "project_synthetic_fixture",
+  "authorship_claim": "generated_for_repository_pending_human_content_review",
+  "human_content_review_completed": false,
+  "legal_review_claimed": false
+}

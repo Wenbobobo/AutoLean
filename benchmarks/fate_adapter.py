@@ -74,6 +74,20 @@ def _sha256(payload: bytes) -> str:
     return hashlib.sha256(payload).hexdigest()
 
 
+def _canonical_lf_bytes(payload: bytes, artifact: str) -> bytes:
+    """Normalize portable text artifacts to the LF bytes committed by Git.
+
+    FATE task files and metadata are read from Git objects.  ``lake-manifest.json`` is
+    an ignored Lake-generated input, so it must have the same explicit line-ending
+    contract instead of inheriting the host checkout's CRLF conversion.
+    """
+
+    canonical = payload.replace(b"\r\n", b"\n")
+    if b"\r" in canonical:
+        raise FateFixtureIntegrityError(f"{artifact} contains a bare carriage return")
+    return canonical
+
+
 def _require_sha256(value: str, field_name: str) -> None:
     if not _HEX_SHA256.fullmatch(value):
         raise FateFixtureIntegrityError(f"{field_name} must be a lowercase SHA-256 digest")
@@ -1149,19 +1163,22 @@ class FateLockedCheckout:
                 raise FateFixtureIntegrityError(
                     f"FATE-{tier} Lean toolchain does not match the lock"
                 )
-            # FATE intentionally ignores this generated resolution file.  Its separately pinned
-            # SHA-256 is therefore the authority, while the regular-file read rejects links.
-            lake_manifest = _read_regular_checkout_file(
-                split_root,
-                PurePosixPath("lake-manifest.json"),
+            # FATE intentionally ignores this generated resolution file.  Normalize only
+            # CRLF-versus-LF presentation before applying its separately pinned hash.
+            lake_manifest = _canonical_lf_bytes(
+                _read_regular_checkout_file(
+                    split_root,
+                    PurePosixPath("lake-manifest.json"),
+                ),
+                f"FATE-{tier} lake manifest",
             )
             if _sha256(lake_manifest) != self.lock.lake_manifest_sha256[tier]:
                 raise FateFixtureIntegrityError(
                     f"FATE-{tier} lake manifest does not match the lock"
                 )
-            metadata = _read_regular_checkout_file(
-                split_root,
-                PurePosixPath(f"FATE-{tier}.json"),
+            metadata = _canonical_lf_bytes(
+                _required_tracked_file(files, f"FATE-{tier}.json"),
+                f"FATE-{tier} metadata JSON",
             )
             if _sha256(metadata) != self.lock.metadata_json_sha256[tier]:
                 raise FateFixtureIntegrityError(

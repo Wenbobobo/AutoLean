@@ -9,7 +9,13 @@ import {
   leverageMetric,
   leverageWindow
 } from "../src/feedbackModel.ts";
-import { buildGridModel, graphPresentation, healthForStatus, summarizeGrid } from "../src/gridModel.ts";
+import {
+  buildDagHealthMap,
+  buildGridModel,
+  graphPresentation,
+  healthForStatus,
+  summarizeGrid
+} from "../src/gridModel.ts";
 import {
   buildNodeInspection,
   classifyWorkRecord,
@@ -292,4 +298,102 @@ test("work record classification distinguishes semantic and verification evidenc
   };
 
   assert.equal(classifyWorkRecord(event).category, "contract_change");
+});
+
+test("T7 and FATE public execution events remain distinct from proof verification", () => {
+  const t7Event = {
+    sequence: 1,
+    event_type: "t7_synthetic_node_v2.synthetic_complete",
+    entity_id: "t7-bundle",
+    task_id: "t7-bundle",
+    occurred_at: "2026-07-27T12:00:00Z",
+    summary: "T7 synthetic complete"
+  };
+  const fateEvent = {
+    sequence: 2,
+    event_type: "fate.attempt.verified",
+    entity_id: "fate-bundle",
+    task_id: "fate-bundle",
+    occurred_at: "2026-07-27T12:00:01Z",
+    summary: "FATE benchmark verifier accepted"
+  };
+
+  assert.equal(classifyWorkRecord(t7Event).category, "synthetic_execution");
+  assert.equal(classifyWorkRecord(fateEvent).category, "benchmark");
+  assert.notEqual(classifyWorkRecord(fateEvent).category, "verification");
+});
+
+test("research advisory events remain a non-authoritative work-record category", () => {
+  const advisoryEvent = {
+    sequence: 3,
+    event_type: "research_hypothesis",
+    entity_id: "a".repeat(64),
+    task_id: null,
+    occurred_at: "2026-07-29T12:00:02Z",
+    summary: "Research advisory hypothesis: lemma"
+  };
+
+  assert.equal(classifyWorkRecord(advisoryEvent).category, "research_advisory");
+  assert.notEqual(classifyWorkRecord(advisoryEvent).category, "task");
+  assert.notEqual(classifyWorkRecord(advisoryEvent).category, "verification");
+});
+
+test("synthetic execution is visually explicit and cannot become a nominal proof state", () => {
+  const node: GraphNode = {
+    id: "dashboard-node|t7-bundle|execution|t7:node-a",
+    source_node_id: "t7:node-a",
+    task_id: "t7-bundle",
+    label: "T7 synthetic node node-a",
+    graph: "execution",
+    status: "synthetic_complete",
+    revision: 1,
+    kind: "synthetic_execution",
+    dependencies: []
+  };
+  const events = [
+    {
+      sequence: 1,
+      event_type: "t7_synthetic_node_v2.synthetic_complete",
+      entity_id: "t7-bundle",
+      task_id: "t7-bundle",
+      occurred_at: "2026-07-27T12:00:00Z",
+      summary: "T7 synthetic complete"
+    },
+    {
+      sequence: 2,
+      event_type: "verification.accepted",
+      entity_id: "unrelated-proof",
+      task_id: "t7-bundle",
+      occurred_at: "2026-07-27T12:00:01Z",
+      summary: "Unrelated proof verification accepted"
+    }
+  ];
+  const map = buildDagHealthMap([node], events, "execution");
+  const inspection = buildNodeInspection(
+    [node],
+    [
+      {
+        id: "unrelated-proof",
+        task_id: "t7-bundle",
+        provider: "fake",
+        model: "fake",
+        status: "succeeded",
+        input_tokens: 1,
+        output_tokens: 1,
+        cost_usd: 0,
+        verification: "accepted"
+      }
+    ],
+    events,
+    node.id
+  );
+
+  assert.equal(healthForStatus("synthetic_complete").tone, "attention");
+  assert.equal(healthForStatus("synthetic_failed").tone, "critical");
+  assert.equal(map.columns[0]?.cells[0]?.eventState, "synthetic_execution");
+  assert.deepEqual(inspection?.runs, []);
+  assert.deepEqual(
+    inspection?.workRecords.map((record) => record.category),
+    ["synthetic_execution"]
+  );
 });

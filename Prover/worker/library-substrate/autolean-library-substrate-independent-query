@@ -288,7 +288,7 @@ LEAN
     )
     image_receipt_sha256=$(
       sha256sum \
-        /opt/autolean/library-substrate/attestations/library-substrate-image-receipt.v1.json |
+        /opt/autolean/library-substrate/attestations/library-substrate-image-receipt.v2.json |
         awk '{print $1}'
     )
     query_wrapper_sha256=$(

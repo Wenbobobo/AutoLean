@@ -28,6 +28,7 @@ MANIFEST_NAMES = frozenset({"package.json", "pnpm-lock.yaml", "pyproject.toml", 
 SKIPPED_COMPONENTS = frozenset(
     {
         ".agents",
+        ".cache",
         ".git",
         ".mypy_cache",
         ".pytest_cache",
@@ -63,9 +64,9 @@ def _manifest_paths(root: Path) -> tuple[Path, ...]:
         sorted(
             path
             for path in root.rglob("*")
-            if path.is_file()
+            if not any(part.casefold() in SKIPPED_COMPONENTS for part in path.parts)
+            and path.is_file()
             and path.name in MANIFEST_NAMES
-            and not any(part.casefold() in SKIPPED_COMPONENTS for part in path.parts)
         )
     )
 

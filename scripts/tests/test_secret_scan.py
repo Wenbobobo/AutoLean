@@ -47,6 +47,19 @@ def test_report_never_contains_the_matched_secret(tmp_path: Path) -> None:
     assert value not in rendered
 
 
+def test_legacy_operator_secret_filename_is_blocked_without_secret_content(
+    tmp_path: Path,
+) -> None:
+    candidate = tmp_path / "llm.txt"
+    candidate.write_text("harmless placeholder\n", encoding="utf-8")
+
+    result = scan_paths(tmp_path, (PurePosixPath("llm.txt"),))
+
+    assert ("llm.txt", "operator-secret-file") in {
+        (finding.path, finding.rule) for finding in result.findings
+    }
+
+
 def test_protected_and_generated_trees_are_not_read(tmp_path: Path) -> None:
     paths = (
         PurePosixPath(".quarantine/archive.txt"),
@@ -210,6 +223,27 @@ def test_history_scan_blocks_force_added_protected_path(tmp_path: Path) -> None:
     result = scan_repository_history(tmp_path)
 
     assert ("docs/meeting/notes.txt", "history-protected-path") in {
+        (finding.path, finding.rule) for finding in result.findings
+    }
+
+
+def test_history_scan_blocks_force_added_legacy_operator_secret_file(
+    tmp_path: Path,
+) -> None:
+    _initialize_repository(tmp_path)
+    (tmp_path / ".gitignore").write_text("/llm.txt\n", encoding="utf-8")
+    (tmp_path / "llm.txt").write_text("harmless placeholder\n", encoding="utf-8")
+    subprocess.run(("git", "add", ".gitignore"), cwd=tmp_path, check=True)
+    subprocess.run(("git", "add", "--force", "llm.txt"), cwd=tmp_path, check=True)
+    subprocess.run(
+        ("git", "commit", "--quiet", "-m", "force legacy operator file"),
+        cwd=tmp_path,
+        check=True,
+    )
+
+    result = scan_repository_history(tmp_path)
+
+    assert ("llm.txt", "history-operator-secret-file") in {
         (finding.path, finding.rule) for finding in result.findings
     }
 

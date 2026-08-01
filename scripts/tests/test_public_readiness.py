@@ -1,3 +1,6 @@
+import hashlib
+import json
+import shutil
 import subprocess
 from pathlib import Path, PurePosixPath
 
@@ -6,9 +9,13 @@ import pytest
 from scripts.public_readiness import (
     MAX_TRACKED_FILE_BYTES,
     PROJECT_ROOT,
+    PROJECT_SYNTHETIC_FIXTURE_MANIFEST_PATH,
+    PROJECT_SYNTHETIC_FIXTURE_PATH,
+    PROJECT_SYNTHETIC_FIXTURE_RENDERER_PATH,
     CandidateFile,
     Finding,
     PublicReadinessError,
+    _is_verified_project_synthetic_fixture,
     _json_contains_private_source_excerpt,
     audit_candidates,
     audit_license_metadata,
@@ -54,6 +61,7 @@ def test_candidate_policy_accepts_source_and_reference_manifest() -> None:
             "benchmarks/fake.raw-artifact-manifest.json",
             "private_benchmark_manifest",
         ),
+        ("llm.txt", "operator_secret_file"),
         ("operator.env", "environment_file"),
         ("keys/verifier.pem", "restricted_or_binary_payload"),
     ],
@@ -62,6 +70,17 @@ def test_candidate_policy_rejects_restricted_payloads(path: str, rule: str) -> N
     findings = audit_candidates((CandidateFile(PurePosixPath(path), 100),))
 
     assert rule in {finding.rule for finding in findings}
+
+
+def test_candidate_policy_does_not_overmatch_llm_documentation() -> None:
+    findings = audit_candidates(
+        (
+            CandidateFile(PurePosixPath("docs/llm.txt"), 100),
+            CandidateFile(PurePosixPath("llm-notes.txt"), 100),
+        )
+    )
+
+    assert findings == ()
 
 
 @pytest.mark.parametrize(
@@ -209,6 +228,117 @@ def test_candidate_policy_rejects_private_source_excerpt_json(tmp_path: Path) ->
         )
     )
     assert {finding.rule for finding in findings} == {"private_source_excerpt"}
+
+
+@pytest.mark.parametrize(
+    "rights",
+    (
+        {"source_license": None, "overall_decision": "unknown"},
+        {"source_license": "pending-review", "overall_decision": "restricted"},
+    ),
+)
+def test_candidate_policy_rejects_tracked_source_text_with_unready_rights(
+    tmp_path: Path,
+    rights: dict[str, object],
+) -> None:
+    pending = tmp_path / "pending-source.json"
+    pending.write_text(
+        json.dumps(
+            {
+                "source_text": "pending source text",
+                "source": {"spans": [{"permitted_excerpt": "pending source text"}]},
+                "rights": rights,
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    assert _json_contains_private_source_excerpt(pending) is True
+    findings = audit_candidates(
+        (
+            CandidateFile(
+                PurePosixPath("records/pending-source.json"),
+                pending.stat().st_size,
+                contains_private_source_excerpt=True,
+            ),
+        )
+    )
+    assert findings == (Finding(path="records/pending-source.json", rule="private_source_excerpt"),)
+
+
+def _copy_project_synthetic_fixture_release(root: Path) -> Path:
+    fixture = root.joinpath(*PROJECT_SYNTHETIC_FIXTURE_PATH.parts)
+    fixture.parent.mkdir(parents=True)
+    shutil.copy2(PROJECT_ROOT / "LICENSE", root / "LICENSE")
+    shutil.copy2(
+        PROJECT_ROOT.joinpath(*PROJECT_SYNTHETIC_FIXTURE_PATH.parts),
+        fixture,
+    )
+    shutil.copy2(
+        PROJECT_ROOT.joinpath(*PROJECT_SYNTHETIC_FIXTURE_MANIFEST_PATH.parts),
+        root.joinpath(*PROJECT_SYNTHETIC_FIXTURE_MANIFEST_PATH.parts),
+    )
+    shutil.copy2(
+        PROJECT_ROOT.joinpath(*PROJECT_SYNTHETIC_FIXTURE_RENDERER_PATH.parts),
+        root.joinpath(*PROJECT_SYNTHETIC_FIXTURE_RENDERER_PATH.parts),
+    )
+    return fixture
+
+
+def test_exact_project_synthetic_fixture_is_the_only_excerpt_exception(tmp_path: Path) -> None:
+    fixture = _copy_project_synthetic_fixture_release(tmp_path)
+
+    assert _is_verified_project_synthetic_fixture(
+        root=tmp_path,
+        relative=PROJECT_SYNTHETIC_FIXTURE_PATH,
+        fixture_path=fixture,
+    )
+    findings = audit_candidates(
+        (
+            CandidateFile(
+                PROJECT_SYNTHETIC_FIXTURE_PATH,
+                fixture.stat().st_size,
+                contains_private_source_excerpt=True,
+                verified_project_synthetic_fixture=True,
+            ),
+        )
+    )
+    assert findings == ()
+
+
+def test_unrelated_apache_text_cannot_launder_through_fixture_exception(tmp_path: Path) -> None:
+    fixture = _copy_project_synthetic_fixture_release(tmp_path)
+    payload = json.loads(fixture.read_text(encoding="utf-8"))
+    sample = payload["samples"][0]
+    unrelated_text = "unrelated Apache-licensed source"
+    unrelated_sha256 = hashlib.sha256(unrelated_text.encode("utf-8")).hexdigest()
+    sample["source_text"] = unrelated_text
+    sample["source"]["content_hash"]["value"] = unrelated_sha256
+    sample["source"]["spans"][0]["content_hash"]["value"] = unrelated_sha256
+    sample["source"]["spans"][0]["permitted_excerpt"] = unrelated_text
+    sample["source"]["spans"][0]["end_offset"] = len(unrelated_text.encode("utf-8"))
+    restrictions = sample["rights"]["restrictions"]
+    restrictions[:] = [item for item in restrictions if not item.startswith("source-bytes-sha256:")]
+    restrictions.append(f"source-bytes-sha256:{unrelated_sha256}")
+    fixture.write_bytes((json.dumps(payload, indent=2) + "\n").encode("utf-8"))
+    manifest_path = tmp_path.joinpath(*PROJECT_SYNTHETIC_FIXTURE_MANIFEST_PATH.parts)
+    manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
+    manifest["fixture_sha256"] = hashlib.sha256(fixture.read_bytes()).hexdigest()
+    manifest_path.write_text(json.dumps(manifest, indent=2) + "\n", encoding="utf-8")
+
+    assert not _is_verified_project_synthetic_fixture(
+        root=tmp_path,
+        relative=PROJECT_SYNTHETIC_FIXTURE_PATH,
+        fixture_path=fixture,
+    )
+    unrelated = CandidateFile(
+        PurePosixPath("records/unrelated-apache.json"),
+        100,
+        contains_private_source_excerpt=True,
+    )
+    assert audit_candidates((unrelated,)) == (
+        Finding(path="records/unrelated-apache.json", rule="private_source_excerpt"),
+    )
 
 
 def test_current_repository_has_consistent_license_metadata() -> None:

@@ -54,6 +54,20 @@ def test_prohibited_provider_dependency_is_rejected(tmp_path: Path) -> None:
     assert any(finding.rule == "prohibited-provider-dependency" for finding in findings)
 
 
+def test_generated_cache_manifests_are_outside_the_provider_policy_surface(
+    tmp_path: Path,
+) -> None:
+    _write_required_denylists(tmp_path)
+    cached_manifest = tmp_path / ".cache" / "foreign-environment" / "pyproject.toml"
+    cached_manifest.parent.mkdir(parents=True)
+    cached_manifest.write_text(
+        '[project]\ndependencies = ["anthropic>=1"]\n',
+        encoding="utf-8",
+    )
+
+    assert check_provider_policy(tmp_path) == ()
+
+
 def test_required_denylist_cannot_be_removed(tmp_path: Path) -> None:
     _write_required_denylists(tmp_path)
     policy = tmp_path / "Prover/src/autolean_prover/providers/policy.py"

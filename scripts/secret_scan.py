@@ -20,6 +20,7 @@ from scripts.public_readiness import (
     FORBIDDEN_PATH_PREFIXES,
     FORBIDDEN_SUFFIXES,
     MAX_TRACKED_FILE_BYTES,
+    OPERATOR_SECRET_FILENAMES,
 )
 
 MAX_TEXT_BYTES = 2 * 1024 * 1024
@@ -158,6 +159,8 @@ def _history_path_rules(relative: PurePosixPath) -> tuple[str, ...]:
         rules.append("history-restricted-directory")
     if name in FORBIDDEN_NAMES or name.endswith(".raw-artifact-manifest.json"):
         rules.append("history-private-manifest")
+    if len(folded) == 1 and name in OPERATOR_SECRET_FILENAMES:
+        rules.append("history-operator-secret-file")
     if name != ".env.example" and (
         name == ".env" or name.endswith(".env") or name.startswith(".env.")
     ):
@@ -249,6 +252,8 @@ def scan_paths(root: Path, paths: tuple[PurePosixPath, ...]) -> ScanResult:
     for relative in paths:
         if is_excluded(relative):
             continue
+        if len(relative.parts) == 1 and relative.name.casefold() in OPERATOR_SECRET_FILENAMES:
+            findings.add(Finding(relative.as_posix(), "operator-secret-file"))
         content, structural_finding = _read_candidate(root, relative)
         if structural_finding is not None:
             findings.add(structural_finding)

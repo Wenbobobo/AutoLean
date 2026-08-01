@@ -215,11 +215,30 @@ compiles `AutoLean.OCI.fixture`, observing the exact type
 `∀ (n : Nat), @Eq.{1} Nat n n` with an empty axiom set. A deliberately invalid
 `/deps/Mathlib/ModelTheory/Semantics.olean` bind does not influence compilation, demonstrating that
 this profile uses its image-owned dependency path rather than the host dependency mount. The
-canary evidence SHA-256 is
+historical T4 attachment cites canary evidence SHA-256
 `0931e138fdc4bf67374dc1a42978c92e49f786bece95fcf812c425fc7fd8ad0e`.
-The ignored evidence files are
-`release-evidence/oci-worker/mathlib-build.v1.json` and
-`release-evidence/oci-worker/mathlib-canary.v1.json`.
+
+### Local mathlib evidence namespace
+
+New mathlib build and canary records are immutable and content-addressed.  A record for image
+`autolean/mathlib-worker@sha256:<image>` and rendered evidence digest `<record>` is stored as:
+
+```text
+release-evidence/oci-worker/mathlib/<kind>/sha256-<image>/<record>.v1.json
+```
+
+where `<kind>` is `build` or `canary`.  The command's stdout exposes both `evidence_path` and
+`evidence_sha256`; neither locator is included in the hashed file itself. Repeating identical
+evidence is idempotent, while a different record gets a different filename. A historical
+attachment must resolve the named path from its pinned image and evidence digest, then recheck the
+record's exact image and build-receipt hash before treating it as local corroboration.
+
+The former fixed paths `release-evidence/oci-worker/mathlib-build.v1.json` and
+`release-evidence/oci-worker/mathlib-canary.v1.json` are legacy, operator-local files. Current
+commands never write, move, or delete them. For backwards compatibility, a historical verifier may
+read one only when its embedded image and receipt identity match the attachment; a newer image in a
+legacy file is unrelated local state, not a verification failure for an older attachment. Operators
+can retain those files for audit, but should use the emitted immutable path for every new binding.
 
 The source-v2 multi-declaration query separately compiled the retained `UniversalLK` source once,
 sealed `Candidate.olean`, and queried all 46 Candidate-owned declarations in a second read-only

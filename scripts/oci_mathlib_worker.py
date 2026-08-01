@@ -45,6 +45,7 @@ DECLARATION_QUERY_MAX_DECLARATIONS: Final[int] = 128
 DECLARATION_SOURCE_MAX_BYTES: Final[int] = 16 * 1024 * 1024
 DECLARATION_EXECUTION_POLICY_SCHEMA: Final[str] = "autolean.mathlib-declaration-execution-policy.v1"
 DECLARATION_QUERY_EVIDENCE_NAME: Final[str] = "mathlib-declarations.v1.json"
+MATHLIB_RUN_EVIDENCE_KINDS: Final[frozenset[str]] = frozenset({"build", "canary"})
 EXTERNAL_RUNTIME_PACKAGES: Final[tuple[str, ...]] = (
     "autolean-builder",
     "autolean-control-plane",
@@ -1167,13 +1168,90 @@ def query_declarations(
     }
 
 
+def _render_evidence(document: dict[str, object]) -> bytes:
+    return (json.dumps(document, ensure_ascii=True, indent=2, sort_keys=True) + "\n").encode(
+        "utf-8"
+    )
+
+
 def _write_evidence(repo_root: Path, name: str, document: dict[str, object]) -> str:
     evidence = repo_root / "release-evidence" / "oci-worker"
     evidence.mkdir(parents=True, exist_ok=True)
-    rendered = json.dumps(document, ensure_ascii=True, indent=2, sort_keys=True) + "\n"
+    rendered = _render_evidence(document)
     output = evidence / name
-    output.write_text(rendered, encoding="utf-8", newline="\n")
-    return _sha256_bytes(rendered.encode("utf-8"))
+    output.write_bytes(rendered)
+    return _sha256_bytes(rendered)
+
+
+def mathlib_run_evidence_relative_path(
+    *,
+    kind: str,
+    image: str,
+    evidence_sha256: str,
+) -> Path:
+    """Return the immutable local path for one mathlib build or canary record.
+
+    The image identity is part of the directory and the rendered record digest is part of
+    the filename.  An attachment can therefore find the exact operator-local record it
+    names without treating a later mutable ``mathlib-build.v1.json`` as evidence for an
+    older image.
+    """
+
+    if kind not in MATHLIB_RUN_EVIDENCE_KINDS:
+        raise MathlibWorkerError(f"unsupported mathlib run evidence kind: {kind}")
+    match = re.fullmatch(r".+@sha256:([0-9a-f]{64})", image)
+    if match is None:
+        raise MathlibWorkerError("mathlib run evidence requires a digest-pinned image")
+    if SHA256_RE.fullmatch(evidence_sha256) is None:
+        raise MathlibWorkerError("mathlib run evidence requires a sha256 evidence digest")
+    return (
+        Path("release-evidence")
+        / "oci-worker"
+        / "mathlib"
+        / kind
+        / f"sha256-{match.group(1)}"
+        / f"{evidence_sha256}.v1.json"
+    )
+
+
+def _record_mathlib_run_evidence(
+    repo_root: Path,
+    *,
+    kind: str,
+    image: str,
+    document: dict[str, object],
+) -> dict[str, object]:
+    """Persist immutable evidence for one exact mathlib image/run pair.
+
+    Existing legacy fixed-name files remain untouched.  Repeating an identical run is
+    idempotent; a same-name/different-bytes collision fails closed.
+    """
+
+    if document.get("image") != image:
+        raise MathlibWorkerError("mathlib run evidence image does not match its document")
+    if "evidence_path" in document or "evidence_sha256" in document:
+        raise MathlibWorkerError("mathlib run evidence must not contain its own locator")
+
+    rendered = _render_evidence(document)
+    evidence_sha256 = _sha256_bytes(rendered)
+    relative_path = mathlib_run_evidence_relative_path(
+        kind=kind,
+        image=image,
+        evidence_sha256=evidence_sha256,
+    )
+    output = repo_root / relative_path
+    output.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with output.open("xb") as stream:
+            stream.write(rendered)
+    except FileExistsError as error:
+        if output.read_bytes() != rendered:
+            raise MathlibWorkerError("mathlib run evidence path has conflicting bytes") from error
+
+    result = dict(document)
+    result["evidence_path"] = relative_path.as_posix()
+    result["evidence_sha256"] = evidence_sha256
+    return result
 
 
 def _record_declaration_query_evidence(
@@ -1226,12 +1304,12 @@ def build(
         "schema_version": BUILD_RECORD_SCHEMA,
         "source_inputs": prepared.source_inputs,
     }
-    evidence_sha256 = _write_evidence(
+    record = _record_mathlib_run_evidence(
         repo_root,
-        "mathlib-build.v1.json",
-        record,
+        kind="build",
+        image=image,
+        document=record,
     )
-    record["evidence_sha256"] = evidence_sha256
     print(json.dumps(record, ensure_ascii=True, sort_keys=True))
     return image, prepared, record
 
@@ -1357,12 +1435,12 @@ def canary(
         "schema_version": CANARY_SCHEMA,
         "wrapper_protocol": "autolean.oci-lean-wrapper.v2",
     }
-    evidence_sha256 = _write_evidence(
+    result = _record_mathlib_run_evidence(
         repo_root,
-        "mathlib-canary.v1.json",
-        result,
+        kind="canary",
+        image=image,
+        document=result,
     )
-    result["evidence_sha256"] = evidence_sha256
     print(json.dumps(result, ensure_ascii=True, sort_keys=True))
     return result
 

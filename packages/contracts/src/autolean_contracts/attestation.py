@@ -35,7 +35,9 @@ class AttestationPurposeV1(StrEnum):
 
     BUILDER_FREEZE = "builder_freeze"
     VERIFICATION = "verification"
+    MODEL_WORK_ADMISSION = "model_work_admission"
     MODEL_EXECUTION = "model_execution"
+    MODEL_EXECUTION_COMPLETION = "model_execution_completion"
 
 
 class AttestationError(ValueError):
@@ -273,8 +275,14 @@ class HmacAttestationVerifierV1:
         if expected_purpose in {
             AttestationPurposeV1.BUILDER_FREEZE,
             AttestationPurposeV1.VERIFICATION,
+            AttestationPurposeV1.MODEL_WORK_ADMISSION,
+            AttestationPurposeV1.MODEL_EXECUTION_COMPLETION,
         } and key.allowed_purposes != frozenset({expected_purpose}):
-            raise AttestationError("Builder and verifier authority keys must be role-dedicated")
+            raise AttestationError(
+                "Builder, verifier, model-work admission, and model completion authority keys "
+                "must be "
+                "role-dedicated to one purpose"
+            )
         now = _normalized_utc(self.clock())
         if attestation.issued_at > now:
             raise AttestationError("attestation was issued in the future")

@@ -1,13 +1,17 @@
 from __future__ import annotations
 
+import inspect
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Mapping
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 
 import pytest
 from autolean_contracts import (
+    AttestationError,
     AttestationPurposeV1,
+    AttestationV1,
+    DigestV1,
     EndpointClassV1,
     HashKindV1,
     HmacAttestationKeyV1,
@@ -18,8 +22,28 @@ from autolean_contracts import (
     ModelExecutionPricingV1,
     ModelExecutionProviderApprovalV1,
     ModelExecutionProviderBindingV1,
+    ModelExecutionSubjectKindV1,
+    ModelWorkBundleV2,
+    ModelWorkRoleV1,
+    PermissionDecisionV1,
+    RightsRecordV1,
+    SourceRecordV1,
+    SourceSpanV1,
     builder_attestation_payload,
+    digest_model,
     digest_text,
+    model_work_admission_evidence_identity,
+    model_work_admission_payload,
+    model_work_bundle_id,
+    model_work_case_contract_hash,
+    model_work_case_hash,
+    model_work_cell_contract_hash,
+    model_work_cell_hash,
+    model_work_contract_id,
+    model_work_item_hash,
+    model_work_rights_binding,
+    model_work_run_hash,
+    model_work_source_binding,
     stable_identifier,
 )
 from autolean_control_plane import (
@@ -56,6 +80,11 @@ _MODEL_KEY = HmacAttestationKeyV1(
     secret=b"provider-test-model-secret-material-01234567",
     allowed_purposes=frozenset({AttestationPurposeV1.MODEL_EXECUTION}),
 )
+_MODEL_WORK_ADMISSION_KEY = HmacAttestationKeyV1(
+    key_id="provider-test-model-work-admission-v1",
+    secret=b"provider-test-admission-secret-material-012345",
+    allowed_purposes=frozenset({AttestationPurposeV1.MODEL_WORK_ADMISSION}),
+)
 _AUTH_CAPABILITIES = ProviderCapabilities.of(
     Capability.TEXT_GENERATION,
     Capability.USAGE_ACCOUNTING,
@@ -83,6 +112,49 @@ class SecretFailingProvider(FakeProvider):
         raise RuntimeError(_PROVIDER_SECRET_MARKER)
 
 
+class CountingFakeProvider(FakeProvider):
+    def __init__(
+        self,
+        responses: list[ModelResponse],
+        *,
+        model_id: str = "fake-model",
+    ) -> None:
+        super().__init__(responses, model_id=model_id, capabilities=_AUTH_CAPABILITIES)
+        self.calls = 0
+
+    def generate(self, request: ModelRequest) -> ModelResponse:
+        self.calls += 1
+        return super().generate(request)
+
+
+class RejectVerification:
+    def __init__(
+        self,
+        delegate: HmacAttestationVerifierV1,
+        *,
+        reject_call: int,
+    ) -> None:
+        self.delegate = delegate
+        self.reject_call = reject_call
+        self.calls = 0
+
+    def verify(
+        self,
+        attestation: AttestationV1,
+        *,
+        expected_purpose: AttestationPurposeV1,
+        payload: Mapping[str, object],
+    ) -> None:
+        self.calls += 1
+        if self.calls == self.reject_call:
+            raise AttestationError("test authority revoked at transaction boundary")
+        self.delegate.verify(
+            attestation,
+            expected_purpose=expected_purpose,
+            payload=payload,
+        )
+
+
 def _clock_state() -> tuple[dict[str, datetime], Callable[[], datetime]]:
     state = {"now": datetime(2026, 1, 1, tzinfo=UTC)}
 
@@ -97,6 +169,7 @@ def _verifier(clock: Callable[[], datetime]) -> HmacAttestationVerifierV1:
         {
             _BUILDER_KEY.key_id: _BUILDER_KEY,
             _MODEL_KEY.key_id: _MODEL_KEY,
+            _MODEL_WORK_ADMISSION_KEY.key_id: _MODEL_WORK_ADMISSION_KEY,
         },
         clock=clock,
     )
@@ -134,6 +207,7 @@ def _plane_and_service(
         control_plane=plane,
         signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
         verifier=verifier,
+        admission_verifier=verifier,
         clock=clock,
         max_ttl_seconds=max_ttl_seconds,
         provider_failure_threshold=provider_failure_threshold,
@@ -164,6 +238,7 @@ def _restart_service(
         control_plane=_restart_plane(tmp_path, clock),
         signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
         verifier=_verifier(clock),
+        admission_verifier=_verifier(clock),
         clock=clock,
         provider_failure_threshold=provider_failure_threshold,
         provider_failure_cooldown_seconds=provider_failure_cooldown_seconds,
@@ -214,6 +289,130 @@ def _bound_request() -> ModelRequest:
         max_output_tokens=4,
         context_pack_hash=digest_text(HashKindV1.PROMPT, "provider-test-context-pack"),
     )
+
+
+def _model_work(
+    request: ModelRequest,
+    *,
+    overall_decision: PermissionDecisionV1 = PermissionDecisionV1.ALLOW,
+    model_egress: PermissionDecisionV1 = PermissionDecisionV1.ALLOW,
+    allowed_endpoint_classes: tuple[EndpointClassV1, ...] = (EndpointClassV1.APPROVED_EXTERNAL,),
+    private_marker: str = "provider-test",
+) -> ModelWorkBundleV2:
+    assert request.context_pack_hash is not None
+    egress_content = "provider-test-answer-free-egress"
+    egress_content_hash = digest_text(HashKindV1.SOURCE_SPAN, egress_content)
+    source = SourceRecordV1(
+        source_id=stable_identifier(f"{private_marker}-model-work-source", "calibration"),
+        work_id=f"{private_marker}-model-work",
+        title=f"Synthetic calibration {private_marker}",
+        version="1",
+        locator=f"repo://{private_marker}/calibration-pairs.v3.json",
+        content_hash=digest_text(HashKindV1.SOURCE_BYTES, f"{private_marker}-model-work"),
+        spans=(
+            SourceSpanV1(
+                span_id=stable_identifier(f"{private_marker}-model-work-span", "calibration"),
+                locator=f"answer-free-egress:{private_marker}-case",
+                content_hash=egress_content_hash,
+            ),
+        ),
+    )
+    rights = RightsRecordV1(
+        rights_id=stable_identifier(f"{private_marker}-model-work-rights", "calibration"),
+        source_id=source.source_id,
+        source_license=(
+            f"LicenseRef-{private_marker}"
+            if overall_decision is PermissionDecisionV1.ALLOW
+            else None
+        ),
+        overall_decision=overall_decision,
+        model_egress=model_egress,
+        allowed_endpoint_classes=allowed_endpoint_classes,
+        reviewed_by=("test-operator" if overall_decision is PermissionDecisionV1.ALLOW else None),
+        reviewed_at=(
+            datetime(2026, 1, 1, tzinfo=UTC)
+            if overall_decision is PermissionDecisionV1.ALLOW
+            else None
+        ),
+    )
+    run_hash = model_work_run_hash(f"{private_marker}-run")
+    cell_hash = model_work_cell_hash(f"{private_marker}-cell")
+    case_hash = model_work_case_hash(f"{private_marker}-case")
+    cell_contract_hash = model_work_cell_contract_hash("1" * 64)
+    case_contract_hash = model_work_case_contract_hash("2" * 64)
+    return ModelWorkBundleV2(
+        bundle_id=model_work_bundle_id(
+            run_hash=run_hash,
+            cell_hash=cell_hash,
+            case_hash=case_hash,
+            repetition=1,
+            role=ModelWorkRoleV1.PROVER,
+        ),
+        work_contract_id=model_work_contract_id(
+            cell_contract_hash=cell_contract_hash,
+            case_contract_hash=case_contract_hash,
+        ),
+        run_hash=run_hash,
+        cell_hash=cell_hash,
+        case_hash=case_hash,
+        repetition=1,
+        role=ModelWorkRoleV1.PROVER,
+        cell_contract_hash=cell_contract_hash,
+        case_contract_hash=case_contract_hash,
+        work_item_hash=model_work_item_hash("3" * 64),
+        role_environment_hash=digest_text(HashKindV1.ENVIRONMENT, "provider-test-role-env"),
+        egress_content_hash=egress_content_hash,
+        context_pack_hash=request.context_pack_hash,
+        request_hash=request.outbound_request_hash(),
+        source=model_work_source_binding(source),
+        rights=model_work_rights_binding(rights),
+    )
+
+
+def _model_work_admission(
+    work: ModelWorkBundleV2,
+    clock: Callable[[], datetime],
+    *,
+    key: HmacAttestationKeyV1 = _MODEL_WORK_ADMISSION_KEY,
+    purpose: AttestationPurposeV1 = AttestationPurposeV1.MODEL_WORK_ADMISSION,
+    ttl_seconds: float = 3600,
+    nonce: str | None = None,
+) -> AttestationV1:
+    return HmacAttestationSignerV1(key, clock=clock).issue(
+        purpose=purpose,
+        payload=model_work_admission_payload(work),
+        evidence_identity=model_work_admission_evidence_identity(work),
+        ttl_seconds=ttl_seconds,
+        nonce=nonce,
+    )
+
+
+def _replace_model_work_trial_binding(
+    work: ModelWorkBundleV2,
+    *,
+    field: str,
+    replacement: object,
+) -> ModelWorkBundleV2:
+    update = {field: replacement}
+    if field in {"run_hash", "cell_hash", "case_hash", "repetition", "role"}:
+        run_hash = replacement if field == "run_hash" else work.run_hash
+        cell_hash = replacement if field == "cell_hash" else work.cell_hash
+        case_hash = replacement if field == "case_hash" else work.case_hash
+        repetition = replacement if field == "repetition" else work.repetition
+        role = replacement if field == "role" else work.role
+        assert isinstance(run_hash, DigestV1)
+        assert isinstance(cell_hash, DigestV1)
+        assert isinstance(case_hash, DigestV1)
+        assert isinstance(repetition, int)
+        assert isinstance(role, ModelWorkRoleV1)
+        update["bundle_id"] = model_work_bundle_id(
+            run_hash=run_hash,
+            cell_hash=cell_hash,
+            case_hash=case_hash,
+            repetition=repetition,
+            role=role,
+        )
+    return work.model_copy(update=update)
 
 
 def _issue_inputs(plane: ControlPlane, bundle, *, worker_id: str = "provider-test-worker"):
@@ -274,11 +473,13 @@ def _registry(
     *,
     model_id: str = "fake-model",
     probe: CapabilityProbe | None = None,
+    provider: FakeProvider | None = None,
 ) -> ProviderRegistry:
     registry = ProviderRegistry(authorization_gate=service)
     registry.register(
         "fake",
-        provider=FakeProvider(responses, model_id=model_id, capabilities=_AUTH_CAPABILITIES),
+        provider=provider
+        or FakeProvider(responses, model_id=model_id, capabilities=_AUTH_CAPABILITIES),
         probe=probe or StaticCapabilityProbe(_AUTH_CAPABILITIES),
         endpoint_class=EndpointClassV1.LOCAL,
         model_revision="fake-model-v1",
@@ -927,3 +1128,993 @@ def test_forbidden_provider_identifier_cannot_be_approved() -> None:
                 capabilities=ProviderCapabilities.of(Capability.TEXT_GENERATION),
             ).configuration_hash,
         )
+
+
+def test_model_work_uses_the_existing_authorization_wire_and_registry_path(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(request)
+    admission = _model_work_admission(work, clock)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="register-approval")
+    assert (
+        service.register_model_work(
+            work,
+            admission=admission,
+        )
+        == work
+    )
+    assert (
+        service.register_model_work(
+            work,
+            admission=admission,
+        )
+        == work
+    )
+    assert (
+        service.register_model_work(
+            work,
+            admission=admission,
+        )
+        == work
+    )
+    lease = service.claim_model_work(
+        work,
+        ttl_seconds=600,
+    )
+    authorization = service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=300,
+    )
+
+    assert authorization.contract_id == work.work_contract_id
+    assert authorization.contract_hash == work.semantic_hash()
+    assert authorization.bundle_hash == work.handoff_hash()
+    assert _registry(service, [_response()]).generate(authorization, request).text == "by rfl"
+    with plane.events.connection() as connection:
+        stored = connection.execute(
+            """
+            SELECT bundle_hash, admission_attestation_hash, admission_attestation_json
+            FROM model_execution_work_bundles
+            WHERE bundle_id = ?
+            """,
+            (work.bundle_id.value,),
+        ).fetchone()
+    assert stored is not None
+    assert stored["bundle_hash"] == work.handoff_hash().value
+    assert (
+        stored["admission_attestation_hash"]
+        == digest_model(
+            HashKindV1.ATTESTATION,
+            admission,
+        ).value
+    )
+    assert AttestationV1.model_validate_json(stored["admission_attestation_json"]) == admission
+
+
+def test_model_work_registration_fails_closed_without_admission_verifier(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, _service = _plane_and_service(tmp_path, clock)
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        clock=clock,
+    )
+    work = _model_work(_bound_request())
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="trusted admission verifier"):
+        service.register_model_work(
+            work,
+            admission=_model_work_admission(work, clock),
+        )
+
+
+def test_model_work_registration_reverifies_admission_inside_insert_transaction(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, _service = _plane_and_service(tmp_path, clock)
+    admission_verifier = RejectVerification(_verifier(clock), reject_call=2)
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        admission_verifier=admission_verifier,
+        clock=clock,
+    )
+    work = _model_work(_bound_request())
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.register_model_work(
+            work,
+            admission=_model_work_admission(work, clock),
+        )
+
+    assert admission_verifier.calls == 2
+    with plane.events.connection() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM model_execution_work_bundles").fetchone()
+    assert count is not None
+    assert int(count[0]) == 0
+
+
+def test_model_work_issue_reverifies_parent_inside_insert_transaction(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, _service = _plane_and_service(tmp_path, clock)
+    admission_verifier = RejectVerification(_verifier(clock), reject_call=5)
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        admission_verifier=admission_verifier,
+        clock=clock,
+    )
+    work = _model_work(_bound_request())
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="transaction-issue-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.issue_model_work(
+            work,
+            approval_id=approval.approval_id,
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+    assert admission_verifier.calls == 5
+    with plane.events.connection() as connection:
+        count = connection.execute("SELECT COUNT(*) FROM model_execution_authorizations").fetchone()
+    assert count is not None
+    assert int(count[0]) == 0
+
+
+def test_legacy_unsigned_model_work_row_is_not_promoted_during_schema_migration(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    database = tmp_path / "control.db"
+    verifier = _verifier(clock)
+    plane = ControlPlane(
+        events=EventStore(database, clock=clock),
+        leases=LeaseStore(database, clock=clock),
+        artifacts=ArtifactStore(tmp_path / "artifacts"),
+        attestation_verifier=verifier,
+        allow_test_only_unreviewed_bundles=True,
+    )
+    work = _model_work(_bound_request())
+    with plane.events.connection() as connection:
+        connection.execute(
+            """
+            CREATE TABLE model_execution_work_bundles (
+                bundle_id TEXT PRIMARY KEY,
+                bundle_hash TEXT NOT NULL,
+                bundle_json TEXT NOT NULL,
+                registration_request_hash TEXT NOT NULL,
+                registered_at TEXT NOT NULL
+            ) WITHOUT ROWID
+            """
+        )
+        connection.execute(
+            """
+            INSERT INTO model_execution_work_bundles (
+                bundle_id, bundle_hash, bundle_json,
+                registration_request_hash, registered_at
+            ) VALUES (?, ?, ?, ?, ?)
+            """,
+            (
+                work.bundle_id.value,
+                work.handoff_hash().value,
+                work.model_dump_json(),
+                "legacy-unsigned-request",
+                "2026-01-01T00:00:00.000000Z",
+            ),
+        )
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=verifier,
+        admission_verifier=verifier,
+        clock=clock,
+    )
+
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match="bundle or admission is corrupt",
+    ):
+        service.claim_model_work(
+            work,
+            ttl_seconds=600,
+        )
+
+
+def test_formalization_issue_remains_independent_of_model_work_admission_verifier(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, _service = _plane_and_service(tmp_path, clock)
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        clock=clock,
+    )
+    bundle = _signed_bundle(clock)
+    plane.register_bundle(bundle, idempotency_key="register-theorem-without-admission")
+    approval = _approval(clock=clock, model_id="theorem-no-admission")
+    service.register_operator_approval(
+        approval,
+        idempotency_key="register-theorem-no-admission-approval",
+    )
+    lease, request = _issue_inputs(
+        plane,
+        bundle,
+        worker_id="theorem-no-admission-worker",
+    )
+
+    authorization = service.issue(
+        bundle,
+        authorization_id=stable_identifier(
+            "provider-test",
+            "theorem-without-model-work-admission",
+        ),
+        approval_id=approval.approval_id,
+        budget=_budget(),
+        lease=lease,
+        context_pack_hash=request.context_pack_hash,
+        outbound_request_hash=request.outbound_request_hash(),
+        ttl_seconds=300,
+        idempotency_key="issue-theorem-without-model-work-admission",
+    )
+
+    assert authorization.bundle_id == bundle.bundle_id
+    assert authorization.subject_kind is ModelExecutionSubjectKindV1.THEOREM
+    assert authorization.parent_admission_hash is None
+    assert authorization.parent_admission_expires_at is None
+    assert (
+        _registry(
+            service,
+            [_response(model_id="theorem-no-admission")],
+            model_id="theorem-no-admission",
+        )
+        .generate(authorization, request)
+        .text
+        == "by rfl"
+    )
+
+
+def test_model_work_registration_rejects_wrong_purpose_and_execution_key(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    wrong = _model_work_admission(
+        work,
+        clock,
+        key=_MODEL_KEY,
+        purpose=AttestationPurposeV1.MODEL_EXECUTION,
+    )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.register_model_work(
+            work,
+            admission=wrong,
+        )
+
+
+def test_model_work_registration_rejects_untrusted_admission_key(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    untrusted_key = HmacAttestationKeyV1(
+        key_id="provider-test-untrusted-admission-v1",
+        secret=b"provider-test-untrusted-admission-material-0123",
+        allowed_purposes=frozenset({AttestationPurposeV1.MODEL_WORK_ADMISSION}),
+    )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.register_model_work(
+            work,
+            admission=_model_work_admission(work, clock, key=untrusted_key),
+        )
+
+
+def test_model_work_registration_rejects_caller_label_as_admission_nonce(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match="signer-generated 48-digit hex",
+    ):
+        service.register_model_work(
+            work,
+            admission=_model_work_admission(
+                work,
+                clock,
+                nonce="caller-chosen-admission-nonce",
+            ),
+        )
+
+
+def test_model_work_registration_rejects_wrong_payload_and_cross_bundle_reuse(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    other_case_hash = model_work_case_hash("provider-test-case-2")
+    other = work.model_copy(
+        update={
+            "bundle_id": model_work_bundle_id(
+                run_hash=work.run_hash,
+                cell_hash=work.cell_hash,
+                case_hash=other_case_hash,
+                repetition=work.repetition,
+                role=work.role,
+            ),
+            "case_hash": other_case_hash,
+        }
+    )
+    admission = _model_work_admission(work, clock)
+
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match=r"evidence identity|attestation was rejected",
+    ):
+        service.register_model_work(
+            other,
+            admission=admission,
+        )
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match=r"evidence identity|attestation was rejected",
+    ):
+        service.register_model_work(
+            work,
+            admission=_model_work_admission(other, clock),
+        )
+
+
+@pytest.mark.parametrize("clock_offset_seconds", [-120, 120])
+def test_model_work_registration_rejects_expired_or_future_attestation(
+    tmp_path: Path,
+    clock_offset_seconds: int,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+
+    def shifted_clock() -> datetime:
+        return clock() + timedelta(seconds=clock_offset_seconds)
+
+    admission = _model_work_admission(
+        work,
+        shifted_clock,
+        ttl_seconds=60,
+    )
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.register_model_work(
+            work,
+            admission=admission,
+        )
+
+
+def test_model_work_claim_and_issue_revalidate_expiry(tmp_path: Path) -> None:
+    state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="register-expiry-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock, ttl_seconds=60),
+    )
+    lease = service.claim_model_work(
+        work,
+        ttl_seconds=600,
+    )
+    state["now"] += timedelta(seconds=61)
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.claim_model_work(
+            work,
+            ttl_seconds=600,
+        )
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        service.issue_model_work(
+            work,
+            approval_id=approval.approval_id,
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+def test_model_work_claim_revalidates_admission_key_revocation(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(
+        work,
+        ttl_seconds=600,
+    )
+    revoked_key = HmacAttestationKeyV1(
+        key_id=_MODEL_WORK_ADMISSION_KEY.key_id,
+        secret=_MODEL_WORK_ADMISSION_KEY.secret,
+        allowed_purposes=_MODEL_WORK_ADMISSION_KEY.allowed_purposes,
+        revoked=True,
+    )
+    restarted = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        admission_verifier=HmacAttestationVerifierV1(
+            {revoked_key.key_id: revoked_key},
+            clock=clock,
+        ),
+        clock=clock,
+    )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        restarted.claim_model_work(
+            work,
+            ttl_seconds=600,
+        )
+    with pytest.raises(ModelExecutionAuthorizationError, match="attestation was rejected"):
+        restarted.issue_model_work(
+            work,
+            approval_id=stable_identifier(
+                "provider-test",
+                "missing-for-revocation",
+            ),
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+def test_model_work_registration_identity_includes_exact_admission(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    original = _model_work_admission(work, clock, nonce="a" * 48)
+    replacement = _model_work_admission(work, clock, nonce="b" * 48)
+    service.register_model_work(
+        work,
+        admission=original,
+    )
+    assert service.register_model_work(work, admission=original) == work
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="different immutable work"):
+        service.register_model_work(
+            work,
+            admission=replacement,
+        )
+
+
+def test_model_work_preflight_is_read_only_and_checks_existing_exact_admission(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    admission = _model_work_admission(work, clock, nonce="a" * 48)
+    service.register_model_work(work, admission=admission)
+    with plane.events.connection() as connection:
+        before = "\n".join(connection.iterdump())
+
+    service.preflight_model_work_registration(
+        work,
+        admission=admission,
+        required_validity_seconds=300,
+    )
+    with pytest.raises(ModelExecutionAuthorizationError, match="differs from its immutable"):
+        service.preflight_model_work_registration(
+            work,
+            admission=_model_work_admission(work, clock, nonce="b" * 48),
+            required_validity_seconds=300,
+        )
+
+    with plane.events.connection() as connection:
+        after = "\n".join(connection.iterdump())
+    assert after == before
+
+
+def test_model_work_claim_detects_persisted_admission_tamper(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    with plane.events.write_transaction() as connection:
+        connection.execute("DROP TRIGGER model_execution_work_bundles_forbid_update")
+        connection.execute(
+            """
+            UPDATE model_execution_work_bundles
+            SET admission_attestation_hash = ?
+            WHERE bundle_id = ?
+            """,
+            ("0" * 64, work.bundle_id.value),
+        )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="admission hash is corrupt"):
+        service.claim_model_work(
+            work,
+            ttl_seconds=600,
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "replacement"),
+    [
+        ("role", ModelWorkRoleV1.FIDELITY_REVIEWER),
+        ("case_hash", model_work_case_hash("provider-test-replaced-case")),
+        ("work_item_hash", model_work_item_hash("4" * 64)),
+        ("request_hash", digest_text(HashKindV1.PROMPT, "replaced-prompt")),
+    ],
+)
+def test_registered_model_work_rejects_trial_binding_replacement(
+    tmp_path: Path,
+    field: str,
+    replacement: object,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    changed = _replace_model_work_trial_binding(
+        work,
+        field=field,
+        replacement=replacement,
+    )
+
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match=r"registered immutable|not registered",
+    ):
+        service.claim_model_work(
+            changed,
+            ttl_seconds=600,
+        )
+
+
+def test_model_work_issue_rejects_caller_bundle_substitution(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(
+        work,
+        ttl_seconds=600,
+    )
+    substituted = work.model_copy(
+        update={
+            "request_hash": digest_text(
+                HashKindV1.PROMPT,
+                "caller-substituted-request",
+            )
+        }
+    )
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="registered immutable"):
+        service.issue_model_work(
+            substituted,
+            approval_id=stable_identifier(
+                "provider-test",
+                "missing-for-substitution",
+            ),
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+@pytest.mark.parametrize(
+    "overall_decision",
+    [PermissionDecisionV1.DENY, PermissionDecisionV1.UNKNOWN],
+)
+def test_model_work_rights_deny_or_unknown_cannot_issue(
+    tmp_path: Path,
+    overall_decision: PermissionDecisionV1,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(request, overall_decision=overall_decision)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="register-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="source rights"):
+        service.issue_model_work(
+            work,
+            approval_id=approval.approval_id,
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+def test_model_work_requires_registration_and_current_matching_lease(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    work = _model_work(_bound_request())
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="not registered"):
+        service.claim_model_work(work, ttl_seconds=600)
+
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    plane.leases.release(lease)
+    with pytest.raises(ModelExecutionAuthorizationError, match="stale or expired"):
+        service.issue_model_work(
+            work,
+            approval_id=stable_identifier("provider-test", "missing-approval"),
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+@pytest.mark.parametrize(
+    "model_egress",
+    [PermissionDecisionV1.DENY, PermissionDecisionV1.UNKNOWN],
+)
+def test_model_work_endpoint_class_must_be_permitted_by_source_rights(
+    tmp_path: Path,
+    model_egress: PermissionDecisionV1,
+) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(
+        request,
+        model_egress=model_egress,
+        allowed_endpoint_classes=(EndpointClassV1.APPROVED_EXTERNAL,),
+    )
+    approval = _approval(
+        clock=clock,
+        endpoint_class=EndpointClassV1.APPROVED_EXTERNAL,
+    )
+    service.register_operator_approval(approval, idempotency_key="register-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+
+    with pytest.raises(ModelExecutionAuthorizationError, match="source rights"):
+        service.issue_model_work(
+            work,
+            approval_id=approval.approval_id,
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+
+
+def test_model_work_attempt_budget_cannot_be_reused(tmp_path: Path) -> None:
+    _state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(request)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="register-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    authorization = service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=300,
+    )
+
+    assert _registry(service, [_response()]).generate(authorization, request).text == "by rfl"
+    with pytest.raises(PolicyViolation, match="authorization was denied"):
+        _registry(service, [_response()]).generate(authorization, request)
+
+
+@pytest.mark.parametrize(
+    "channel",
+    [
+        "case_id",
+        "source_id_namespace",
+        "span_id_namespace",
+        "source_license_id",
+        "attestation_evidence_identity",
+        "idempotency_key",
+        "cell_contract_hash_encoding",
+    ],
+)
+def test_model_work_admission_public_records_do_not_retain_text_canaries(
+    tmp_path: Path,
+    channel: str,
+) -> None:
+    """Security regression target for every currently direct ModelWork text channel.
+
+    The valid behavior rejects the input or retains only a fixed-form derived opaque value.
+    """
+
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    marker = "model-work-private-canary"
+    work = _model_work(_bound_request())
+    rejected = False
+
+    try:
+        if channel == "case_id":
+            work = work.model_copy(update={"case_id": marker})
+        elif channel == "source_id_namespace":
+            source_id = stable_identifier(marker, "source")
+            work = work.model_copy(
+                update={
+                    "source": work.source.model_copy(update={"source_id": source_id}),
+                    "rights": work.rights.model_copy(update={"source_id": source_id}),
+                }
+            )
+        elif channel == "span_id_namespace":
+            span_id = stable_identifier(marker, "span")
+            span = work.source.spans[0].model_copy(update={"span_id": span_id})
+            work = work.model_copy(
+                update={"source": work.source.model_copy(update={"spans": (span,)})}
+            )
+        elif channel == "source_license_id":
+            work = work.model_copy(
+                update={"rights": work.rights.model_copy(update={"source_license_id": marker})}
+            )
+        elif channel == "idempotency_key":
+            pass
+        elif channel == "cell_contract_hash_encoding":
+            marker = b"model-work-private-canary".hex().ljust(64, "0")
+            work = work.model_copy(update={"cell_contract_hash": marker})
+
+        if channel == "attestation_evidence_identity":
+            admission = HmacAttestationSignerV1(_MODEL_WORK_ADMISSION_KEY, clock=clock).issue(
+                purpose=AttestationPurposeV1.MODEL_WORK_ADMISSION,
+                payload=model_work_admission_payload(work),
+                evidence_identity=marker,
+                ttl_seconds=60,
+            )
+        else:
+            admission = _model_work_admission(work, clock)
+        if channel == "idempotency_key":
+            assert (
+                "idempotency_key" not in inspect.signature(service.register_model_work).parameters
+            )
+            rejected = True
+        else:
+            service.register_model_work(work, admission=admission)
+    except (
+        AttributeError,
+        ModelExecutionAuthorizationError,
+        TypeError,
+        ValueError,
+    ):
+        rejected = True
+
+    with plane.events.connection() as connection:
+        persisted = "\n".join(connection.iterdump())
+    assert rejected or work.bundle_id.value in persisted
+    assert marker not in persisted
+
+
+def test_model_work_normal_projection_does_not_persist_private_planner_text(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    marker = "model-work-normal-path-private-canary"
+    request = _bound_request()
+    work = _model_work(request, private_marker=marker)
+    admission = _model_work_admission(work, clock)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="normal-canary-approval")
+    service.register_model_work(work, admission=admission)
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=300,
+    )
+
+    with plane.events.connection() as connection:
+        persisted = "\n".join(connection.iterdump())
+    assert marker not in persisted
+
+
+def test_model_work_execution_capability_expires_with_its_parent_admission(
+    tmp_path: Path,
+) -> None:
+    """A short admission cannot mint a longer provider-I/O capability."""
+
+    state, clock = _clock_state()
+    _plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(request)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(
+        approval,
+        idempotency_key="register-parent-expiry-approval",
+    )
+    admission = _model_work_admission(work, clock, ttl_seconds=1)
+    service.register_model_work(work, admission=admission)
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    with pytest.raises(
+        ModelExecutionAuthorizationError,
+        match="TTL exceeds its parent admission",
+    ):
+        service.issue_model_work(
+            work,
+            approval_id=approval.approval_id,
+            budget=_budget(attempts=1),
+            lease=lease,
+            ttl_seconds=300,
+        )
+    authorization = service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=1,
+    )
+    assert authorization.subject_kind is ModelExecutionSubjectKindV1.MODEL_WORK
+    assert authorization.parent_admission_hash == digest_model(HashKindV1.ATTESTATION, admission)
+    assert authorization.parent_admission_expires_at == admission.expires_at
+    assert authorization.expires_at == admission.expires_at
+    state["now"] += timedelta(seconds=2)
+
+    provider = CountingFakeProvider([_response()])
+    probe = CountingProbe(_AUTH_CAPABILITIES)
+    with pytest.raises(PolicyViolation, match="authorization was denied"):
+        _registry(service, [], provider=provider, probe=probe).generate(authorization, request)
+    assert probe.calls == 0
+    assert provider.calls == 0
+
+
+def test_model_work_execution_capability_rechecks_parent_admission_revocation(
+    tmp_path: Path,
+) -> None:
+    """A revoked admission authority must stop an already-issued ModelWork capability."""
+
+    _state, clock = _clock_state()
+    plane, service = _plane_and_service(tmp_path, clock)
+    request = _bound_request()
+    work = _model_work(request)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(
+        approval,
+        idempotency_key="register-parent-revocation-approval",
+    )
+    service.register_model_work(work, admission=_model_work_admission(work, clock))
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    authorization = service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=300,
+    )
+    revoked_admission_key = HmacAttestationKeyV1(
+        key_id=_MODEL_WORK_ADMISSION_KEY.key_id,
+        secret=_MODEL_WORK_ADMISSION_KEY.secret,
+        allowed_purposes=_MODEL_WORK_ADMISSION_KEY.allowed_purposes,
+        revoked=True,
+    )
+    restarted = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        admission_verifier=HmacAttestationVerifierV1(
+            {revoked_admission_key.key_id: revoked_admission_key},
+            clock=clock,
+        ),
+        clock=clock,
+    )
+
+    provider = CountingFakeProvider([_response()])
+    probe = CountingProbe(_AUTH_CAPABILITIES)
+    with pytest.raises(PolicyViolation, match="authorization was denied"):
+        _registry(restarted, [], provider=provider, probe=probe).generate(
+            authorization,
+            request,
+        )
+    assert probe.calls == 0
+    assert provider.calls == 0
+
+
+def test_model_work_reserve_reverifies_parent_inside_budget_transaction(
+    tmp_path: Path,
+) -> None:
+    _state, clock = _clock_state()
+    plane, _service = _plane_and_service(tmp_path, clock)
+    admission_verifier = RejectVerification(_verifier(clock), reject_call=7)
+    service = ModelExecutionAuthorizationService(
+        control_plane=plane,
+        signer=HmacAttestationSignerV1(_MODEL_KEY, clock=clock),
+        verifier=_verifier(clock),
+        admission_verifier=admission_verifier,
+        clock=clock,
+    )
+    request = _bound_request()
+    work = _model_work(request)
+    approval = _approval(clock=clock)
+    service.register_operator_approval(approval, idempotency_key="transaction-reserve-approval")
+    service.register_model_work(
+        work,
+        admission=_model_work_admission(work, clock),
+    )
+    lease = service.claim_model_work(work, ttl_seconds=600)
+    authorization = service.issue_model_work(
+        work,
+        approval_id=approval.approval_id,
+        budget=_budget(attempts=1),
+        lease=lease,
+        ttl_seconds=300,
+    )
+    provider = CountingFakeProvider([_response()])
+    probe = CountingProbe(_AUTH_CAPABILITIES)
+
+    with pytest.raises(PolicyViolation, match="authorization was denied"):
+        _registry(service, [], provider=provider, probe=probe).generate(
+            authorization,
+            request,
+        )
+
+    assert admission_verifier.calls == 7
+    assert probe.calls == 0
+    assert provider.calls == 0
+    with plane.events.connection() as connection:
+        count = connection.execute(
+            """
+            SELECT COUNT(*)
+            FROM model_execution_authorization_ledger
+            WHERE event_type = 'reserved'
+            """
+        ).fetchone()
+    assert count is not None
+    assert int(count[0]) == 0

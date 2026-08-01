@@ -21,17 +21,23 @@ from autolean_builder.fine_span_attachment import (
     FineSpanAttachmentError,
     load_fine_source_span_attachment,
 )
+from autolean_builder.pilot_harness import (
+    PilotBoundaryDispositionV2,
+    load_pilot_boundary_decision,
+)
 from autolean_builder.reference_cache import (
     ReferenceCache,
     ReferenceCacheError,
     ReferenceManifestV1,
 )
+from autolean_contracts import canonical_json_bytes
 
 ROOT = Path(__file__).resolve().parents[1]
 OUTPUT_ROOT = ROOT / "tmp" / "pdfs" / "model-theory-t3-review"
 PACKET_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/human-review/packet.v1.json")
 DECISION_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/decision.v2.json")
 FINE_SPANS_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/fine-source-spans.v2.json")
+RULE_MATRIX_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/source-rule-matrix.v2.json")
 PENDING_REVIEW_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/pending-review.md")
 MANIFEST_RELATIVE_PATH = Path("Builder/references/manifest.v2.json")
 IMPLEMENTATION_RELATIVE_PATH = Path("Library/AutoLeanLibrary/Fixtures/ModelTheory/UniversalLK.lean")
@@ -39,8 +45,129 @@ T4_ATTACHMENT_RELATIVE_PATH = Path(
     "Builder/pilots/model-theory-admission/t4-exact-image-attachment.v1.json"
 )
 T4_QUERY_RELATIVE_PATH = Path("Builder/pilots/model-theory-admission/t4-declaration-query.v1.json")
+REVIEW_EVIDENCE_RELATIVE_PATH = Path(
+    "Builder/pilots/model-theory-admission/review-evidence.v2.json"
+)
+RESPONSE_RELATIVE_PATH = Path(
+    "Builder/pilots/model-theory-admission/human-review/response.template.v1.json"
+)
 PACKET_SCHEMA = "autolean.model-theory-t3-human-review-packet.v1"
 VIEW_SCHEMA = "autolean.model-theory-t3-review-view-manifest.v1"
+_ADVISORY_AUTHORITY_KEYS = frozenset(
+    {
+        "human_identity_authenticated",
+        "expert_qualification_authenticated",
+        "independence_authenticated",
+        "builder_admission_authority_present",
+        "may_change_boundary_decision",
+        "may_issue_admission_receipt",
+        "may_freeze_statement",
+        "may_handoff_to_prover",
+        "may_promote",
+        "may_claim_open_problem_progress",
+    }
+)
+_EVIDENCE_AUTHORITY_KEYS = frozenset(
+    {
+        "human_review_present",
+        "expert_review_present",
+        "authenticated_independence_present",
+        "operator_admission_authority_present",
+        "may_issue_admission_receipt",
+    }
+)
+_REVIEW_EVIDENCE_SCHEMA_KEYS = frozenset(
+    {
+        "schema_version",
+        "artifact_kind",
+        "candidate_id",
+        "candidate_revision",
+        "public_source_rule_matrix_path",
+        "public_source_rule_matrix_sha256",
+        "report_context_policy",
+        "reports",
+        "authority_boundary",
+        "contains_source_excerpt",
+        "contains_local_cache_path",
+        "contains_prompt_or_raw_log",
+    }
+)
+_REVIEW_REPORT_SCHEMA_KEYS = frozenset(
+    {
+        "role",
+        "reviewer_id",
+        "reviewer_kind",
+        "independence_group",
+        "context_pack",
+        "output",
+        "execution_run_receipt",
+        "review_state",
+        "claims_human_or_expert_authority",
+    }
+)
+_RESPONSE_SCHEMA_KEYS = frozenset(
+    {
+        "schema_version",
+        "artifact_kind",
+        "submission_state",
+        "review_effect",
+        "packet_binding",
+        "reviewer_record",
+        "span_reviews",
+        "page_ambiguity_reviews",
+        "fragment_naming_review",
+        "fin_n_freshness_review",
+        "init_axiom_policy_review",
+        "overall_review",
+        "public_safety_confirmation",
+        "authority_boundary",
+    }
+)
+_EVIDENCE_CONTEXT_POLICY = (
+    "Each report retains the public matrix digest it actually reviewed; "
+    "a historical report digest may differ from the current public projection."
+)
+_REVIEWER_RECORD_TEMPLATE: dict[str, object] = {
+    "reviewer_id": None,
+    "reviewed_at": None,
+    "qualification_note": None,
+    "identity_authenticated": False,
+    "qualification_authenticated": False,
+    "independence_authenticated": False,
+}
+_FRAGMENT_NAMING_TEMPLATE: dict[str, object] = {
+    "fragment_scope_verdict": "pending",
+    "proposed_exact_name": None,
+    "accepted_scope_exclusions": [],
+    "notes": None,
+    "review_effect": "advisory_only",
+}
+_FIN_FRESHNESS_TEMPLATE: dict[str, object] = {
+    "fin_n_representation_verdict": "pending",
+    "freshness_encoding_verdict": "pending",
+    "notes": None,
+    "review_effect": "advisory_only",
+}
+_INIT_AXIOM_POLICY_TEMPLATE: dict[str, object] = {
+    "init_import_policy_verdict": "pending",
+    "axiom_policy_verdict": "pending",
+    "accepted_axioms": [],
+    "notes": None,
+    "review_effect": "advisory_only",
+}
+_OVERALL_REVIEW_TEMPLATE: dict[str, object] = {
+    "overall_recommendation": "pending",
+    "rationale": None,
+    "remaining_blockers": [],
+    "review_effect": "advisory_only",
+    "cannot_issue_admission": True,
+}
+_PUBLIC_SAFETY_TEMPLATE: dict[str, object] = {
+    "contains_textbook_excerpt": False,
+    "contains_local_cache_path": False,
+    "contains_prompt_or_raw_model_output": False,
+    "contains_credentials": False,
+}
 RENDER_DPI = 144
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REPARSE_POINT = getattr(stat, "FILE_ATTRIBUTE_REPARSE_POINT", 0x400)
@@ -288,6 +415,188 @@ def load_review_plan(repo_root: Path = ROOT) -> ReviewPlan:
         page_count=page_count,
         page_claims=claims,
     )
+
+
+def _agent_review_bindings(evidence: dict[str, object]) -> dict[str, tuple[object, ...]]:
+    bindings: dict[str, tuple[object, ...]] = {}
+    for item in _array(evidence.get("reports"), "review reports"):
+        report = _object(item, "review report")
+        if frozenset(report) != _REVIEW_REPORT_SCHEMA_KEYS:
+            raise ReviewBuildError("review evidence report schema drifted")
+        role = _string(report.get("role"), "review role")
+        if role in bindings:
+            raise ReviewBuildError("review evidence contains a duplicate role")
+        output = _object(report.get("output"), "review output")
+        bindings[role] = (
+            report.get("reviewer_id"),
+            report.get("reviewer_kind"),
+            report.get("independence_group"),
+            report.get("review_state"),
+            _sha256(canonical_json_bytes(_object(report.get("context_pack"), "context pack"))),
+            _sha256(canonical_json_bytes(output)),
+            _sha256(
+                canonical_json_bytes(_object(report.get("execution_run_receipt"), "run receipt"))
+            ),
+            report.get("claims_human_or_expert_authority"),
+            output.get("claims_human_or_expert_authority"),
+        )
+    return bindings
+
+
+def _pending_span_review(span_id: str) -> dict[str, object]:
+    return {
+        "span_id": span_id,
+        "visual_locator_verdict": "pending",
+        "semantic_fidelity_verdict": "pending",
+        "locator_correction": {
+            "corrected_start_offset": None,
+            "corrected_end_offset": None,
+            "corrected_raw_sha256": None,
+            "pdf_page_1_based": None,
+            "pdf_page_0_based": None,
+            "printed_page_label": None,
+            "page_render_sha256": None,
+        },
+        "notes": None,
+        "review_effect": "advisory_only",
+    }
+
+
+def _pending_ambiguity_review(ambiguity_id: str) -> dict[str, object]:
+    empty_page_evidence = {
+        "pdf_page_1_based": None,
+        "pdf_page_0_based": None,
+        "printed_page_label": None,
+        "page_render_sha256": None,
+    }
+    return {
+        "ambiguity_id": ambiguity_id,
+        "page_ambiguity_verdict": "pending",
+        "review_view_manifest_sha256": None,
+        "page_evidence": [empty_page_evidence.copy(), empty_page_evidence.copy()],
+        "notes": None,
+        "review_effect": "advisory_only",
+    }
+
+
+def verify_local_review_gate(cache_root: Path, *, repo_root: Path = ROOT) -> tuple[str, ...]:
+    """Replay the operator packet while preserving its explicit non-admission boundary."""
+
+    plan = load_review_plan(repo_root)
+    try:
+        plan.fine_spans.assert_binds_rule_matrix(repo_root / RULE_MATRIX_RELATIVE_PATH)
+    except FineSpanAttachmentError as error:
+        raise ReviewBuildError(
+            "fine source spans do not bind the fixed source-rule matrix"
+        ) from error
+    decision = load_pilot_boundary_decision(repo_root / DECISION_RELATIVE_PATH)
+    evidence, _ = _load_object(repo_root / REVIEW_EVIDENCE_RELATIVE_PATH, "review evidence")
+    response, _ = _load_object(repo_root / RESPONSE_RELATIVE_PATH, "response template")
+    decision_binding = _object(plan.packet.get("decision_binding"), "decision binding")
+    response_binding = _object(response.get("packet_binding"), "response binding")
+    packet_overall = _object(plan.packet.get("overall_review"), "packet overall review")
+    response_overall = _object(response.get("overall_review"), "response overall review")
+    reviewer_record = _object(response.get("reviewer_record"), "response reviewer record")
+    fragment_naming = _object(response.get("fragment_naming_review"), "fragment naming review")
+    fin_freshness = _object(response.get("fin_n_freshness_review"), "Fin freshness review")
+    init_axiom_policy = _object(
+        response.get("init_axiom_policy_review"), "Init axiom policy review"
+    )
+    public_safety = _object(
+        response.get("public_safety_confirmation"), "public safety confirmation"
+    )
+    ambiguity_ids = tuple(item.ambiguity_id for item in plan.fine_spans.locator_ambiguities)
+    response_ambiguities = tuple(
+        _object(item, "response ambiguity")
+        for item in _array(response.get("page_ambiguity_reviews"), "response ambiguities")
+    )
+    response_spans = tuple(
+        _object(item, "response span")
+        for item in _array(response.get("span_reviews"), "response spans")
+    )
+    expected_reviews = {
+        review.role.value: (
+            review.reviewer_id,
+            review.reviewer_kind,
+            review.independence_group,
+            review.review_state.value,
+            review.context_pack_sha256,
+            review.output_sha256,
+            review.execution_run_receipt_sha256,
+            False,
+            False,
+        )
+        for review in decision.agent_reviews
+    }
+    authorities = (
+        (
+            _object(plan.packet.get("authority_boundary"), "packet authority"),
+            _ADVISORY_AUTHORITY_KEYS,
+        ),
+        (
+            _object(evidence.get("authority_boundary"), "evidence authority"),
+            _EVIDENCE_AUTHORITY_KEYS,
+        ),
+        (
+            _object(response.get("authority_boundary"), "response authority"),
+            _ADVISORY_AUTHORITY_KEYS,
+        ),
+    )
+    authority_absent = all(
+        frozenset(authority) == expected and all(value is False for value in authority.values())
+        for authority, expected in authorities
+    )
+    if (
+        decision.disposition is not PilotBoundaryDispositionV2.GAP
+        or not decision.blocker_ids
+        or decision_binding.get("canonical_sha256") != decision.canonical_sha256()
+        or decision_binding.get("candidate_id") != decision.candidate.candidate_id
+        or decision_binding.get("candidate_revision") != decision.candidate.revision
+        or decision_binding.get("disposition") != "gap"
+        or decision_binding.get("selection") != "not_selected"
+        or decision_binding.get("statement_contract") != "not_frozen"
+        or frozenset(evidence) != _REVIEW_EVIDENCE_SCHEMA_KEYS
+        or evidence.get("schema_version") != "autolean.pilot-automated-review-evidence.v2"
+        or evidence.get("artifact_kind") != "public_safe_t3_automated_review_evidence"
+        or evidence.get("candidate_id") != decision.candidate.candidate_id
+        or evidence.get("candidate_revision") != decision.candidate.revision
+        or evidence.get("public_source_rule_matrix_path") != RULE_MATRIX_RELATIVE_PATH.as_posix()
+        or evidence.get("public_source_rule_matrix_sha256")
+        != plan.fine_spans.rule_matrix_binding.matrix_sha256
+        or evidence.get("report_context_policy") != _EVIDENCE_CONTEXT_POLICY
+        or evidence.get("contains_source_excerpt") is not False
+        or evidence.get("contains_local_cache_path") is not False
+        or evidence.get("contains_prompt_or_raw_log") is not False
+        or _agent_review_bindings(evidence) != expected_reviews
+        or frozenset(response) != _RESPONSE_SCHEMA_KEYS
+        or response.get("schema_version") != "autolean.model-theory-t3-human-review-response.v1"
+        or response.get("submission_state") != "unfilled_template"
+        or response.get("artifact_kind") != "unfilled_advisory_review_response"
+        or response.get("review_effect") != "advisory_only"
+        or response_binding.get("packet_id") != plan.packet.get("packet_id")
+        or response_binding.get("packet_path") != PACKET_RELATIVE_PATH.as_posix()
+        or response_binding.get("packet_sha256") != plan.packet_sha256
+        or packet_overall.get("cannot_issue_admission") is not True
+        or reviewer_record != _REVIEWER_RECORD_TEMPLATE
+        or fragment_naming != _FRAGMENT_NAMING_TEMPLATE
+        or fin_freshness != _FIN_FRESHNESS_TEMPLATE
+        or init_axiom_policy != _INIT_AXIOM_POLICY_TEMPLATE
+        or response_overall != _OVERALL_REVIEW_TEMPLATE
+        or public_safety != _PUBLIC_SAFETY_TEMPLATE
+        or not authority_absent
+        or response_ambiguities
+        != tuple(_pending_ambiguity_review(ambiguity_id) for ambiguity_id in ambiguity_ids)
+        or response_spans
+        != tuple(_pending_span_review(span.span_id) for span in plan.fine_spans.spans)
+    ):
+        raise ReviewBuildError(
+            "local review gate requires unresolved, non-authoritative T3 evidence"
+        )
+    if any((repo_root / DECISION_RELATIVE_PATH.parent).glob("admission-receipt*.json")):
+        raise ReviewBuildError("local review gate cannot coexist with an admission receipt")
+    _, text = verify_materials(plan, cache_root)
+    map_spans_to_pages(text, plan.fine_spans.spans)
+    return ambiguity_ids
 
 
 def _verify_material_bytes(
@@ -753,7 +1062,7 @@ def build_review_view(
 
 def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__, allow_abbrev=False)
-    parser.add_argument("action", choices=("build",))
+    parser.add_argument("action", choices=("build", "check"))
     parser.add_argument("--cache-root", required=True, type=Path)
     parser.add_argument("--pdftoppm", default="pdftoppm")
     return parser.parse_args(argv)
@@ -762,7 +1071,17 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
 def main(argv: list[str] | None = None) -> None:
     try:
         arguments = parse_args(argv)
-        result = build_review_view(arguments.cache_root, arguments.pdftoppm)
+        result: dict[str, object]
+        if arguments.action == "check":
+            ambiguity_ids = verify_local_review_gate(arguments.cache_root)
+            result = {
+                "admission": "forbidden",
+                "disposition": "gap",
+                "status": "ok",
+                "unresolved_ambiguity_ids": ambiguity_ids,
+            }
+        else:
+            result = build_review_view(arguments.cache_root, arguments.pdftoppm)
     except ReviewBuildError as error:
         raise SystemExit(f"model-theory-review: {error}") from error
     print(json.dumps(result, ensure_ascii=True, separators=(",", ":"), sort_keys=True))

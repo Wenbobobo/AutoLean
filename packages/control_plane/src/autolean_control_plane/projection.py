@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hashlib
 import json
 import os
 import tempfile
@@ -13,8 +14,30 @@ from typing import cast
 
 from .errors import ProjectionError
 from .events import JsonObject, JsonValue, StoredEvent, canonical_json
+from .research_advisory import (
+    RESEARCH_ADVISORY_ENTITY_TYPE,
+    RESEARCH_ADVISORY_EVENT_TYPES,
+    validate_research_advisory_event,
+)
 
 _EXACT_TRANSITIVE_LEVERAGE_NODE_LIMIT = 512
+_T7_SYNTHETIC_EVENT_SCHEMA = "autolean.t7-synthetic-node-result.v2"
+_T7_SYNTHETIC_ENTITY_TYPE = "t7_synthetic_node_v2"
+_T7_SYNTHETIC_EVIDENCE_CLASS = "synthetic_fake_node_v1"
+_T7_PUBLIC_NODE_REF_DOMAIN = b"autolean.dashboard.t7-public-node-ref.v1\x00"
+_T7_SYNTHETIC_EVENT_OUTCOMES = {
+    "t7_synthetic_node_v2.synthetic_complete": "synthetic_complete",
+    "t7_synthetic_node_v2.synthetic_failed": "synthetic_failed",
+    "t7_synthetic_node_v2.synthetic_reused": "synthetic_reused",
+}
+_FATE_EVENT_SCHEMAS = frozenset(
+    {
+        "autolean.fate-execution.v1",
+        "autolean.fate-execution.v2",
+    }
+)
+_FATE_STARTED_EVENT = "fate.attempt.started"
+_FATE_VERIFIED_EVENT = "fate.attempt.verified"
 
 
 @dataclass(frozen=True, slots=True)
@@ -40,6 +63,15 @@ class _PhaseFeedbackState:
     milestones: list[JsonObject] = field(default_factory=list)
 
 
+@dataclass(slots=True)
+class _FateReplayState:
+    """Ephemeral replay binding for a public FATE attempt stream."""
+
+    identity: tuple[str, str, str, int, str | None]
+    started_at: str
+    terminal_seen: bool = False
+
+
 class DashboardProjection:
     """A deliberately lossy projection: it never exposes proof/source artifact contents."""
 
@@ -53,8 +85,14 @@ class DashboardProjection:
         event_views: list[JsonObject] = []
         active_bundles: set[str] = set()
         blocked_bundles: set[str] = set()
+        fate_replays: dict[str, _FateReplayState] = {}
 
         for event in self._events:
+            if (
+                event.entity_type == RESEARCH_ADVISORY_ENTITY_TYPE
+                and event.event_type not in RESEARCH_ADVISORY_EVENT_TYPES
+            ):
+                raise ProjectionError("research advisory stream contains an unknown event type")
             payload = event.payload
             bundle_id = self._event_task_id(event)
             if event.event_type == "task.registered":
@@ -67,11 +105,30 @@ class DashboardProjection:
                         if node is not None:
                             nodes[cast(str, node["id"])] = node
                 self._capture_artifact(payload, "bundle_artifact", artifacts)
+            elif event.event_type in _T7_SYNTHETIC_EVENT_OUTCOMES:
+                node = self._t7_synthetic_node(event, bundle_id)
+                nodes[cast(str, node["id"])] = node
+            elif event.event_type in {_FATE_STARTED_EVENT, _FATE_VERIFIED_EVENT}:
+                fate_run = self._fate_run(event, bundle_id, fate_replays)
+                fate_run_id = cast(str, fate_run["id"])
+                existing = runs.get(fate_run_id)
+                if event.event_type == _FATE_STARTED_EVENT:
+                    if existing is not None:
+                        raise ProjectionError("FATE run identity collides with an existing run")
+                elif existing is None or existing.get("provider") != "fate-execution":
+                    raise ProjectionError("FATE terminal run identity lost its started event")
+                runs[fate_run_id] = fate_run
+            elif event.event_type in RESEARCH_ADVISORY_EVENT_TYPES:
+                # Advisory records deliberately create neither graph nodes nor runs.  Validation
+                # here prevents a tainted record from gaining a harmless-looking timeline entry.
+                validate_research_advisory_event(event)
             elif event.event_type == "task.claimed" and bundle_id:
                 active_bundles.add(bundle_id)
                 self._set_task_status(nodes, bundle_id, "running")
             elif event.event_type == "proof.submitted":
                 proof_id = self._optional_text(payload, "proof_id") or event.entity_id
+                if proof_id in runs:
+                    raise ProjectionError("proof run identity collides with an existing run")
                 runs[proof_id] = self._run_from_submission(payload, proof_id)
                 self._capture_artifact(payload, "proof_artifact", artifacts)
             elif event.event_type == "gap.reported" and bundle_id:
@@ -88,6 +145,10 @@ class DashboardProjection:
                 verified_proof_id = self._optional_text(payload, "proof_id")
                 accepted = self._verification_accepted(event)
                 if verified_proof_id and verified_proof_id in runs:
+                    if runs[verified_proof_id].get("provider") == "fate-execution":
+                        raise ProjectionError(
+                            "generic verification cannot target a FATE benchmark run"
+                        )
                     runs[verified_proof_id]["status"] = "succeeded" if accepted else "failed"
                     runs[verified_proof_id]["verification"] = "accepted" if accepted else "rejected"
                 if bundle_id:
@@ -526,9 +587,11 @@ class DashboardProjection:
     @staticmethod
     def _set_task_status(nodes: dict[str, JsonObject], bundle_id: str, status: str) -> None:
         # Bundle IDs are not graph IDs. The event only affects nodes tied to that task's revision;
-        # node state stays conservative when the graph had no nodes.
+        # node state stays conservative when the graph had no nodes. Synthetic fixture nodes have
+        # their own closed status protocol and must never be promoted or failed by task/proof
+        # events that happen to share a public bundle ID.
         for node in nodes.values():
-            if node.get("bundle_id") == bundle_id:
+            if node.get("bundle_id") == bundle_id and node.get("kind") != "synthetic_execution":
                 node["status"] = status
 
     @staticmethod
@@ -562,13 +625,8 @@ class DashboardProjection:
         ):
             return None
 
-        def public_id(identifier: str) -> str:
-            # StableIdentifierV1 values cannot contain "|", so this tuple encoding is
-            # unambiguous while remaining inspectable and stable across event replays.
-            return f"dashboard-node|{bundle_id}|{graph}|{identifier}"
-
         dependencies: list[JsonValue] = [
-            public_id(identifier)
+            DashboardProjection._public_node_id(bundle_id, graph, identifier)
             for identifier in DashboardProjection._optional_list(raw_node, "dependencies")
             if isinstance(identifier, str) and identifier
         ]
@@ -578,7 +636,7 @@ class DashboardProjection:
                 "bundle_id": bundle_id,
                 "dependencies": dependencies,
                 "graph": graph,
-                "id": public_id(source_node_id),
+                "id": DashboardProjection._public_node_id(bundle_id, graph, source_node_id),
                 "kind": kind,
                 "label": label,
                 "revision": revision,
@@ -590,6 +648,183 @@ class DashboardProjection:
                 "updated_at": DashboardProjection._optional_text(raw_node, "updated_at"),
             }
         )
+
+    @staticmethod
+    def _public_node_id(bundle_id: str, graph: str, source_node_id: str) -> str:
+        """Build the one public graph-node identity used by every projection path."""
+
+        # StableIdentifierV1 values cannot contain "|", so this tuple encoding is
+        # unambiguous while remaining inspectable and stable across event replays.
+        return f"dashboard-node|{bundle_id}|{graph}|{source_node_id}"
+
+    @staticmethod
+    def _t7_synthetic_node(event: StoredEvent, bundle_id: str | None) -> JsonObject:
+        """Project T7 fixture results as explicitly non-promotable execution nodes.
+
+        This is intentionally an allowlist rather than a generic event-to-node adapter.  In
+        particular, it omits the lease holder, fencing token, artifact references, source module,
+        and every future event field.  A completed synthetic fixture is not a kernel-verified
+        proof, so it stays an attention state in the UI rather than becoming ``verified``.
+        """
+
+        payload = event.payload
+        outcome = _T7_SYNTHETIC_EVENT_OUTCOMES[event.event_type]
+        node_id = DashboardProjection._optional_text(payload, "node_id")
+        event_bundle_id = DashboardProjection._optional_text(payload, "bundle_id")
+        valid_identity = (
+            event.entity_type == _T7_SYNTHETIC_ENTITY_TYPE
+            and event.entity_sequence == 1
+            and event.metadata == {}
+            and bundle_id is not None
+            and event_bundle_id == bundle_id
+            and isinstance(node_id, str)
+            and len(node_id) <= 240
+            and payload.get("schema_version") == _T7_SYNTHETIC_EVENT_SCHEMA
+            and payload.get("typed_outcome") == outcome
+            and payload.get("evidence_class") == _T7_SYNTHETIC_EVIDENCE_CLASS
+            and payload.get("promotion_eligible") is False
+        )
+        if not valid_identity or bundle_id is None or node_id is None:
+            raise ProjectionError("T7 synthetic event cannot be safely projected")
+
+        public_ref = DashboardProjection._t7_public_node_ref(bundle_id, node_id)
+        source_node_id = f"t7-public:{public_ref}"
+        status = {
+            "synthetic_complete": "synthetic_complete",
+            "synthetic_failed": "synthetic_failed",
+            "synthetic_reused": "synthetic_reused",
+        }[outcome]
+        return DashboardProjection._json_object(
+            {
+                "bundle_id": bundle_id,
+                "dependencies": [],
+                "graph": "execution",
+                "id": DashboardProjection._public_node_id(bundle_id, "execution", source_node_id),
+                "kind": "synthetic_execution",
+                "label": f"T7 synthetic node {public_ref[:12]}",
+                "revision": 1,
+                "source_node_id": source_node_id,
+                "status": status,
+                "task_id": bundle_id,
+                "updated_at": event.recorded_at,
+            }
+        )
+
+    @staticmethod
+    def _t7_public_node_ref(bundle_id: str, node_id: str) -> str:
+        material = canonical_json({"bundle_id": bundle_id, "node_id": node_id}).encode("utf-8")
+        return hashlib.sha256(_T7_PUBLIC_NODE_REF_DOMAIN + material).hexdigest()
+
+    @staticmethod
+    def _fate_run(
+        event: StoredEvent,
+        bundle_id: str | None,
+        replay_states: dict[str, _FateReplayState],
+    ) -> JsonObject:
+        """Replay and project only the redacted FATE envelope, never private artifacts."""
+
+        payload = event.payload
+        event_bundle_id = DashboardProjection._optional_text(payload, "bundle_id")
+        run_id = DashboardProjection._optional_text(payload, "run_id")
+        problem_id = DashboardProjection._optional_text(payload, "problem_id")
+        attempt_number = DashboardProjection._optional_int(payload, "attempt_number")
+        raw_attempt_seed = payload.get("attempt_seed")
+        attempt_seed = (
+            raw_attempt_seed if isinstance(raw_attempt_seed, str) and raw_attempt_seed else None
+        )
+        schema_version = payload.get("schema_version")
+        valid_v2_seed = (
+            isinstance(attempt_seed, str)
+            and len(attempt_seed) == 64
+            and all(character in "0123456789abcdef" for character in attempt_seed)
+        )
+        if (
+            event.entity_type != "fate-attempt"
+            or event.entity_id != bundle_id
+            or event.entity_sequence != (1 if event.event_type == _FATE_STARTED_EVENT else 2)
+            or bundle_id is None
+            or event_bundle_id != bundle_id
+            or not run_id
+            or not problem_id
+            or attempt_number is None
+            or attempt_number < 1
+            or (raw_attempt_seed is not None and attempt_seed is None)
+            or schema_version not in _FATE_EVENT_SCHEMAS
+            or (schema_version == "autolean.fate-execution.v2" and not valid_v2_seed)
+        ):
+            raise ProjectionError("FATE event cannot be safely projected")
+
+        identity = (cast(str, schema_version), run_id, problem_id, attempt_number, attempt_seed)
+        public_id = f"fate:{bundle_id}"
+        if len(public_id) > 256:
+            raise ProjectionError("FATE public attempt identity is too long")
+        base: JsonObject = {
+            "id": public_id,
+            "task_id": bundle_id,
+            # The FATE event never needs to disclose an endpoint or a provider configuration.
+            "provider": "fate-execution",
+            "model": "redacted-by-public-sidecar",
+            "started_at": event.recorded_at,
+            "duration_ms": None,
+            "input_tokens": 0,
+            "output_tokens": 0,
+            "cost_usd": 0.0,
+            "status": "benchmark_running",
+            "verification": "benchmark_pending",
+        }
+
+        if event.event_type == _FATE_STARTED_EVENT:
+            if payload.get("raw_output_persisted") is not False:
+                raise ProjectionError("FATE start event has an invalid public-output boundary")
+            if event.entity_id in replay_states:
+                raise ProjectionError("duplicate FATE started event in replay")
+            replay_states[event.entity_id] = _FateReplayState(
+                identity=identity,
+                started_at=event.recorded_at,
+            )
+            return DashboardProjection._json_object(base)
+
+        replay_state = replay_states.get(event.entity_id)
+        if replay_state is None:
+            raise ProjectionError("FATE terminal event has no matching started event")
+        if replay_state.identity != identity:
+            raise ProjectionError("FATE terminal event identity differs from its started event")
+        if replay_state.terminal_seen:
+            raise ProjectionError("duplicate FATE terminal event in replay")
+
+        required_false_flags = (
+            "contains_raw_output",
+            "contains_candidate_source",
+            "contains_private_digests",
+        )
+        accepted = payload.get("accepted")
+        elapsed_ms = DashboardProjection._optional_int(payload, "elapsed_ms")
+        input_tokens = DashboardProjection._optional_int(payload, "input_tokens")
+        output_tokens = DashboardProjection._optional_int(payload, "output_tokens")
+        cost_microusd = DashboardProjection._optional_int(payload, "cost_microusd")
+        if (
+            not isinstance(accepted, bool)
+            or elapsed_ms is None
+            or input_tokens is None
+            or output_tokens is None
+            or cost_microusd is None
+            or any(payload.get(flag) is not False for flag in required_false_flags)
+            or payload.get("private_artifacts_persisted") is not True
+        ):
+            raise ProjectionError("FATE terminal event has an invalid public-output boundary")
+        replay_state.terminal_seen = True
+        base.update(
+            {
+                "started_at": replay_state.started_at,
+                "duration_ms": elapsed_ms,
+                "input_tokens": input_tokens,
+                "output_tokens": output_tokens,
+                "cost_usd": cost_microusd / 1_000_000,
+                "status": "benchmark_verified" if accepted else "benchmark_rejected",
+                "verification": "benchmark_accepted" if accepted else "benchmark_rejected",
+            }
+        )
+        return DashboardProjection._json_object(base)
 
     @staticmethod
     def _run_from_submission(payload: JsonObject, proof_id: str) -> JsonObject:
@@ -630,6 +865,22 @@ class DashboardProjection:
 
     @staticmethod
     def _event_view(event: StoredEvent, *, task_id: str | None) -> JsonObject:
+        summary = event.event_type.replace(".", " ")
+        if event.event_type in _T7_SYNTHETIC_EVENT_OUTCOMES:
+            outcome = _T7_SYNTHETIC_EVENT_OUTCOMES[event.event_type].replace("_", " ")
+            summary = f"T7 {outcome}"
+        elif event.event_type == _FATE_STARTED_EVENT:
+            summary = "FATE benchmark attempt started"
+        elif event.event_type == _FATE_VERIFIED_EVENT:
+            accepted = event.payload.get("accepted")
+            if accepted is True:
+                summary = "FATE benchmark verifier accepted"
+            elif accepted is False:
+                summary = "FATE benchmark verifier rejected"
+        elif event.event_type in RESEARCH_ADVISORY_EVENT_TYPES:
+            advisory = validate_research_advisory_event(event)
+            label = "hypothesis" if event.event_type == "research_hypothesis" else "observation"
+            summary = f"Research advisory {label}: {advisory.proposal_kind.value}"
         return DashboardProjection._json_object(
             {
                 "sequence": event.global_position,
@@ -637,7 +888,7 @@ class DashboardProjection:
                 "entity_id": task_id or event.entity_id,
                 "task_id": task_id,
                 "occurred_at": event.recorded_at,
-                "summary": event.event_type.replace(".", " "),
+                "summary": summary,
             }
         )
 

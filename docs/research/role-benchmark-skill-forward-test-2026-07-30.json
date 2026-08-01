@@ -1,0 +1,67 @@
+{
+  "authority": {
+    "model_competence_claim": false,
+    "proof_or_semantic_evidence": false,
+    "promotion_allowed": false,
+    "real_provider_executed": false
+  },
+  "base_commit": "a9a4bdcd1617d93fbc67b69a792f517d4303cbc5",
+  "evidence": {
+    "private_manifest_output_count": 15,
+    "private_manifest_sha256": "45356a0de03a146ef11df3e1d2e69fe13ead175c779febcc36b82c704fcf9251",
+    "readiness_byte_equal": true,
+    "readiness_sha256": "e416390cb5a930d98c3e24d984b7927b97207b1fcfcb4bd69165f6eef8b5476c",
+    "report_byte_equal": true,
+    "report_sha256": "00461ccf88c6ad9e803c7c94e1d4ed8b5da8b673c82f4bf21b4b13627250159f",
+    "role_count": 5,
+    "trial_count": 15
+  },
+  "execution": {
+    "authorized_external_status": "blocked",
+    "execution_class": "scripted_fake",
+    "private_location_disclosed": false,
+    "repetitions_per_role": 3,
+    "run_id": "skill-forward-test-20260730-v2",
+    "scripted_fake_status": "ready"
+  },
+  "inputs": [
+    {
+      "path": "skills/run-autolean-benchmarks/SKILL.md",
+      "sha256": "6c95262e5ab659676c1e9c97b09101976ec4ff891d0b66c3f62344efc4ec6fc9",
+      "size_bytes": 7254
+    },
+    {
+      "path": "skills/run-autolean-benchmarks/agents/openai.yaml",
+      "sha256": "6e686b0c1c3feb91b8eb7323815e8564e959902ba1695858d0a369803356cba3",
+      "size_bytes": 228
+    },
+    {
+      "path": "benchmarks/role_benchmark.py",
+      "sha256": "db7c3705ad7a39da03331d866bb2af4edb86f9b0f50d8b0ff6b1b828fe2782e6",
+      "size_bytes": 117782
+    },
+    {
+      "path": "scripts/role_benchmark.py",
+      "sha256": "c2c62e29187afb4b44b854b44c982d08baf2fb96f6abfca3768e2464b3e3c8a6",
+      "size_bytes": 10467
+    },
+    {
+      "path": "benchmarks/tests/test_role_benchmark.py",
+      "sha256": "a58c4739259d6ff48c519fd72841c29c4ea6837fd64942511e3476e1b14403c9",
+      "size_bytes": 53724
+    },
+    {
+      "path": "benchmarks/roles/fake-smoke.v3.json",
+      "sha256": "56ec03eee8e60d740d2b986906c373edad4ee764fa7bcb1a8d6c655fc38af830",
+      "size_bytes": 13173
+    }
+  ],
+  "observed_on": "2026-07-30",
+  "schema_version": "autolean.role-benchmark-skill-forward-test-evidence.v1",
+  "validation": {
+    "focused_tests_passed": 45,
+    "manifest_commit_failure_report_blocked": true,
+    "manifest_retry_executor_calls_after": 15,
+    "manifest_retry_executor_calls_before": 15
+  }
+}

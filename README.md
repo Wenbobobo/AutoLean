@@ -40,8 +40,11 @@ Contribution rules and the exact offline CI boundary are documented in
 model, or claims Lean/OCI authority.
 
 The executed Phase 1 evidence and remaining gates are tracked in
-[`docs/phase-1-progress.md`](docs/phase-1-progress.md), with the current parallel route in
-[`docs/phase-1-parallel-execution.md`](docs/phase-1-parallel-execution.md). The first Builder
+[`docs/phase-1-progress.md`](docs/phase-1-progress.md). The only active execution order is
+[`docs/roadmap-next.md`](docs/roadmap-next.md), and all operator, host, rights, reviewer, signer,
+and release actions are consolidated in
+[`docs/operator-and-authority-worklist.md`](docs/operator-and-authority-worklist.md). Historical
+plans remain available through [`docs/archive/README.md`](docs/archive/README.md). The first Builder
 discovery proposal is the rights-gated
 [`docs/domain-pilot-selection.md`](docs/domain-pilot-selection.md).
 

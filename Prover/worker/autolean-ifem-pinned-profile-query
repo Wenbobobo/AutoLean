@@ -1,0 +1,125 @@
+#!/bin/sh
+set -eu
+
+fail() {
+  printf '%s\n' "autolean-ifem-pinned-profile-query: $1" >&2
+  exit 2
+}
+
+[ "$#" -ge 6 ] || fail "expected the frozen singleton-profile argument shape"
+[ "$1" = "--protocol" ] || fail "missing protocol argument"
+[ "$2" = "autolean.ifem-pinned-profile-query.v1" ] || fail "unsupported protocol"
+[ "$3" = "--profile" ] || fail "missing profile argument"
+profile=$4
+shift 4
+
+case "$profile" in
+  ifem-singleton-defs|ifem-singleton-dual|ifem-singleton-lax-milgram|\
+  ifem-singleton-operator-basic|ifem-singleton-operator-bilinear) ;;
+  *) fail "unsupported singleton import profile" ;;
+esac
+
+helper=/opt/mathlib/AutoLean/AutoleanIFEMPinnedProfileQuery.lean
+wrapper=/opt/autolean/bin/autolean-ifem-pinned-profile-query
+manifest=/opt/autolean/attestations/ifem-pinned-profile-built-oleans.sha256
+negative_control=AutoLean.IFEM.PinnedProfileQuery.NegativeControl
+
+[ -f "$helper" ] && [ ! -L "$helper" ] || fail "query helper is unavailable"
+[ -f "$wrapper" ] && [ ! -L "$wrapper" ] || fail "query wrapper is unavailable"
+[ -f "$manifest" ] && [ ! -L "$manifest" ] || fail "built olean manifest is unavailable"
+sha256sum --check --strict --status "$manifest" || fail "built olean manifest does not match"
+
+manifest_hash_for() {
+  artifact=$1
+  value=$(LC_ALL=C awk -v expected="$artifact" '
+    $2 == expected { count += 1; value = $1 }
+    END {
+      if (count != 1 || value !~ /^[0-9a-f]{64}$/) exit 1
+      print value
+    }
+  ' "$manifest") || fail "built olean manifest has an invalid entry"
+  printf '%s' "$value"
+}
+
+helper_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/AutoLean/AutoleanIFEMPinnedProfileQuery.olean)
+defs_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Defs.olean)
+dual_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Dual.olean)
+lax_milgram_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/LaxMilgram.olean)
+operator_basic_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Basic.olean)
+operator_bilinear_olean_hash=$(manifest_hash_for /opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Bilinear.olean)
+built_olean_hashes=$(printf '%s' \
+  '[{"path":"/opt/mathlib/.lake/build/lib/lean/AutoLean/AutoleanIFEMPinnedProfileQuery.olean","sha256":"'"$helper_olean_hash"'"},' \
+  '{"path":"/opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Defs.olean","sha256":"'"$defs_olean_hash"'"},' \
+  '{"path":"/opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/Dual.olean","sha256":"'"$dual_olean_hash"'"},' \
+  '{"path":"/opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/InnerProductSpace/LaxMilgram.olean","sha256":"'"$lax_milgram_olean_hash"'"},' \
+  '{"path":"/opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Basic.olean","sha256":"'"$operator_basic_olean_hash"'"},' \
+  '{"path":"/opt/mathlib/.lake/build/lib/lean/Mathlib/Analysis/Normed/Operator/Bilinear.olean","sha256":"'"$operator_bilinear_olean_hash"'"}]')
+
+helper_sha256=$(sha256sum "$helper" | awk '{print $1}')
+wrapper_sha256=$(sha256sum "$wrapper" | awk '{print $1}')
+manifest_sha256=$(sha256sum "$manifest" | awk '{print $1}')
+case "$helper_sha256:$wrapper_sha256:$manifest_sha256" in
+  *[!0-9a-f:]*|*:|:*|*::* ) fail "image-owned hash is malformed" ;;
+esac
+
+declaration_file=$(mktemp /tmp/autolean-ifem-profile-declarations.XXXXXX)
+cleanup() {
+  rm -f "$declaration_file"
+}
+trap cleanup EXIT HUP INT TERM
+
+previous=
+declarations=0
+while [ "$#" -gt 0 ]; do
+  [ "$1" = "--declaration" ] || fail "expected declaration argument"
+  [ "$#" -ge 2 ] || fail "declaration value is missing"
+  declaration=$2
+  case "$declaration" in
+    ""|*[!A-Za-z0-9_.]*) fail "declaration uses unsupported characters" ;;
+    .*|*..*|*.) fail "declaration is not a canonical dotted name" ;;
+  esac
+  [ "$declaration" != "$negative_control" ] || fail "negative control is image-owned"
+  [ "$declaration" != "$previous" ] || fail "declarations must be unique"
+  if [ -n "$previous" ] && [ "$declaration" \< "$previous" ]; then
+    fail "declarations must be sorted"
+  fi
+  printf '%s\n' "$declaration" >>"$declaration_file"
+  previous=$declaration
+  declarations=$((declarations + 1))
+  [ "$declarations" -le 128 ] || fail "too many declarations"
+  shift 2
+done
+[ "$declarations" -gt 0 ] || fail "at least one declaration is required"
+
+set -- "$helper_sha256" "$wrapper_sha256" "$manifest_sha256" "$profile" "$negative_control"
+while IFS= read -r declaration; do
+  set -- "$@" "$declaration"
+done <"$declaration_file"
+
+lean_path=$(cat /opt/autolean/environment/lean-path)
+[ -n "$lean_path" ] || fail "image-owned mathlib LEAN_PATH is unavailable"
+case "$lean_path" in
+  *"
+"*|*"
+"*) fail "image-owned mathlib LEAN_PATH is malformed" ;;
+esac
+
+scratch=$(mktemp -d /tmp/autolean-ifem-profile-query.XXXXXX)
+cleanup() {
+  rm -f "$declaration_file"
+  rm -rf "$scratch"
+}
+
+if ! LEAN_PATH="$lean_path" lean --run "$helper" "$@" >"$scratch/query.stdout" 2>"$scratch/query.stderr"
+then
+  sed -n '1,200p' "$scratch/query.stderr" >&2
+  exit 21
+fi
+result_lines=$(wc -l <"$scratch/query.stdout")
+[ "$result_lines" -eq 1 ] || fail "query helper did not emit exactly one record"
+record=$(cat "$scratch/query.stdout")
+case "$record" in
+  \{*\}) ;;
+  *) fail "query helper record is not one JSON object" ;;
+esac
+printf '%s,"built_olean_hashes":%s}\n' "${record%\}}" "$built_olean_hashes"

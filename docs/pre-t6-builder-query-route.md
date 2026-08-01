@@ -62,6 +62,16 @@ Outputs:
 
 The receipt must be content-addressed and replayable from the fixed image. It must not be accepted by `claim`, `submit_proof`, `verify_submission`, or the Prover V2 facade.
 
+The container cannot discover its own registry RepoDigest. Therefore `--image` is not trusted
+caller testimony: the host canary must first verify that the requested reference equals Docker's
+recorded child RepoDigest, then use that exact same string both as the image executed by
+`docker run` and as the endpoint identity argument. A raw direct wrapper invocation is not
+receipt-bound evidence.
+
+Successful endpoint stdout is exactly one compact JSON line and successful stderr is empty.
+Compile/query failures expose only a fixed 4096-byte diagnostic prefix plus a stable phase marker;
+unbounded Lean diagnostics are never streamed into retained evidence.
+
 ## Required fail-closed tests
 
 The Builder endpoint must reject or clearly mark as non-promotable:
@@ -98,6 +108,19 @@ This is still **not T6**. It is a real pre-T6 vertical because it closes the Bui
 4. **Builder adapter**: add a narrow internal function that stores the query receipt digest as Builder evidence; do not add a public control-plane method.
 5. **Vertical fixture**: run `prepare -> fidelity -> freeze -> builder-query receipt -> bridge -> claim -> proof -> verify` on the UniversalLK staged candidate.
 6. **Docs/evidence**: update the progress ledger only after the retained receipt, canary output, and verification artifact hashes exist.
+
+Current working-tree status: items 1--3 are implemented and locally unit/static tested. A real
+receipt-v2 child image has not been built in this checkout. Item 4 remains open because
+`builder-query-canary` validates fresh, replay, and seven negative cases but only prints a summary;
+it does not persist the raw validated query record as immutable Builder evidence. Items 5--6
+remain blocked by T3/T5 and real OCI execution.
+
+The operator preflight, once a new Docker-recorded RepoDigest exists, is:
+
+```text
+uv run --frozen python -m Library.scripts.library_substrate_image verify --image <recorded-repodigest>
+uv run --frozen python -m Library.scripts.library_substrate_image builder-query-canary --image <recorded-repodigest>
+```
 
 ## Non-goals
 

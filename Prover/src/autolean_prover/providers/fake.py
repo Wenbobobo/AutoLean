@@ -7,6 +7,8 @@ from autolean_contracts import DigestV1, EndpointClassV1, HashKindV1, digest_mod
 
 from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.providers.base import (
+    MAX_MODEL_REQUEST_TIMEOUT_SECONDS,
+    ModelExecutionTimeoutPolicyV1,
     ModelRequest,
     ModelResponse,
     ProviderCapabilities,
@@ -25,6 +27,7 @@ class FakeProvider:
         *,
         model_id: str = "fake-model",
         capabilities: ProviderCapabilities,
+        timeout_seconds: float = MAX_MODEL_REQUEST_TIMEOUT_SECONDS,
     ) -> None:
         validate_provider_identity("fake", model_id)
         if not isinstance(capabilities, ProviderCapabilities):
@@ -32,6 +35,7 @@ class FakeProvider:
         self._responses = tuple(responses)
         self._model_id = model_id
         self._capabilities = capabilities
+        self._execution_timeout_policy = ModelExecutionTimeoutPolicyV1(timeout_seconds)
         self._next = 0
         self._lock = threading.Lock()
 
@@ -56,6 +60,7 @@ class FakeProvider:
                 "provider_id": self.provider_id,
                 "model_id": self.model_id,
                 "endpoint_class": self.endpoint_class.value,
+                "timeout_seconds": self.execution_timeout_policy.configured_ceiling_seconds,
                 "capabilities": sorted(capability.value for capability in self.capabilities.values),
             },
         )
@@ -63,6 +68,10 @@ class FakeProvider:
     @property
     def capabilities(self) -> ProviderCapabilities:
         return self._capabilities
+
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1:
+        return self._execution_timeout_policy
 
     def probe(self) -> ProviderCapabilities:
         """Useful to callers that want a local capability check without network access."""

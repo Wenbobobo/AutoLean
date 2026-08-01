@@ -10,6 +10,7 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
+from unittest.mock import patch
 
 import pytest
 from autolean_contracts import canonical_json_bytes
@@ -29,6 +30,8 @@ from benchmarks.role_benchmark import (
     RoleBenchmarkExecutorDescriptorV1,
     RoleBenchmarkHarness,
     RoleBenchmarkPreflightBindingV1,
+    RoleBenchmarkPrivateManifestStore,
+    RoleBenchmarkPrivatePaths,
     RoleBenchmarkRawOutputStore,
     RoleBenchmarkReportV1,
     RoleBenchmarkStore,
@@ -57,6 +60,18 @@ FIXTURE_PATH = PROJECT_ROOT / "benchmarks" / "roles" / "fake-smoke.v3.json"
 
 def _fixture() -> FakeRoleBenchmarkFixtureV1:
     return load_fake_fixture(FIXTURE_PATH)
+
+
+def _private_paths(database: Path, run_id: str) -> RoleBenchmarkPrivatePaths:
+    database_key = hashlib.sha256(str(database.resolve()).encode("utf-8")).hexdigest()[:16]
+    return operator_private_benchmark_paths(
+        run_id,
+        environment={
+            "AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(
+                database.parent / f"{database_key}-{run_id}-private"
+            )
+        },
+    )
 
 
 class _CountingExecutor:
@@ -249,13 +264,16 @@ def _run(
     *,
     run_id: str,
 ) -> RoleBenchmarkReportV1:
-    raw_output_store = RoleBenchmarkRawOutputStore(database.parent / f"{run_id}-raw")
+    private_paths = _private_paths(database, run_id)
+    raw_output_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
+    private_manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
     with RoleBenchmarkStore(database) as store:
         return RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
             raw_output_store=raw_output_store,
+            private_manifest_store=private_manifest_store,
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id=run_id,
         )
@@ -369,6 +387,10 @@ def test_fake_harness_persists_complete_answer_free_report(tmp_path: Path) -> No
 
 def test_harness_revalidates_the_complete_readiness_report(tmp_path: Path) -> None:
     fixture = _fixture()
+    private_paths = operator_private_benchmark_paths(
+        "stale-readiness-run",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
     stale_readiness = build_scripted_fake_readiness(fixture.matrix).model_copy(
         update={"matrix_hash": "0" * 64}
     )
@@ -380,7 +402,8 @@ def test_harness_revalidates_the_complete_readiness_report(tmp_path: Path) -> No
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
-            raw_output_store=RoleBenchmarkRawOutputStore(tmp_path / "raw"),
+            raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+            private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
             readiness=stale_readiness,
             run_id="stale-readiness-run",
         )
@@ -390,19 +413,25 @@ def test_raw_outputs_are_private_cas_artifacts_with_a_separate_manifest(
     tmp_path: Path,
 ) -> None:
     fixture = _fixture()
-    raw_store = RoleBenchmarkRawOutputStore(tmp_path / "raw")
+    private_paths = operator_private_benchmark_paths(
+        "raw-artifact-run",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
+    raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
+    manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
     with RoleBenchmarkStore(tmp_path / "roles.sqlite3") as store:
         report = RoleBenchmarkHarness().run(
             fixture.matrix,
             executor=ScriptedFakeRoleExecutor(fixture),
             store=store,
             raw_output_store=raw_store,
+            private_manifest_store=manifest_store,
             readiness=build_scripted_fake_readiness(fixture.matrix),
             run_id="raw-artifact-run",
         )
         replayed = store.report("raw-artifact-run")
 
-    manifest = raw_store.build_manifest(report.run, report.results)
+    manifest = manifest_store.load()
     assert raw_store.build_manifest(replayed.run, replayed.results) == manifest
     assert manifest.schema_version == "autolean.role-raw-artifact-manifest.v3"
     assert all(
@@ -421,7 +450,7 @@ def test_raw_outputs_are_private_cas_artifacts_with_a_separate_manifest(
         item.output_hash for item in report.results
     }
     digest = manifest.outputs[0].output_hash
-    blob = tmp_path / "raw" / "sha256" / digest[:2] / digest[2:4] / digest
+    blob = private_paths.raw_output_root / "sha256" / digest[:2] / digest[2:4] / digest
     blob.write_bytes(b"{}")
     with pytest.raises(ArtifactCorruption, match="failed integrity"):
         raw_store.build_manifest(report.run, report.results)
@@ -430,9 +459,11 @@ def test_raw_outputs_are_private_cas_artifacts_with_a_separate_manifest(
 def test_private_manifest_cross_checks_complete_public_result_commitments(
     tmp_path: Path,
 ) -> None:
-    report = _run(_fixture(), tmp_path / "roles.sqlite3", run_id="manifest-cross-check")
-    raw_store = RoleBenchmarkRawOutputStore(tmp_path / "manifest-cross-check-raw")
-    manifest = raw_store.build_manifest(report.run, report.results)
+    database = tmp_path / "roles.sqlite3"
+    report = _run(_fixture(), database, run_id="manifest-cross-check")
+    manifest = RoleBenchmarkPrivateManifestStore(
+        _private_paths(database, "manifest-cross-check")
+    ).load()
     validate_report_private_manifest(report, manifest)
 
     payload = manifest.model_dump(mode="json")
@@ -682,6 +713,71 @@ def test_private_manifest_write_rejects_linked_parent(tmp_path: Path) -> None:
     with pytest.raises(RoleBenchmarkError, match="symlink, junction, or reparse point"):
         prepare_private_manifest_path(paths)
     assert not (linked_target / paths.manifest_path.name).exists()
+
+
+def test_private_manifest_write_fails_fast_when_parent_is_not_writable(
+    tmp_path: Path,
+) -> None:
+    paths = operator_private_benchmark_paths(
+        "unwritable-manifest-run",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
+
+    with (
+        patch("benchmarks.role_benchmark.os.open", side_effect=PermissionError("denied")),
+        pytest.raises(RoleBenchmarkError, match="parent is not writable"),
+    ):
+        prepare_private_manifest_path(paths)
+
+
+def test_manifest_commit_failure_prevents_report_and_retry_is_idempotent(tmp_path: Path) -> None:
+    fixture = _fixture()
+    run_id = "manifest-commit-failure"
+    database = tmp_path / "roles.sqlite3"
+    private_paths = operator_private_benchmark_paths(
+        run_id,
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
+    raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
+    manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
+    executor = _CountingExecutor(fixture)
+
+    with RoleBenchmarkStore(database) as store:
+        with (
+            patch.object(
+                RoleBenchmarkPrivateManifestStore,
+                "commit",
+                side_effect=RoleBenchmarkError("injected manifest commit failure"),
+            ),
+            pytest.raises(RoleBenchmarkError, match="injected manifest commit failure"),
+        ):
+            RoleBenchmarkHarness().run(
+                fixture.matrix,
+                executor=executor,
+                store=store,
+                raw_output_store=raw_store,
+                private_manifest_store=manifest_store,
+                readiness=build_scripted_fake_readiness(fixture.matrix),
+                run_id=run_id,
+            )
+        assert len(store.load_results(run_id)) == 15
+        with pytest.raises(RoleBenchmarkStoreError, match="no unique raw artifact manifest"):
+            store.report(run_id)
+
+    assert not private_paths.manifest_path.exists()
+    assert executor.calls == 15
+    with RoleBenchmarkStore(database) as store:
+        report = RoleBenchmarkHarness().run(
+            fixture.matrix,
+            executor=executor,
+            store=store,
+            raw_output_store=raw_store,
+            private_manifest_store=manifest_store,
+            readiness=build_scripted_fake_readiness(fixture.matrix),
+            run_id=run_id,
+        )
+    assert manifest_store.load().content_hash() == report.raw_artifact_manifest_hash
+    assert executor.calls == 15
 
 
 def test_repetition_metrics_expose_output_fluctuation(tmp_path: Path) -> None:
@@ -1009,7 +1105,10 @@ def test_concurrent_and_repeated_same_run_never_duplicate_executor_calls(
 ) -> None:
     fixture = _fixture()
     database = tmp_path / "roles.sqlite3"
-    raw_root = tmp_path / "operator-private-raw"
+    private_paths = operator_private_benchmark_paths(
+        "concurrent-run",
+        environment={"AUTOLEAN_BENCHMARK_PRIVATE_ROOT": str(tmp_path / "operator-private")},
+    )
     executor = _CountingExecutor(fixture, delay_seconds=0.01)
     with RoleBenchmarkStore(database):
         pass
@@ -1020,7 +1119,8 @@ def test_concurrent_and_repeated_same_run_never_duplicate_executor_calls(
                 fixture.matrix,
                 executor=executor,
                 store=store,
-                raw_output_store=RoleBenchmarkRawOutputStore(raw_root),
+                raw_output_store=RoleBenchmarkRawOutputStore(private_paths.raw_output_root),
+                private_manifest_store=RoleBenchmarkPrivateManifestStore(private_paths),
                 readiness=build_scripted_fake_readiness(fixture.matrix),
                 run_id="concurrent-run",
             )

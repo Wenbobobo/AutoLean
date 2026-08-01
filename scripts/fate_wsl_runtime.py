@@ -50,7 +50,10 @@ from scripts.fate_compile_canary import (
 RUNTIME_STATE_SCHEMA: Final = "autolean.fate-wsl-runtime-state.v1"
 RUNTIME_AUDIT_SCHEMA: Final = "autolean.fate-wsl-runtime-audit.v1"
 HOST_RESULT_SCHEMA: Final = "autolean.fate-wsl-runtime-result.v1"
-LAYOUT_VERSION: Final = "fate-runtime-v1"
+# V2 changes the persisted runtime's text policy from the historical CRLF
+# presentation to the canonical LF bytes pinned by the fixture lock.  A new
+# namespace prevents a valid V1 state file from being reinterpreted in place.
+LAYOUT_VERSION: Final = "fate-runtime-v2"
 _TIERS: Final[tuple[Tier, ...]] = ("M", "H", "X")
 _SHA1 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -282,10 +285,6 @@ def _require_ext4(cache_root: Path, runner: ProcessRunner) -> None:
         raise RuntimePreparationError("cache_root_is_not_ext4")
 
 
-def _attributes_payload(tier: Tier) -> bytes:
-    return (f"FATE-{tier}.json text eol=crlf\nlake-manifest.json text eol=crlf\n").encode("ascii")
-
-
 def _dependencies_payload(dependencies: Sequence[LockedDependency]) -> list[dict[str, str]]:
     return [
         {"name": dependency.name, "revision": dependency.revision}
@@ -400,8 +399,8 @@ def build_runtime_expectation(checkout: Path, manifest_path: Path) -> RuntimeExp
     dependency_graph_sha256 = _sha256(_canonical_json(_dependencies_payload(dependencies)))
     eol_policy = {
         tier: {
-            "attributes_sha256": _sha256(_attributes_payload(tier)),
-            "crlf_paths": [f"FATE-{tier}.json", "lake-manifest.json"],
+            "metadata_json": "git_blob_lf",
+            "lake_manifest": "canonical_lf",
             "task_sources": "git_blob_lf",
         }
         for tier in _TIERS
@@ -592,13 +591,6 @@ def _prepare_new_layout(
             split_repositories[tier],
             expectation.fixture.submodules[tier],
         )
-        attributes = split_repositories[tier] / ".git" / "info" / "attributes"
-        _write_exclusive(
-            attributes,
-            _attributes_payload(tier),
-            "attributes_target_conflict",
-        )
-
     _create_detached_worktree(
         runner,
         root_repository,
@@ -799,12 +791,7 @@ def audit_runtime(
             != expectation.fixture.submodules[tier]
         ):
             raise RuntimePreparationError("runtime_split_revision_drift")
-        common = _git_common_dir(runner, split_root, paths.cache_root)
-        _require_regular_hash(
-            common / "info" / "attributes",
-            _sha256(_attributes_payload(tier)),
-            "runtime_attributes_drift",
-        )
+        _git_common_dir(runner, split_root, paths.cache_root)
         _require_clean_git_worktree(runner, split_root)
         _require_regular_hash(
             split_root / f"FATE-{tier}.json",
@@ -816,6 +803,11 @@ def audit_runtime(
             expectation.fixture.lake_manifest_sha256[tier],
             "runtime_lake_manifest_hash_drift",
         )
+        for text_path in (
+            split_root / f"FATE-{tier}.json",
+            split_root / "lake-manifest.json",
+        ):
+            _require_lf(text_path, "runtime_canonical_input_eol_drift")
         for text_path in (
             split_root / f"FATE{tier}.lean",
             split_root / "lakefile.lean",

@@ -1,0 +1,341 @@
+{
+  "schema_version": "autolean.ifem-prerequisite-census-plan.v1",
+  "protocol": "autolean.builder-ifem-prerequisite-census.v1",
+  "state": "not_run",
+  "denominator": {
+    "lane_id": "ifem-coercive-galerkin",
+    "denominator_id": "ifem-coercive-prerequisites",
+    "denominator_revision": "ifem-coercive-prerequisites-r01-f9d1f2d4717a",
+    "denominator_content_sha256": "f9d1f2d4717aaaed9f10c6c82deae083985f643089b17c424de4e61e9845bcc5",
+    "frozen_node_count": 25,
+    "prerequisite_node_count": 21,
+    "source_manifest": "Builder/pilots/discovery/phase-2-active-lanes.v1.json"
+  },
+  "environment": {
+    "library_root": "Library",
+    "lean_toolchain": "leanprover/lean4:v4.28.0",
+    "mathlib_revision": "8f9d9cff6bd728b17a24e163c9402775d9e6a365",
+    "lake_manifest_sha256": "e2a93c904f51195d6740cd9abfb35ab155dc0157e0e46642dce0d364b68a9a89",
+    "direct_imports": [
+      "Mathlib.Analysis.InnerProductSpace.LaxMilgram",
+      "Mathlib.Analysis.Normed.Operator.Bilinear"
+    ],
+    "lean_argv": [
+      "lake",
+      "env",
+      "lean",
+      "--run",
+      "<generated-query.lean>"
+    ]
+  },
+  "graph_boundary": {
+    "mathematical_graph": "frozen_prerequisite_denominator_only",
+    "formal_graph": "candidate_declarations_unclassified",
+    "execution_graph": "pinned_library_declaration_observation",
+    "builder_freeze": "forbidden",
+    "prover_handoff": "forbidden",
+    "coverage_claim": "forbidden_without_reviewed_result"
+  },
+  "classification_policy": {
+    "classifications": [
+      "direct",
+      "thin_adapter",
+      "missing",
+      "unknown"
+    ],
+    "default_classification": "unknown",
+    "direct_requires": [
+      "canonical_type_sha256s",
+      "mapped_declaration",
+      "query_observation_sha256",
+      "semantic_review_sha256"
+    ],
+    "thin_adapter_requires": [
+      "adapter_compile_receipt_sha256",
+      "adapter_source_sha256",
+      "canonical_type_sha256s",
+      "mapped_declaration",
+      "query_observation_sha256",
+      "semantic_review_sha256"
+    ],
+    "missing_requires": [
+      "declaration_inventory_sha256",
+      "negative_query_observation_sha256",
+      "semantic_review_sha256"
+    ],
+    "unknown_requires": [
+      "explicit_unknown_reason"
+    ]
+  },
+  "queries": [
+    {
+      "node_id": "ifem-real-scalar-field",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "Real"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Defs"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-normed-vector-space",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "NormedAddCommGroup",
+        "NormedSpace"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Defs"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-inner-product-space",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "InnerProductSpace"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Defs"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-complete-inner-product-space",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "CompleteSpace"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Dual"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-induced-norm",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "InnerProductSpace.toCore"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Defs"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-continuous-linear-functional",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap",
+        "StrongDual"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Dual"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-dual-norm",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.opNorm",
+        "StrongDual"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Dual",
+        "Mathlib.Analysis.Normed.Operator.Basic"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-continuous-bilinear-form",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap",
+        "ContinuousLinearMap.bilinearComp"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Bilinear"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-continuity-bound",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.le_opNorm",
+        "ContinuousLinearMap.opNorm_le_bound"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Basic"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-coercivity-predicate",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsCoercive"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-induced-dual-operator",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "InnerProductSpace.continuousLinearMapOfBilin"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.Dual"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-operator-norm-bound",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.le_opNorm",
+        "ContinuousLinearMap.opNorm_le_bound"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Basic"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-submodule",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "Submodule"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-closed-subspace",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsClosed",
+        "Submodule"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-inherited-complete-structure",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsClosed.completeSpace_coe"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-restricted-bilinear-form",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.bilinearComp",
+        "ContinuousLinearMap.precompL",
+        "ContinuousLinearMap.precompR",
+        "Submodule.subtypeL"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Bilinear"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-restricted-functional",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.comp",
+        "Submodule.subtypeL"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Basic",
+        "Mathlib.Analysis.Normed.Operator.Bilinear"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-restricted-continuity",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "ContinuousLinearMap.norm_precompL_le",
+        "ContinuousLinearMap.norm_precompR_le"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.Normed.Operator.Bilinear"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-restricted-coercivity",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsCoercive"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-lax-milgram-solution-interface",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsCoercive.continuousLinearEquivOfBilin",
+        "IsCoercive.unique_continuousLinearEquivOfBilin"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    },
+    {
+      "node_id": "ifem-galerkin-solution-interface",
+      "probe_kind": "environment_declaration_lookup",
+      "candidate_declarations": [
+        "IsClosed.completeSpace_coe",
+        "IsCoercive.continuousLinearEquivOfBilin"
+      ],
+      "source_hints": [
+        "Mathlib.Analysis.InnerProductSpace.LaxMilgram"
+      ],
+      "initial_classification": "unknown",
+      "classification_authority": "post_query_builder_semantic_review"
+    }
+  ],
+  "content_sha256": "b24081ac1de564189ea10804665224cbdead963af3f737852e2de4d610cf8de8"
+}

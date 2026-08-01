@@ -10,11 +10,15 @@ from autolean_contracts import DigestV1, EndpointClassV1, HashKindV1, digest_mod
 
 from autolean_prover.errors import ConfigurationError, ProviderResponseError
 from autolean_prover.providers.base import (
+    CanonicalJsonRequestBody,
+    ModelExecutionTimeoutPolicyV1,
     ModelRequest,
     ModelResponse,
     ProviderCapabilities,
     TokenUsage,
     ToolCall,
+    canonical_json_request_body,
+    effective_model_timeout_seconds,
     require_request_capabilities,
 )
 from autolean_prover.providers.policy import (
@@ -38,6 +42,9 @@ class ChatCompletionsSettings:
     capabilities: ProviderCapabilities
     endpoint_class: EndpointClassV1 = EndpointClassV1.APPROVED_EXTERNAL
     timeout_seconds: float = 120.0
+    thinking_enabled: bool = False
+    require_response_model: bool = False
+    require_usage: bool = False
 
     def __post_init__(self) -> None:
         validate_provider_identity(self.provider_id, self.model_id)
@@ -51,6 +58,13 @@ class ChatCompletionsSettings:
         if not isinstance(self.capabilities, ProviderCapabilities):
             raise ConfigurationError("provider capabilities must be ProviderCapabilities")
         validate_positive_timeout(self.timeout_seconds, label="provider timeout_seconds")
+        for label, value in (
+            ("thinking_enabled", self.thinking_enabled),
+            ("require_response_model", self.require_response_model),
+            ("require_usage", self.require_usage),
+        ):
+            if not isinstance(value, bool):
+                raise ConfigurationError(f"provider {label} must be a boolean")
 
 
 class ChatCompletionsProvider:
@@ -89,6 +103,9 @@ class ChatCompletionsProvider:
                 "base_url": self._settings.base_url,
                 "api_key_env": self._settings.api_key_env,
                 "timeout_seconds": self._settings.timeout_seconds,
+                "thinking_enabled": self._settings.thinking_enabled,
+                "require_response_model": self._settings.require_response_model,
+                "require_usage": self._settings.require_usage,
                 "capabilities": sorted(capability.value for capability in self.capabilities.values),
             },
         )
@@ -97,19 +114,53 @@ class ChatCompletionsProvider:
     def capabilities(self) -> ProviderCapabilities:
         return self._settings.capabilities
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1:
+        return ModelExecutionTimeoutPolicyV1(self._settings.timeout_seconds)
+
     def generate(self, request: ModelRequest) -> ModelResponse:
-        require_request_capabilities(self, request)
+        prepared_body = self.prepare_request_body(request)
+        return self.generate_prepared(request, prepared_body)
+
+    def generate_prepared(
+        self,
+        request: ModelRequest,
+        prepared_body: CanonicalJsonRequestBody,
+    ) -> ModelResponse:
+        """Send exactly a previously prepared body after rebinding it to the request."""
+
+        if not isinstance(prepared_body, CanonicalJsonRequestBody):
+            raise ConfigurationError("prepared Chat Completions body is invalid")
+        expected = self.prepare_request_body(request)
+        if prepared_body != expected:
+            raise ConfigurationError(
+                "prepared Chat Completions body differs from the logical request"
+            )
         headers = {"Content-Type": "application/json"}
         key = resolve_secret_reference(self._settings.api_key_env, self._environment)
         if key is not None:
             headers["Authorization"] = f"Bearer {key}"
-        raw = self._transport.post_json(
-            url=f"{self._settings.base_url}/chat/completions",
-            headers=headers,
-            payload=self._request_payload(request),
-            timeout_seconds=self._settings.timeout_seconds,
-        )
+        try:
+            raw = self._transport.post_json_bytes(
+                url=f"{self._settings.base_url}/chat/completions",
+                headers=headers,
+                body=prepared_body.body,
+                timeout_seconds=effective_model_timeout_seconds(
+                    request,
+                    provider_timeout_seconds=self._settings.timeout_seconds,
+                ),
+            )
+        except ProviderResponseError:
+            raise
+        except Exception:
+            raise ProviderResponseError("Chat Completions request failed") from None
         return self._parse_response(raw)
+
+    def prepare_request_body(self, request: ModelRequest) -> CanonicalJsonRequestBody:
+        """Build the exact credential-free JSON body without resolving an API key."""
+
+        require_request_capabilities(self, request)
+        return canonical_json_request_body(self._request_payload(request))
 
     def _request_payload(self, request: ModelRequest) -> dict[str, object]:
         messages: list[dict[str, str]] = []
@@ -121,8 +172,12 @@ class ChatCompletionsProvider:
             "messages": messages,
             "max_tokens": request.max_output_tokens,
         }
+        if self._settings.thinking_enabled:
+            payload["thinking"] = {"type": "enabled"}
         if request.reasoning_effort is not None:
             payload["reasoning_effort"] = request.reasoning_effort
+        if request.response_format is not None:
+            payload["response_format"] = {"type": request.response_format}
         if request.tools:
             payload["tools"] = [
                 {
@@ -139,6 +194,14 @@ class ChatCompletionsProvider:
         return payload
 
     def _parse_response(self, raw: Mapping[str, object]) -> ModelResponse:
+        response_model_id = raw.get("model")
+        if response_model_id is None and self._settings.require_response_model:
+            raise ProviderResponseError("Chat Completions payload is missing the response model")
+        if response_model_id is not None:
+            if not isinstance(response_model_id, str):
+                raise ProviderResponseError("Chat Completions model must be a string")
+            if response_model_id != self.model_id:
+                raise ProviderResponseError("Chat Completions model does not match the request")
         choices = raw.get("choices")
         if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
             raise ProviderResponseError("Chat Completions payload is missing choices[0]")
@@ -154,7 +217,16 @@ class ChatCompletionsProvider:
             raise ProviderResponseError("Chat Completions message content must be a string")
         tool_calls = self._parse_tool_calls(message.get("tool_calls"))
         if not text and not tool_calls:
-            raise ProviderResponseError("Chat Completions payload contains no text or tool call")
+            # Thinking-capable APIs may exhaust a bounded completion on private reasoning before
+            # they emit a final answer.  Preserve neither that chain-of-thought nor a fabricated
+            # answer: a syntactically valid reasoning-only response becomes an empty candidate
+            # that downstream evaluators can score as zero.  Treating it as a transport failure
+            # would instead obscure a real model outcome and tempt an unauthorized retry.
+            reasoning_content = message.get("reasoning_content")
+            if not isinstance(reasoning_content, str) or not reasoning_content:
+                raise ProviderResponseError(
+                    "Chat Completions payload contains no text or tool call"
+                )
         response_id = raw.get("id")
         if response_id is not None and not isinstance(response_id, str):
             raise ProviderResponseError("Chat Completions id must be a string")
@@ -188,20 +260,30 @@ class ChatCompletionsProvider:
             calls.append(ToolCall(call_id=call_id, name=name, arguments_json=arguments))
         return tuple(calls)
 
-    @staticmethod
-    def _parse_usage(value: object) -> TokenUsage:
+    def _parse_usage(self, value: object) -> TokenUsage:
         if value is None:
+            if self._settings.require_usage:
+                raise ProviderResponseError("Chat Completions payload is missing usage")
             return TokenUsage()
         if not isinstance(value, dict):
             raise ProviderResponseError("Chat Completions usage must be an object")
 
-        def read(key: str) -> int:
+        def read(key: str, *, required: bool = False) -> int:
+            if required and key not in value:
+                raise ProviderResponseError(f"Chat Completions usage is missing {key!r}")
             item: object = value.get(key, 0)
             if isinstance(item, bool) or not isinstance(item, int) or item < 0:
                 raise ProviderResponseError(f"usage field {key!r} must be a non-negative integer")
             return item
 
+        input_tokens = read("prompt_tokens", required=self._settings.require_usage)
+        cached_input_tokens = read("prompt_cache_hit_tokens")
+        if cached_input_tokens > input_tokens:
+            raise ProviderResponseError(
+                "usage field 'prompt_cache_hit_tokens' cannot exceed 'prompt_tokens'"
+            )
         return TokenUsage(
-            input_tokens=read("prompt_tokens"),
-            output_tokens=read("completion_tokens"),
+            input_tokens=input_tokens,
+            output_tokens=read("completion_tokens", required=self._settings.require_usage),
+            cached_input_tokens=cached_input_tokens,
         )

@@ -40,6 +40,18 @@ def test_real_lean_content_fixture_binds_twenty_unique_declarations() -> None:
     assert len({item.declaration for item in graph.declarations}) == 20
 
 
+def test_loaded_manifest_hash_remains_bound_to_the_exact_parsed_bytes(tmp_path: Path) -> None:
+    manifest, _ = _copied_fixture(tmp_path)
+    parsed_bytes = manifest.read_bytes()
+    fixture = load_real_lean_project_dag(manifest)
+    captured = hashlib.sha256(parsed_bytes).hexdigest()
+
+    manifest.write_bytes(parsed_bytes + b" ")
+
+    assert fixture.manifest_sha256() == captured
+    assert fixture.manifest_sha256() != hashlib.sha256(manifest.read_bytes()).hexdigest()
+
+
 def test_real_lean_content_fixture_rejects_source_hash_drift(tmp_path: Path) -> None:
     manifest, _ = _copied_fixture(tmp_path)
     source = manifest.parent / "lean" / "AutoLean" / "ProjectDagPreflight" / "Foundations.lean"

@@ -5,14 +5,17 @@ import json
 import sqlite3
 from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
+from dataclasses import replace
 from datetime import UTC, datetime, timedelta
 from pathlib import Path
 from threading import Barrier
 
 import pytest
 from autolean_contracts import (
+    ActorKindV1,
     AlignmentTargetV1,
     AttestationPurposeV1,
+    EditRegionV1,
     ExecutionGraphV1,
     FidelityEvidenceArtifactRefV1,
     FidelityReportV1,
@@ -30,7 +33,9 @@ from autolean_contracts import (
     MathematicalSpecificationV1,
     OciVerifierExecutionPolicyV2,
     PermissionDecisionV1,
+    ProofStatusV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     ReleaseTierV1,
     RightsRecordV1,
     SourceRecordV1,
@@ -59,6 +64,7 @@ from autolean_contracts.graphs import (
     MathematicalNodeV1,
 )
 from autolean_control_plane import (
+    ArtifactRef,
     ArtifactStore,
     ControlPlane,
     DashboardProjection,
@@ -181,6 +187,7 @@ def _bundle(
     nonce: str | None = None,
     bundle_key: str = "bundle",
     additional_source_spans: tuple[SourceSpanV1, ...] = (),
+    allowed_edit_regions: tuple[EditRegionV1, ...] = (),
 ) -> FormalizationTaskBundleV1:
     source_id = _id("source")
     span = SourceSpanV1(
@@ -245,6 +252,7 @@ def _bundle(
         policy=TaskPolicyV1(
             release_tier=ReleaseTierV1.CALIBRATION,
             fidelity_risk=FidelityRiskV1.L1_SIMPLE,
+            allowed_edit_regions=allowed_edit_regions,
         ),
     )
     frozen_payload = draft.model_dump(mode="python", round_trip=True)
@@ -723,6 +731,13 @@ def _submission(bundle: FormalizationTaskBundleV1) -> ProofSubmissionV1:
         proof_source=source,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, source),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=_id("proof-provenance"),
+                actor_id="control-plane-test-worker",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 
@@ -1780,6 +1795,534 @@ def test_projection_composite_node_ids_preserve_names_and_drop_tainted_fields(
     assert "TAINTED-MODEL-PROMPT" not in exported
     assert '"proof_source"' not in exported
     assert '"metadata"' not in exported
+
+
+def test_projection_shows_t7_and_fate_public_event_families_without_private_fields(
+    tmp_path: Path,
+) -> None:
+    t7_bundle_id = "t7-synthetic-worker-fixture-a"
+    t7_raw_node_id = "T7-RAW-NODE-ID-SENTINEL"
+    fate_bundle_id = "fate-public-attempt-a"
+    forbidden = {
+        t7_raw_node_id,
+        "T7-PRIVATE-MODULE-NAME",
+        "T7-PRIVATE-LEASE-HOLDER",
+        "T7-RAW-PROMPT-SENTINEL",
+        "T7-RAW-PROOF-SENTINEL",
+        "T7-PRIVATE-CAS-DIGEST-SENTINEL",
+        "FATE-PRIVATE-APPROVAL-SNAPSHOT",
+        "FATE-PRIVATE-CANDIDATE",
+    }
+    events = (
+        StoredEvent(
+            global_position=1,
+            event_id="t7-complete-a",
+            entity_type="t7_synthetic_node_v2",
+            entity_id=f"worker-input-hash-a:{t7_raw_node_id}",
+            entity_sequence=1,
+            event_type="t7_synthetic_node_v2.synthetic_complete",
+            payload={
+                "schema_version": "autolean.t7-synthetic-node-result.v2",
+                "bundle_id": t7_bundle_id,
+                "node_id": t7_raw_node_id,
+                "module": "T7-PRIVATE-MODULE-NAME",
+                "typed_outcome": "synthetic_complete",
+                "evidence_class": "synthetic_fake_node_v1",
+                "promotion_eligible": False,
+                "lease_holder_id": "T7-PRIVATE-LEASE-HOLDER",
+                "fencing_token": 7,
+                "source_prompt": "T7-RAW-PROMPT-SENTINEL",
+                "proof_candidate": "T7-RAW-PROOF-SENTINEL",
+                "private_cas_digest": "T7-PRIVATE-CAS-DIGEST-SENTINEL",
+            },
+            metadata={},
+            recorded_at="2026-07-27T12:00:01Z",
+        ),
+        StoredEvent(
+            global_position=2,
+            event_id="fate-start-a",
+            entity_type="fate-attempt",
+            entity_id=fate_bundle_id,
+            entity_sequence=1,
+            event_type="fate.attempt.started",
+            payload={
+                "schema_version": "autolean.fate-execution.v1",
+                "bundle_id": fate_bundle_id,
+                "run_id": "fate-run-a",
+                "problem_id": "FATE-M-3",
+                "attempt_number": 1,
+                "raw_output_persisted": False,
+                "approval_snapshot": "FATE-PRIVATE-APPROVAL-SNAPSHOT",
+            },
+            metadata={},
+            recorded_at="2026-07-27T12:00:02Z",
+        ),
+        StoredEvent(
+            global_position=3,
+            event_id="fate-terminal-a",
+            entity_type="fate-attempt",
+            entity_id=fate_bundle_id,
+            entity_sequence=2,
+            event_type="fate.attempt.verified",
+            payload={
+                "schema_version": "autolean.fate-execution.v1",
+                "bundle_id": fate_bundle_id,
+                "run_id": "fate-run-a",
+                "problem_id": "FATE-M-3",
+                "attempt_number": 1,
+                "accepted": True,
+                "elapsed_ms": 246,
+                "input_tokens": 100,
+                "output_tokens": 20,
+                "cost_microusd": 2_500,
+                "contains_raw_output": False,
+                "contains_candidate_source": False,
+                "contains_private_digests": False,
+                "private_artifacts_persisted": True,
+                "candidate": "FATE-PRIVATE-CANDIDATE",
+            },
+            metadata={},
+            recorded_at="2026-07-27T12:00:03Z",
+        ),
+        StoredEvent(
+            global_position=4,
+            event_id="future-event-a",
+            entity_type="future-event",
+            entity_id="future-entity-a",
+            entity_sequence=1,
+            event_type="future.event.v3",
+            payload={"unrecognized": True},
+            metadata={},
+            recorded_at="2026-07-27T12:00:04Z",
+        ),
+    )
+
+    snapshot = DashboardProjection(events).snapshot()
+    public_ref = hashlib.sha256(
+        b"autolean.dashboard.t7-public-node-ref.v1\x00"
+        + json.dumps(
+            {"bundle_id": t7_bundle_id, "node_id": t7_raw_node_id},
+            ensure_ascii=True,
+            allow_nan=False,
+            sort_keys=True,
+            separators=(",", ":"),
+        ).encode("utf-8")
+    ).hexdigest()
+
+    assert snapshot["nodes"] == [
+        {
+            "dependencies": [],
+            "graph": "execution",
+            "id": f"dashboard-node|{t7_bundle_id}|execution|t7-public:{public_ref}",
+            "kind": "synthetic_execution",
+            "label": f"T7 synthetic node {public_ref[:12]}",
+            "revision": 1,
+            "source_node_id": f"t7-public:{public_ref}",
+            "status": "synthetic_complete",
+            "task_id": t7_bundle_id,
+            "updated_at": "2026-07-27T12:00:01Z",
+        }
+    ]
+    assert snapshot["runs"] == [
+        {
+            "id": f"fate:{fate_bundle_id}",
+            "task_id": fate_bundle_id,
+            "provider": "fate-execution",
+            "model": "redacted-by-public-sidecar",
+            "started_at": "2026-07-27T12:00:02Z",
+            "duration_ms": 246,
+            "input_tokens": 100,
+            "output_tokens": 20,
+            "cost_usd": 0.0025,
+            "status": "benchmark_verified",
+            "verification": "benchmark_accepted",
+        }
+    ]
+    assert [item["summary"] for item in snapshot["events"]] == [
+        "T7 synthetic complete",
+        "FATE benchmark attempt started",
+        "FATE benchmark verifier accepted",
+        "future event v3",
+    ]
+    exported = export_dashboard_projection(tmp_path / "projection.json", events).read_text(
+        encoding="utf-8"
+    )
+    assert all(value not in exported for value in forbidden)
+
+
+@pytest.mark.parametrize(
+    ("event_type", "accepted"),
+    [
+        ("verification.accepted", True),
+        ("verification.rejected", False),
+    ],
+)
+def test_generic_verification_cannot_change_t7_synthetic_status(
+    event_type: str,
+    accepted: bool,
+) -> None:
+    bundle_id = "t7-cross-protocol-bundle"
+    synthetic = StoredEvent(
+        global_position=1,
+        event_id="t7-cross-protocol-result",
+        entity_type="t7_synthetic_node_v2",
+        entity_id="private-worker-node-identity",
+        entity_sequence=1,
+        event_type="t7_synthetic_node_v2.synthetic_complete",
+        payload={
+            "schema_version": "autolean.t7-synthetic-node-result.v2",
+            "bundle_id": bundle_id,
+            "node_id": "private-node-id",
+            "typed_outcome": "synthetic_complete",
+            "evidence_class": "synthetic_fake_node_v1",
+            "promotion_eligible": False,
+        },
+        metadata={},
+        recorded_at="2026-07-27T12:00:00Z",
+    )
+    verification = StoredEvent(
+        global_position=2,
+        event_id="unrelated-proof-verification",
+        entity_type="verification",
+        entity_id="proof-from-another-protocol",
+        entity_sequence=1,
+        event_type=event_type,
+        payload={
+            "bundle_id": bundle_id,
+            "proof_id": "proof-from-another-protocol",
+            "accepted": accepted,
+        },
+        metadata={},
+        recorded_at="2026-07-27T12:00:01Z",
+    )
+
+    snapshot = DashboardProjection((synthetic, verification)).snapshot()
+
+    assert snapshot["nodes"][0]["kind"] == "synthetic_execution"
+    assert snapshot["nodes"][0]["status"] == "synthetic_complete"
+    assert snapshot["nodes"][0]["status"] not in {"verified", "blocked", "failed"}
+
+
+@pytest.mark.parametrize(
+    ("event_type", "payload", "message"),
+    [
+        (
+            "t7_synthetic_node_v2.synthetic_complete",
+            {
+                "schema_version": "autolean.t7-synthetic-node-result.v2",
+                "bundle_id": "t7-bundle-a",
+                "node_id": "node-a",
+                "typed_outcome": "synthetic_complete",
+                "evidence_class": "synthetic_fake_node_v1",
+                "promotion_eligible": True,
+            },
+            "T7 synthetic",
+        ),
+        (
+            "fate.attempt.verified",
+            {
+                "schema_version": "autolean.fate-execution.v1",
+                "bundle_id": "fate-bundle-a",
+                "run_id": "fate-run-a",
+                "problem_id": "FATE-M-3",
+                "attempt_number": 1,
+                "accepted": True,
+                "elapsed_ms": 1,
+                "input_tokens": 1,
+                "output_tokens": 1,
+                "cost_microusd": 1,
+                "contains_raw_output": True,
+                "contains_candidate_source": False,
+                "contains_private_digests": False,
+                "private_artifacts_persisted": True,
+            },
+            "FATE terminal",
+        ),
+    ],
+)
+def test_projection_rejects_known_public_execution_events_with_unsafe_boundaries(
+    event_type: str,
+    payload: dict[str, object],
+    message: str,
+) -> None:
+    bundle_id = payload["bundle_id"]
+    assert isinstance(bundle_id, str)
+    event = StoredEvent(
+        global_position=1,
+        event_id="unsafe-public-execution-event",
+        entity_type=("t7_synthetic_node_v2" if event_type.startswith("t7_") else "fate-attempt"),
+        entity_id=("worker-input-hash-a:node-a" if event_type.startswith("t7_") else bundle_id),
+        entity_sequence=(1 if event_type.startswith("t7_") else 2),
+        event_type=event_type,
+        payload=payload,
+        metadata={},
+        recorded_at="2026-07-27T12:00:00Z",
+    )
+
+    with pytest.raises(ProjectionError, match=message):
+        DashboardProjection((event,)).snapshot()
+
+
+def _fate_projection_test_event(
+    position: int,
+    event_type: str,
+    *,
+    bundle_id: str = "fate-replay-bundle",
+    entity_id: str | None = None,
+    include_attempt_seed: bool = True,
+    overrides: dict[str, object] | None = None,
+) -> StoredEvent:
+    payload: dict[str, object] = {
+        "schema_version": "autolean.fate-execution.v1",
+        "bundle_id": bundle_id,
+        "run_id": "fate-replay-run",
+        "problem_id": "FATE-H-31",
+        "attempt_number": 1,
+        "attempt_seed": "a" * 64,
+    }
+    if not include_attempt_seed:
+        payload.pop("attempt_seed")
+    if event_type == "fate.attempt.started":
+        payload["raw_output_persisted"] = False
+    else:
+        payload.update(
+            {
+                "accepted": True,
+                "elapsed_ms": 25,
+                "input_tokens": 10,
+                "output_tokens": 5,
+                "cost_microusd": 100,
+                "contains_raw_output": False,
+                "contains_candidate_source": False,
+                "contains_private_digests": False,
+                "private_artifacts_persisted": True,
+            }
+        )
+    payload.update(overrides or {})
+    return StoredEvent(
+        global_position=position,
+        event_id=f"fate-replay-event-{position}",
+        entity_type="fate-attempt",
+        entity_id=entity_id or bundle_id,
+        entity_sequence=1 if event_type == "fate.attempt.started" else 2,
+        event_type=event_type,
+        payload=payload,
+        metadata={},
+        recorded_at=f"2026-07-27T12:00:0{position}Z",
+    )
+
+
+def test_fate_replay_is_ordered_by_event_position_and_requires_started_event() -> None:
+    started = _fate_projection_test_event(1, "fate.attempt.started")
+    terminal = _fate_projection_test_event(2, "fate.attempt.verified")
+
+    snapshot = DashboardProjection((terminal, started)).snapshot()
+
+    assert snapshot["runs"][0]["status"] == "benchmark_verified"
+    assert snapshot["runs"][0]["started_at"] == started.recorded_at
+
+    with pytest.raises(ProjectionError, match="no matching started event"):
+        DashboardProjection((terminal,)).snapshot()
+
+
+def test_fate_v2_events_match_current_public_producer_contract(tmp_path: Path) -> None:
+    private_sentinel = "FATE-V2-PRIVATE-APPROVAL-SNAPSHOT"
+    started = _fate_projection_test_event(
+        1,
+        "fate.attempt.started",
+        overrides={
+            "schema_version": "autolean.fate-execution.v2",
+            "bundle_hash": "a" * 64,
+            "authorization_hash": "b" * 64,
+            "approval_hash": "c" * 64,
+            "request_hash": "d" * 64,
+            "context_pack_hash": "e" * 64,
+            "execution_nonce": "fate-execution-nonce",
+        },
+    )
+    terminal = _fate_projection_test_event(
+        2,
+        "fate.attempt.verified",
+        overrides={
+            "schema_version": "autolean.fate-execution.v2",
+            "bundle_hash": "a" * 64,
+            "authorization_hash": "b" * 64,
+            "approval_hash": "c" * 64,
+            "approval_snapshot": {"private": private_sentinel},
+            "verification_event_id": "verification-event-v2",
+            "verifier_id": "independent-verifier-v2",
+        },
+    )
+
+    snapshot = DashboardProjection((started, terminal)).snapshot()
+
+    assert snapshot["runs"][0]["status"] == "benchmark_verified"
+    exported = export_dashboard_projection(tmp_path / "projection.json", (started, terminal))
+    assert private_sentinel not in exported.read_text(encoding="utf-8")
+
+
+@pytest.mark.parametrize(
+    "event_type",
+    [
+        "fate.attempt.started",
+        "fate.attempt.verified",
+    ],
+)
+def test_fate_v2_event_requires_attempt_seed(event_type: str) -> None:
+    event = _fate_projection_test_event(
+        1,
+        event_type,
+        include_attempt_seed=False,
+        overrides={"schema_version": "autolean.fate-execution.v2"},
+    )
+
+    with pytest.raises(ProjectionError, match="cannot be safely projected"):
+        DashboardProjection((event,)).snapshot()
+
+
+@pytest.mark.parametrize("attempt_seed", ["short", "A" * 64])
+def test_fate_v2_attempt_seed_must_be_a_lowercase_sha256(attempt_seed: str) -> None:
+    event = _fate_projection_test_event(
+        1,
+        "fate.attempt.started",
+        overrides={
+            "schema_version": "autolean.fate-execution.v2",
+            "attempt_seed": attempt_seed,
+        },
+    )
+
+    with pytest.raises(ProjectionError, match="cannot be safely projected"):
+        DashboardProjection((event,)).snapshot()
+
+
+@pytest.mark.parametrize(
+    ("field", "different_value"),
+    [
+        ("run_id", "different-run"),
+        ("problem_id", "FATE-X-11"),
+        ("attempt_number", 2),
+        ("attempt_seed", "b" * 64),
+    ],
+)
+def test_fate_terminal_identity_must_match_started_event(
+    field: str,
+    different_value: object,
+) -> None:
+    started = _fate_projection_test_event(
+        1,
+        "fate.attempt.started",
+        overrides={"schema_version": "autolean.fate-execution.v2"},
+    )
+    terminal = _fate_projection_test_event(
+        2,
+        "fate.attempt.verified",
+        overrides={
+            "schema_version": "autolean.fate-execution.v2",
+            field: different_value,
+        },
+    )
+
+    with pytest.raises(ProjectionError, match="identity differs"):
+        DashboardProjection((started, terminal)).snapshot()
+
+
+def test_fate_terminal_entity_must_match_started_event() -> None:
+    started = _fate_projection_test_event(1, "fate.attempt.started")
+    terminal = _fate_projection_test_event(
+        2,
+        "fate.attempt.verified",
+        entity_id="different-fate-entity",
+    )
+
+    with pytest.raises(ProjectionError, match="cannot be safely projected"):
+        DashboardProjection((started, terminal)).snapshot()
+
+
+def test_fate_terminal_schema_must_match_started_event() -> None:
+    started = _fate_projection_test_event(1, "fate.attempt.started")
+    terminal = _fate_projection_test_event(
+        2,
+        "fate.attempt.verified",
+        overrides={"schema_version": "autolean.fate-execution.v2"},
+    )
+
+    with pytest.raises(ProjectionError, match="identity differs"):
+        DashboardProjection((started, terminal)).snapshot()
+
+
+def test_fate_replay_rejects_duplicate_terminal_event() -> None:
+    started = _fate_projection_test_event(1, "fate.attempt.started")
+    terminal = _fate_projection_test_event(2, "fate.attempt.verified")
+    conflicting_terminal = _fate_projection_test_event(
+        3,
+        "fate.attempt.verified",
+        overrides={"accepted": False},
+    )
+
+    with pytest.raises(ProjectionError, match="duplicate FATE terminal"):
+        DashboardProjection((started, terminal, conflicting_terminal)).snapshot()
+
+
+@pytest.mark.parametrize(
+    ("event_type", "accepted"),
+    [
+        ("verification.accepted", True),
+        ("verification.rejected", False),
+    ],
+)
+def test_generic_verification_cannot_terminalize_fate_attempt(
+    event_type: str,
+    accepted: bool,
+) -> None:
+    bundle_id = "fate-replay-bundle"
+    started = _fate_projection_test_event(1, "fate.attempt.started", bundle_id=bundle_id)
+    generic_verification = StoredEvent(
+        global_position=2,
+        event_id="generic-verification-targeting-fate-run",
+        entity_type="verification",
+        entity_id=f"fate:{bundle_id}",
+        entity_sequence=1,
+        event_type=event_type,
+        payload={
+            "bundle_id": bundle_id,
+            "proof_id": f"fate:{bundle_id}",
+            "accepted": accepted,
+        },
+        metadata={},
+        recorded_at="2026-07-27T12:00:02Z",
+    )
+
+    with pytest.raises(ProjectionError, match="cannot target a FATE benchmark run"):
+        DashboardProjection((started, generic_verification)).snapshot()
+
+
+@pytest.mark.parametrize("fate_first", [True, False])
+def test_proof_submission_cannot_replace_fate_run_identity(fate_first: bool) -> None:
+    bundle_id = "fate-replay-bundle"
+    started = _fate_projection_test_event(
+        1 if fate_first else 2,
+        "fate.attempt.started",
+        bundle_id=bundle_id,
+    )
+    proof_submission = StoredEvent(
+        global_position=2 if fate_first else 1,
+        event_id="proof-submission-colliding-with-fate-run",
+        entity_type="proof",
+        entity_id=f"fate:{bundle_id}",
+        entity_sequence=1,
+        event_type="proof.submitted",
+        payload={
+            "bundle_id": bundle_id,
+            "proof_id": f"fate:{bundle_id}",
+            "provider": "fake",
+            "model": "fake",
+        },
+        metadata={},
+        recorded_at="2026-07-27T12:00:02Z",
+    )
+
+    with pytest.raises(ProjectionError, match="run identity"):
+        DashboardProjection((started, proof_submission)).snapshot()
 
 
 def test_projection_rejected_verification_is_fail_closed() -> None:
@@ -3405,3 +3948,151 @@ def test_legacy_registration_projection_rejects_ambiguous_json(
             ).fetchone()
             is None
         )
+
+
+def test_claimed_bundle_can_be_fetched_after_restart_and_materialized(
+    tmp_path: Path,
+) -> None:
+    bundle = _bundle(bundle_key="claimed-fetch")
+    first = _plane(tmp_path)
+    binding = first.register_bundle(bundle, idempotency_key="register-claimed-fetch")
+    receipt = first.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch",
+        ttl_seconds=60,
+        idempotency_key="claim-claimed-fetch",
+    )
+
+    restarted = _plane(tmp_path)
+    fetched = restarted.fetch_claimed_bundle(receipt)
+    replayed = restarted.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch",
+        ttl_seconds=60,
+        idempotency_key="claim-claimed-fetch",
+    )
+
+    from autolean_prover.execution import WorkspaceMaterializer
+
+    workspace = WorkspaceMaterializer().materialize(
+        fetched,
+        tmp_path / "claimed-fetch-workspace",
+    )
+    assert fetched == bundle
+    assert receipt.bundle_id == binding.bundle_id
+    assert receipt.bundle_hash == binding.bundle_hash
+    assert receipt.bundle_artifact == binding.bundle_artifact
+    assert replayed == receipt
+    assert restarted.fetch_claimed_bundle(replayed) == bundle
+    assert workspace.bundle == bundle
+    assert workspace.proof_path.name == "Proof.lean"
+
+    with pytest.raises(InvalidTransition, match="different bundle"):
+        restarted.fetch_claimed_bundle(replace(receipt, bundle_id=_id("forged-bundle").value))
+    with pytest.raises(InvalidTransition, match="persisted task claim"):
+        restarted.fetch_claimed_bundle(replace(receipt, bundle_hash="f" * 64))
+    with pytest.raises(InvalidTransition, match="persisted task claim"):
+        restarted.fetch_claimed_bundle(
+            replace(
+                receipt,
+                bundle_artifact=ArtifactRef(
+                    digest="f" * 64,
+                    size=receipt.bundle_artifact.size,
+                ),
+            )
+        )
+
+
+def test_fetch_claimed_bundle_rejects_stale_lease_and_corrupt_artifact(
+    tmp_path: Path,
+) -> None:
+    now = [datetime.now(UTC)]
+
+    def clock() -> datetime:
+        return now[0]
+
+    plane = _plane(tmp_path, clock=clock)
+    bundle = _bundle(
+        bundle_key="claimed-fetch-stale",
+        signer=_builder_signer(clock),
+        nonce="claimed-fetch-stale-builder",
+    )
+    plane.register_bundle(bundle, idempotency_key="register-claimed-fetch-stale")
+    receipt = plane.claim(
+        bundle.bundle_id.value,
+        worker_id="worker-claimed-fetch-stale",
+        ttl_seconds=1,
+        idempotency_key="claim-claimed-fetch-stale",
+    )
+
+    artifact_path = plane.artifacts.path_for(receipt.bundle_artifact)
+    artifact_path.write_bytes(b"corrupt")
+    with pytest.raises(InvalidTransition, match="unavailable or corrupt"):
+        plane.fetch_claimed_bundle(receipt)
+
+    now[0] += timedelta(seconds=2)
+    restarted = _plane(tmp_path, clock=clock)
+    with pytest.raises(StaleFence):
+        restarted.fetch_claimed_bundle(receipt)
+
+
+def test_submit_proof_rejects_non_candidate_status_and_missing_provenance(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    bundle = _bundle(bundle_key="submission-gate")
+    plane.register_bundle(bundle, idempotency_key="register-submission-gate")
+    receipt = plane.claim(
+        bundle.bundle_id.value,
+        worker_id="submission-gate-worker",
+        ttl_seconds=60,
+        idempotency_key="claim-submission-gate",
+    )
+    submission = _submission(bundle)
+
+    with pytest.raises(InvalidTransition, match="candidate proof status only"):
+        plane.submit_proof(
+            bundle.bundle_id.value,
+            lease=receipt.lease,
+            submission=submission.model_copy(update={"status": ProofStatusV1.KERNEL_VERIFIED}),
+            idempotency_key="submit-non-candidate",
+        )
+    with pytest.raises(InvalidTransition, match="explicit provenance"):
+        plane.submit_proof(
+            bundle.bundle_id.value,
+            lease=receipt.lease,
+            submission=submission.model_copy(update={"provenance": ()}),
+            idempotency_key="submit-without-provenance",
+        )
+    assert plane.events.read_stream("proof", submission.proof_id.value) == ()
+
+
+def test_v1_bundle_keeps_line_ranged_edit_region_payload_compatible() -> None:
+    region = EditRegionV1(
+        artifact_ref="Proof.lean",
+        start_line=1,
+        end_line=1,
+    )
+
+    bundle = _bundle(
+        bundle_key="line-ranged-edit-region",
+        allowed_edit_regions=(region,),
+    )
+
+    assert bundle.contract.policy.allowed_edit_regions == (region,)
+
+
+def test_registration_replay_rejects_an_invalid_mathlib_axiom_policy(
+    tmp_path: Path,
+) -> None:
+    plane = _plane(tmp_path)
+    bundle = _bundle(bundle_key="invalid-replayed-axiom-policy")
+    plane.register_bundle(bundle, idempotency_key="register-valid-axiom-policy")
+    event = plane.events.read_stream("task", bundle.bundle_id.value)[0]
+    payload = dict(event.payload)
+    payload["axiom_profile"] = "mathlib"
+    payload["axioms_allowlist"] = ["Classical.choice", "AutoLean.UnsafeAxiom"]
+    tampered = replace(event, payload=payload)
+
+    with pytest.raises(InvalidTransition, match="invalid axiom policy"):
+        plane._binding_from_event(tampered)

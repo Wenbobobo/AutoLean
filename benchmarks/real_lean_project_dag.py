@@ -84,10 +84,13 @@ class RealLeanProjectDagV1:
     modules: tuple[LeanModuleV1, ...]
     declarations: tuple[LeanDeclarationV1, ...]
     manifest_path: Path
+    loaded_manifest_sha256: str
 
     def __post_init__(self) -> None:
         if not self.name.strip() or not _safe_relative_directory(self.source_root):
             raise RealLeanProjectDagError("real Lean fixture metadata is invalid")
+        if _SHA256.fullmatch(self.loaded_manifest_sha256) is None:
+            raise RealLeanProjectDagError("real Lean fixture manifest hash is invalid")
         module_names = tuple(module.module for module in self.modules)
         module_files = tuple(module.file for module in self.modules)
         declaration_ids = tuple(item.node_id for item in self.declarations)
@@ -215,7 +218,9 @@ class RealLeanProjectDagV1:
         )
 
     def manifest_sha256(self) -> str:
-        return hashlib.sha256(self.manifest_path.read_bytes()).hexdigest()
+        """Return the digest of the exact manifest bytes parsed by the loader."""
+
+        return self.loaded_manifest_sha256
 
     def source_path(self, module: LeanModuleV1) -> Path:
         root = self.root.resolve()
@@ -299,7 +304,7 @@ def _safe_relative_directory(value: str) -> bool:
     )
 
 
-def _load_json_object(path: Path) -> dict[str, object]:
+def _load_json_object(path: Path) -> tuple[dict[str, object], str]:
     def unique_pairs(pairs: list[tuple[str, object]]) -> dict[str, object]:
         document: dict[str, object] = {}
         for key, value in pairs:
@@ -309,12 +314,13 @@ def _load_json_object(path: Path) -> dict[str, object]:
         return document
 
     try:
-        value = json.loads(path.read_text(encoding="utf-8"), object_pairs_hook=unique_pairs)
+        content = path.read_bytes()
+        value = json.loads(content.decode("utf-8"), object_pairs_hook=unique_pairs)
     except (OSError, UnicodeDecodeError, json.JSONDecodeError) as error:
         raise RealLeanProjectDagError("real Lean fixture manifest could not be parsed") from error
     if not isinstance(value, dict):
         raise RealLeanProjectDagError("real Lean fixture manifest must be an object")
-    return value
+    return value, hashlib.sha256(content).hexdigest()
 
 
 def _expect_str(value: object, label: str) -> str:
@@ -333,7 +339,7 @@ def load_real_lean_project_dag(path: str | Path) -> RealLeanProjectDagV1:
     """Load and byte-validate the isolated real Lean content fixture."""
 
     manifest_path = Path(path)
-    raw = _load_json_object(manifest_path)
+    raw, loaded_manifest_sha256 = _load_json_object(manifest_path)
     expected_root = {"schema_version", "name", "source_root", "modules", "declarations"}
     if set(raw) != expected_root:
         raise RealLeanProjectDagError("real Lean fixture manifest has unexpected fields")
@@ -379,6 +385,7 @@ def load_real_lean_project_dag(path: str | Path) -> RealLeanProjectDagV1:
         modules=tuple(modules),
         declarations=tuple(declarations),
         manifest_path=manifest_path,
+        loaded_manifest_sha256=loaded_manifest_sha256,
     )
 
 

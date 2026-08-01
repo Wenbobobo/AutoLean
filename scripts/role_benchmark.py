@@ -13,6 +13,16 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 if str(PROJECT_ROOT) not in sys.path:
     sys.path.insert(0, str(PROJECT_ROOT))
 
+_COMPARE_SUITE_PRESETS: dict[str, tuple[tuple[str, str], ...]] = {
+    "calibration-pairs-v3": (
+        ("fake.oracle.prover", "fake.mutant.prover"),
+        ("fake.oracle.statement-formalizer", "fake.mutant.statement-formalizer"),
+        ("fake.oracle.fidelity-reviewer", "fake.mutant.fidelity-reviewer"),
+        ("fake.oracle.cheating-supervisor", "fake.mutant.cheating-supervisor"),
+        ("fake.oracle.task-allocator", "fake.mutant.task-allocator"),
+    ),
+}
+
 
 def _absolute(path: str, *, label: str) -> Path:
     resolved = Path(path).resolve()
@@ -58,6 +68,7 @@ def main() -> None:
     )
     from benchmarks.role_benchmark import (
         RoleBenchmarkHarness,
+        RoleBenchmarkPrivateManifestStore,
         RoleBenchmarkRawOutputStore,
         RoleBenchmarkStore,
         ScriptedFakeRoleExecutor,
@@ -68,8 +79,6 @@ def main() -> None:
         load_fake_fixture,
         load_raw_artifact_manifest_json,
         operator_private_benchmark_paths,
-        prepare_private_manifest_path,
-        raw_artifact_manifest_json,
         report_json,
         validate_report_private_manifest,
     )
@@ -123,11 +132,15 @@ def main() -> None:
     compare_suite_parser.add_argument("--baseline-run", required=True)
     compare_suite_parser.add_argument("--candidate-run", required=True)
     compare_suite_parser.add_argument(
+        "--preset",
+        choices=tuple(_COMPARE_SUITE_PRESETS),
+        help="named suite expanded before any explicit --cell-pair values",
+    )
+    compare_suite_parser.add_argument(
         "--cell-pair",
         action="append",
-        required=True,
         metavar="BASELINE_CELL=CANDIDATE_CELL",
-        help="repeatable paired cells; each pair must stay within one role",
+        help="repeatable paired cells appended after --preset; each pair must stay within one role",
     )
     compare_suite_parser.add_argument("--output")
 
@@ -150,6 +163,7 @@ def main() -> None:
         )
         database = output_root / "roles.sqlite3"
         private_paths = operator_private_benchmark_paths(str(args.run_id))
+        private_manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
         raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
         with RoleBenchmarkStore(database) as store:
             report = RoleBenchmarkHarness().run(
@@ -157,15 +171,12 @@ def main() -> None:
                 executor=executor,
                 store=store,
                 raw_output_store=raw_store,
+                private_manifest_store=private_manifest_store,
                 readiness=readiness,
                 run_id=str(args.run_id),
             )
-        manifest = raw_store.build_manifest(report.run, report.results)
+        manifest = private_manifest_store.load()
         validate_report_private_manifest(report, manifest)
-        _write_or_print(
-            raw_artifact_manifest_json(manifest),
-            str(prepare_private_manifest_path(private_paths)),
-        )
         _write_or_print(report_json(report), str(output_root / "report.json"))
         sys.stdout.write(report_json(report))
         return
@@ -179,21 +190,19 @@ def main() -> None:
             )
             executor = ScriptedFakeRoleExecutor(fixture)
             private_paths = operator_private_benchmark_paths(str(args.run_id))
+            private_manifest_store = RoleBenchmarkPrivateManifestStore(private_paths)
             raw_store = RoleBenchmarkRawOutputStore(private_paths.raw_output_root)
             report = RoleBenchmarkHarness().run(
                 fixture.matrix,
                 executor=executor,
                 store=store,
                 raw_output_store=raw_store,
+                private_manifest_store=private_manifest_store,
                 readiness=readiness,
                 run_id=str(args.run_id),
             )
-            manifest = raw_store.build_manifest(report.run, report.results)
+            manifest = private_manifest_store.load()
             validate_report_private_manifest(report, manifest)
-            _write_or_print(
-                raw_artifact_manifest_json(manifest),
-                str(prepare_private_manifest_path(private_paths)),
-            )
             _write_or_print(report_json(report), args.output)
         elif args.command == "report":
             report = store.report(str(args.run_id))
@@ -218,12 +227,14 @@ def main() -> None:
             )
             _write_or_print(comparison_json(comparison), args.output)
         else:
-            pairs: list[tuple[str, str]] = []
-            for raw_pair in args.cell_pair:
+            pairs = list(_COMPARE_SUITE_PRESETS.get(args.preset, ()))
+            for raw_pair in args.cell_pair or ():
                 left, separator, right = str(raw_pair).partition("=")
                 if not separator or not left or not right:
                     raise ValueError("--cell-pair must be BASELINE_CELL=CANDIDATE_CELL")
                 pairs.append((left, right))
+            if not pairs:
+                raise ValueError("compare-suite requires --preset or at least one --cell-pair")
             baseline = store.report(str(args.baseline_run))
             candidate = store.report(str(args.candidate_run))
             suite = compare_report_suite(

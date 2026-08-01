@@ -11,7 +11,6 @@ from scripts.fate_wsl_runtime import (
     HOST_RESULT_SCHEMA,
     ProcessResult,
     RuntimePreparationError,
-    _attributes_payload,
     _host_dispatch,
     _load_locked_dependencies,
     _pure_absolute_posix,
@@ -109,14 +108,6 @@ def test_host_dispatch_rejects_absolute_path_in_native_result(
         _host_dispatch(_audit_args(tmp_path), FakeHostRunner(leaked_result=True))
 
 
-def test_eol_policy_is_path_specific_and_deterministic() -> None:
-    assert _attributes_payload("M") == (
-        b"FATE-M.json text eol=crlf\nlake-manifest.json text eol=crlf\n"
-    )
-    assert b"*.lean" not in _attributes_payload("M")
-    assert b"*" not in _attributes_payload("X")
-
-
 def test_posix_boundaries_and_deterministic_layout_reject_escape(tmp_path: Path) -> None:
     assert _pure_absolute_posix("/home/operator/cache", "cache").as_posix() == (
         "/home/operator/cache"
@@ -132,9 +123,9 @@ def test_posix_boundaries_and_deterministic_layout_reject_escape(tmp_path: Path)
     with pytest.raises(RuntimePreparationError, match="packages_outside_cache_root"):
         _require_descendant(root, tmp_path / "outside", "packages")
     paths = _runtime_paths(root, root / "packages", "b" * 40)
-    assert paths.layout_root.name == "fate-runtime-v1-bbbbbbbb"
+    assert paths.layout_root.name == "fate-runtime-v2-bbbbbbbb"
     assert paths.runtime_root.relative_to(paths.cache_root).as_posix() == (
-        "fate-runtime-v1-bbbbbbbb/runtime"
+        "fate-runtime-v2-bbbbbbbb/runtime"
     )
 
 

@@ -38,7 +38,7 @@ from Library.scripts.verify_substrate_fixture import (
 )
 
 WSL_DISTRIBUTION: Final = "Ubuntu-24.04"
-IMAGE_TAG: Final = "autolean/library-substrate:4.28.0-universal-lk-independent-preflight-v1"
+IMAGE_TAG: Final = "autolean/library-substrate:4.28.0-universal-lk-builder-query-preflight-v2"
 IMAGE_REPOSITORY: Final = "autolean/library-substrate"
 IMAGE_DIGEST_RE: Final = re.compile(r"^autolean/library-substrate@sha256:[0-9a-f]{64}$")
 SHA256_RE: Final = re.compile(r"^[0-9a-f]{64}$")
@@ -51,18 +51,27 @@ WORKER_ROOT: Final = Path(__file__).resolve().parents[2] / "Prover" / "worker"
 DOCKERFILE: Final = WORKER_ROOT / "Dockerfile.library-substrate"
 HELPER_ROOT: Final = WORKER_ROOT / "library-substrate"
 ASSETS: Final = {
+    "AutoleanLibrarySubstrateBuilderQuery.lean": "BUILDER_QUERY_HELPER_SHA256",
     "AutoleanLibrarySubstrateInventory.lean": "INVENTORY_HELPER_SHA256",
     "AutoleanLibrarySubstrateV2Query.lean": "V2_FACADE_QUERY_HELPER_SHA256",
     "autolean-library-substrate-build": "BUILD_TOOL_SHA256",
     "autolean-library-substrate-build-receipt": "RECEIPT_TOOL_SHA256",
+    "autolean-library-substrate-builder-query": "BUILDER_QUERY_WRAPPER_SHA256",
     "autolean-library-substrate-independent-query": "QUERY_WRAPPER_SHA256",
     "autolean-library-substrate-v2-facade": "V2_FACADE_WRAPPER_SHA256",
 }
 RUNTIME_MANIFEST_SCHEMA: Final = "autolean.library-substrate-runtime-manifest.v1"
 DECLARATION_INVENTORY_SCHEMA: Final = "autolean.library-substrate-declaration-inventory.v1"
-IMAGE_RECEIPT_SCHEMA: Final = "autolean.library-substrate-image-receipt.v1"
+IMAGE_RECEIPT_SCHEMA: Final = "autolean.library-substrate-image-receipt.v2"
 QUERY_SCHEMA: Final = "autolean.library-substrate-independent-query.v1"
 CANARY_SCHEMA: Final = "autolean.library-substrate-independent-canary.v1"
+BUILDER_QUERY_SCHEMA: Final = "autolean.library-substrate-builder-query.v1"
+BUILDER_QUERY_CANARY_SCHEMA: Final = "autolean.library-substrate-builder-query-canary.v1"
+BUILDER_QUERY_WRAPPER_PATH: Final = (
+    "/opt/autolean/library-substrate/bin/autolean-library-substrate-builder-query"
+)
+BUILDER_QUERY_HELPER_PATH: Final = "/opt/autolean/lib/AutoleanLibrarySubstrateBuilderQuery.lean"
+BUILDER_QUERY_FAILURE_DIAGNOSTIC_LIMIT: Final = 4096
 RUNTIME_SOURCE_CHECKSUM_FILENAME: Final = "runtime-sources.sha256"
 RUNTIME_FILE_CHECKSUM_FILENAME: Final = "runtime-files.sha256"
 V2_FACADE_CANARY_SCHEMA: Final = "autolean.library-substrate-v2-facade-canary.v2"
@@ -93,6 +102,73 @@ end AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK
 V2_WRONG_TARGET_TYPE_SOURCE_SHA256: Final = (
     "f938b08d4e6d9de5e0288207f68ccc3122a5bd96dc08c885b71ba98a52919323"
 )
+BUILDER_QUERY_TARGET: Final = "Candidate.ClosedSoundStatement"
+BUILDER_QUERY_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude
+
+namespace Candidate
+
+open FirstOrder
+open FirstOrder.Language
+open AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK
+
+universe u
+
+axiom ClosedSoundStatement {L : FirstOrder.Language} {M : Type u} [L.Structure M]
+    {Γ Δ : Side L 0} (derivation : Deriv L 0 Γ Δ) :
+    ClosedAll M Γ → ClosedAny M Δ
+
+end Candidate
+"""
+BUILDER_QUERY_THEOREM_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude
+
+namespace Candidate
+
+theorem ClosedSoundStatement : True := by
+  trivial
+
+end Candidate
+"""
+BUILDER_QUERY_EXTRA_DECLARATION_SOURCE: Final = BUILDER_QUERY_SOURCE.replace(
+    "\nend Candidate\n", "\naxiom ExtraCarrier : True\n\nend Candidate\n"
+)
+BUILDER_QUERY_FORBIDDEN_IMPORT_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.SemanticPrelude
+
+namespace Candidate
+
+axiom ClosedSoundStatement : True
+
+end Candidate
+"""
+BUILDER_QUERY_TARGET_IMPORT_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound
+
+namespace Candidate
+
+axiom ClosedSoundStatement : True
+
+end Candidate
+"""
+BUILDER_QUERY_MISSING_TARGET_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude
+
+namespace Candidate
+
+axiom OtherStatement : True
+
+end Candidate
+"""
+BUILDER_QUERY_TRUE_SOURCE: Final = """\
+import AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude
+
+namespace Candidate
+
+axiom ClosedSoundStatement : True
+
+end Candidate
+"""
 
 
 class SubstrateImageError(RuntimeError):
@@ -1014,6 +1090,36 @@ def _validate_v2_facade_bindings(
         fail("V2 facade receipt is not bound to the runtime manifest")
 
 
+def _validate_builder_query_bindings(
+    receipt: Mapping[str, object],
+    build_input: Mapping[str, object],
+    *,
+    runtime_manifest_file_sha256: str,
+    builder_query_wrapper_sha256: str,
+    builder_query_helper_sha256: str,
+) -> None:
+    """Bind the non-proof Builder query endpoint to the image receipt and build input."""
+
+    for field, actual in (
+        ("builder_query_wrapper_sha256", builder_query_wrapper_sha256),
+        ("builder_query_helper_sha256", builder_query_helper_sha256),
+    ):
+        recorded = receipt.get(field)
+        if not isinstance(recorded, str) or not SHA256_RE.fullmatch(recorded) or recorded != actual:
+            fail(f"image receipt does not bind the {field}")
+    assets = build_input.get("assets")
+    if not isinstance(assets, dict):
+        fail("substrate build input assets are unavailable")
+    expected_assets = {
+        "BUILDER_QUERY_WRAPPER_SHA256": builder_query_wrapper_sha256,
+        "BUILDER_QUERY_HELPER_SHA256": builder_query_helper_sha256,
+    }
+    if any(assets.get(name) != digest for name, digest in expected_assets.items()):
+        fail("substrate build input does not bind the Builder query assets")
+    if receipt.get("runtime_manifest_sha256") != runtime_manifest_file_sha256:
+        fail("Builder query receipt is not bound to the runtime manifest")
+
+
 def verify(image: str) -> dict[str, object]:
     inspected = _inspect(image)
     actual_reference = _child_image_reference(inspected)
@@ -1026,6 +1132,8 @@ def verify(image: str) -> dict[str, object]:
     expected_receipt_fields = {
         "build_input_sha256",
         "build_tool_sha256",
+        "builder_query_helper_sha256",
+        "builder_query_wrapper_sha256",
         "compiled_tree_sha256",
         "declaration_inventory_sha256",
         "dockerfile_sha256",
@@ -1143,6 +1251,23 @@ def verify(image: str) -> dict[str, object]:
         facade_wrapper_sha256=facade_wrapper_sha256,
         facade_query_helper_sha256=facade_query_helper_sha256,
     )
+    builder_query_wrapper_sha256 = _image_file_sha256(
+        image,
+        BUILDER_QUERY_WRAPPER_PATH,
+        label="image-owned Builder query wrapper",
+    )
+    builder_query_helper_sha256 = _image_file_sha256(
+        image,
+        BUILDER_QUERY_HELPER_PATH,
+        label="image-owned Builder query helper",
+    )
+    _validate_builder_query_bindings(
+        receipt,
+        build_input,
+        runtime_manifest_file_sha256=manifest_file_sha256,
+        builder_query_wrapper_sha256=builder_query_wrapper_sha256,
+        builder_query_helper_sha256=builder_query_helper_sha256,
+    )
     runtime_files, records, auxiliary = _validate_manifest(manifest, receipt=receipt)
     verified_runtime_files = _validate_runtime_file_closure(
         image,
@@ -1155,6 +1280,17 @@ def verify(image: str) -> dict[str, object]:
         "image": image,
         "image_id": image_id,
         "image_receipt_sha256": image_receipt_sha256,
+        "builder_query_identity": {
+            "build_input_sha256": receipt["build_input_sha256"],
+            "builder_query_helper_sha256": builder_query_helper_sha256,
+            "builder_query_wrapper_sha256": builder_query_wrapper_sha256,
+            "image": image,
+            "image_receipt_sha256": image_receipt_sha256,
+            "parent_image": receipt["parent_image"],
+            "profile_id": receipt["profile_id"],
+            "profile_sha256": receipt["profile_sha256"],
+            "runtime_manifest_sha256": receipt["runtime_manifest_sha256"],
+        },
         "v2_facade_identity": {
             "query_helper_sha256": facade_query_helper_sha256,
             "wrapper_sha256": facade_wrapper_sha256,
@@ -1176,6 +1312,105 @@ def _snapshot_candidate(destination: Path) -> tuple[Path, str]:
     candidate.write_bytes(content)
     candidate.chmod(0o444)
     return candidate, _sha256_bytes(content)
+
+
+def _write_builder_query_source(destination: Path, source: str) -> tuple[Path, str]:
+    destination.mkdir(parents=True, exist_ok=False)
+    candidate = destination / "Candidate.lean"
+    candidate.write_text(source, encoding="utf-8", newline="\n")
+    candidate.chmod(0o444)
+    content = _regular_bytes(candidate, label="Builder statement carrier source")
+    return candidate, _sha256_bytes(content)
+
+
+def _builder_query_command(
+    image: str,
+    candidate: Path,
+    *,
+    target: str,
+    expected_type_sha256: str | None = None,
+) -> list[str]:
+    if not IMAGE_DIGEST_RE.fullmatch(image):
+        fail("Builder query requires a Docker-recorded library-substrate RepoDigest")
+    command = [
+        *_docker_run_base(),
+        "--mount",
+        f"type=bind,src={candidate.parent},dst=/input,readonly",
+        image,
+        BUILDER_QUERY_WRAPPER_PATH,
+        "--target",
+        target,
+        "--image",
+        image,
+    ]
+    if expected_type_sha256 is not None:
+        if not SHA256_RE.fullmatch(expected_type_sha256):
+            fail("Builder query replay expectation is not a lowercase SHA-256")
+        command.extend(("--expected-type-sha256", expected_type_sha256))
+    return command
+
+
+def _builder_query_record(
+    image: str,
+    candidate: Path,
+    *,
+    target: str,
+    expected_type_sha256: str | None = None,
+) -> dict[str, object]:
+    output = _run(
+        _builder_query_command(
+            image,
+            candidate,
+            target=target,
+            expected_type_sha256=expected_type_sha256,
+        ),
+        timeout=300,
+    ).stdout
+    return _json_record(output, label="Builder statement query")
+
+
+def _expect_builder_query_rejected(
+    image: str,
+    candidate: Path,
+    *,
+    label: str,
+    target: str,
+    reason_marker: str,
+    expected_type_sha256: str | None = None,
+) -> dict[str, object]:
+    source_sha256 = _sha256_bytes(_regular_bytes(candidate, label=f"Builder query {label} source"))
+    try:
+        result = subprocess.run(
+            _builder_query_command(
+                image,
+                candidate,
+                target=target,
+                expected_type_sha256=expected_type_sha256,
+            ),
+            check=False,
+            capture_output=True,
+            errors="replace",
+            timeout=300,
+            text=True,
+        )
+    except (OSError, subprocess.SubprocessError) as error:
+        raise SubstrateImageError("Builder query rejection subprocess failed") from error
+    if result.returncode == 0:
+        fail(f"Builder query accepted the {label} negative")
+    if result.stdout:
+        fail(f"Builder query {label} failure emitted stdout")
+    if (
+        not result.stderr
+        or len(result.stderr.encode("utf-8")) > BUILDER_QUERY_FAILURE_DIAGNOSTIC_LIMIT + 512
+        or reason_marker not in result.stderr
+    ):
+        fail(f"Builder query {label} failure reason is unavailable or unbounded")
+    return {
+        "candidate_source_sha256": source_sha256,
+        "reason_marker": reason_marker,
+        "returncode": result.returncode,
+        "stderr_summary": result.stderr.strip(),
+    }
 
 
 def _compile_candidate(image: str, candidate: Path, output: Path) -> Path:
@@ -1599,6 +1834,240 @@ def _validate_query(
     }
 
 
+def _validate_builder_query_record(
+    record: Mapping[str, object],
+    *,
+    expected_identity: Mapping[str, object],
+    expected_source_sha256: str,
+    expected_type_sha256: str | None,
+) -> dict[str, object]:
+    expected_fields = {
+        "candidate_direct_imports",
+        "candidate_ir_auxiliary_names",
+        "candidate_kernel_names",
+        "candidate_owns_target",
+        "candidate_source_sha256",
+        "canonical_type",
+        "canonical_type_sha256",
+        "carrier_axiom_excluded_from_type_axioms",
+        "carrier_kind",
+        "declaration",
+        "declaration_kind",
+        "lean_version",
+        "loaded_module_closure",
+        "mathlib_revision",
+        "proof_eligible",
+        "replay_expected_type_sha256",
+        "replay_mode",
+        "replay_verified",
+        "schema_version",
+        "substrate_identity",
+        "type_observed_axioms",
+    }
+    if set(record) != expected_fields:
+        fail("Builder statement query schema drifted")
+    canonical_type = record.get("canonical_type")
+    canonical_type_sha256 = record.get("canonical_type_sha256")
+    if (
+        not isinstance(canonical_type, str)
+        or not isinstance(canonical_type_sha256, str)
+        or not SHA256_RE.fullmatch(canonical_type_sha256)
+        or _sha256_bytes(canonical_type.encode("utf-8")) != canonical_type_sha256
+    ):
+        fail("Builder statement query canonical type hash is invalid")
+    if (
+        record.get("schema_version") != BUILDER_QUERY_SCHEMA
+        or record.get("declaration") != BUILDER_QUERY_TARGET
+        or record.get("declaration_kind") != "axiom"
+        or record.get("carrier_kind") != "builder_statement_carrier"
+        or record.get("proof_eligible") is not False
+        or record.get("candidate_owns_target") is not True
+        or record.get("carrier_axiom_excluded_from_type_axioms") is not True
+        or record.get("candidate_source_sha256") != expected_source_sha256
+        or record.get("lean_version") != "v4.28.0"
+        or record.get("mathlib_revision") != EXPECTED_MATHLIB_REVISION
+        or record.get("substrate_identity") != dict(expected_identity)
+    ):
+        fail("Builder statement query is not a bound non-proof carrier observation")
+    candidate_kernel_names = _sorted_unique_strings(
+        record.get("candidate_kernel_names"), label="Builder query Candidate kernel names"
+    )
+    candidate_auxiliary_names = _sorted_unique_strings(
+        record.get("candidate_ir_auxiliary_names"),
+        label="Builder query Candidate IR auxiliary names",
+    )
+    if candidate_kernel_names != (BUILDER_QUERY_TARGET,) or candidate_auxiliary_names:
+        fail("Builder statement query did not isolate exactly one Candidate-owned carrier")
+    direct_imports = _sorted_unique_strings(
+        record.get("candidate_direct_imports"), label="Builder query direct imports"
+    )
+    if direct_imports != (
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude",
+        "Init",
+    ):
+        fail("Builder statement query direct imports differ from the fixed profile")
+    loaded = _sorted_unique_strings(
+        record.get("loaded_module_closure"), label="Builder query loaded module closure"
+    )
+    required_modules = {*tuple(MODULE_BY_NAME)[:3], "Candidate"}
+    forbidden_modules = {
+        "AutoLeanLibrary.Fixtures.ModelTheory.Packet",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Controls",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound",
+        "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.DerivSound",
+    }
+    if not required_modules.issubset(loaded) or forbidden_modules.intersection(loaded):
+        fail("Builder statement query loaded module boundary is invalid")
+    type_axioms = _sorted_unique_strings(
+        record.get("type_observed_axioms"), label="Builder query type-level axioms"
+    )
+    if BUILDER_QUERY_TARGET in type_axioms:
+        fail("Builder statement carrier leaked into the type-level axiom set")
+    if expected_type_sha256 is None:
+        if (
+            record.get("replay_expected_type_sha256") is not None
+            or record.get("replay_mode") is not False
+            or record.get("replay_verified") is not False
+        ):
+            fail("fresh Builder statement query was mislabeled as replay")
+    elif (
+        expected_type_sha256 != canonical_type_sha256
+        or record.get("replay_expected_type_sha256") != expected_type_sha256
+        or record.get("replay_mode") is not True
+        or record.get("replay_verified") is not True
+    ):
+        fail("Builder statement query did not verify the replay type expectation")
+    return {
+        "candidate_source_sha256": expected_source_sha256,
+        "canonical_type_sha256": canonical_type_sha256,
+        "carrier_axiom_excluded_from_type_axioms": True,
+        "declaration": BUILDER_QUERY_TARGET,
+        "proof_eligible": False,
+        "query_receipt_canonical_sha256": _sha256_bytes(_canonical_json_bytes(dict(record))),
+        "replay_mode": expected_type_sha256 is not None,
+        "type_observed_axioms": list(type_axioms),
+    }
+
+
+def builder_query_canary(image: str) -> dict[str, object]:
+    """Exercise the receipt-bound, Builder-only statement observation endpoint.
+
+    ``verify(image)`` first proves that ``image`` is the Docker-recorded child RepoDigest.
+    The command builder then uses that same string both as the image Docker executes and as
+    the endpoint's asserted image identity.
+    """
+
+    verified = verify(image)
+    identity = cast(dict[str, object], verified["builder_query_identity"])
+    with tempfile.TemporaryDirectory(
+        prefix="autolean-library-substrate-builder-query-", dir="/tmp"
+    ) as raw:
+        root = Path(raw)
+        candidate, source_sha256 = _write_builder_query_source(
+            root / "accepted", BUILDER_QUERY_SOURCE
+        )
+        fresh_record = _builder_query_record(image, candidate, target=BUILDER_QUERY_TARGET)
+        fresh = _validate_builder_query_record(
+            fresh_record,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=None,
+        )
+        observed_type_sha256 = cast(str, fresh["canonical_type_sha256"])
+        replay_record = _builder_query_record(
+            image,
+            candidate,
+            target=BUILDER_QUERY_TARGET,
+            expected_type_sha256=observed_type_sha256,
+        )
+        replay = _validate_builder_query_record(
+            replay_record,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=observed_type_sha256,
+        )
+
+        negative_specs = (
+            (
+                "theorem_body",
+                BUILDER_QUERY_THEOREM_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "Candidate source contains proof-bearing or executable declaration syntax",
+                None,
+            ),
+            (
+                "extra_declaration",
+                BUILDER_QUERY_EXTRA_DECLARATION_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "Candidate owns declarations other than the requested carrier",
+                None,
+            ),
+            (
+                "forbidden_import",
+                BUILDER_QUERY_FORBIDDEN_IMPORT_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "Candidate direct imports differ from the Builder statement profile",
+                None,
+            ),
+            (
+                "target_oracle_import",
+                BUILDER_QUERY_TARGET_IMPORT_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "phase=compile failed",
+                None,
+            ),
+            (
+                "missing_target",
+                BUILDER_QUERY_MISSING_TARGET_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "requested target is not owned by Candidate",
+                None,
+            ),
+            (
+                "non_owned_target",
+                BUILDER_QUERY_SOURCE,
+                TARGET_DECLARATION,
+                "target declaration is outside the Candidate namespace",
+                None,
+            ),
+            (
+                "statement_true_drift",
+                BUILDER_QUERY_TRUE_SOURCE,
+                BUILDER_QUERY_TARGET,
+                "observed carrier type differs from the replay expectation",
+                observed_type_sha256,
+            ),
+        )
+        negatives: dict[str, object] = {}
+        for label, source, target, reason, replay_hash in negative_specs:
+            negative_candidate, _ = _write_builder_query_source(root / label, source)
+            negatives[label] = _expect_builder_query_rejected(
+                image,
+                negative_candidate,
+                label=label,
+                target=target,
+                reason_marker=reason,
+                expected_type_sha256=replay_hash,
+            )
+    return {
+        "authority": "operator-local-builder-observation-preflight-only",
+        "fresh_observation": fresh,
+        "image": image,
+        "image_id": verified["image_id"],
+        "negative_cases": negatives,
+        "non_claims": [
+            "no_bundle_registration",
+            "no_contract_or_gateway_integration",
+            "no_formal_asset_admission",
+            "no_proof_submission_or_acceptance",
+            "no_t6_completion",
+        ],
+        "replay_observation": replay,
+        "schema_version": BUILDER_QUERY_CANARY_SCHEMA,
+    }
+
+
 def canary(image: str) -> dict[str, object]:
     verified = verify(image)
     manifest = cast(dict[str, object], verified["runtime_manifest"])
@@ -1774,11 +2243,30 @@ def _delegate_to_wsl(arguments: argparse.Namespace) -> int:
 
 def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("action", choices=("build", "verify", "canary", "facade-canary", "all"))
+    parser.add_argument(
+        "action",
+        choices=(
+            "build",
+            "verify",
+            "canary",
+            "facade-canary",
+            "builder-query-canary",
+            "all",
+        ),
+    )
     parser.add_argument("--image")
     parser.add_argument("--native", action="store_true", help=argparse.SUPPRESS)
     parsed = parser.parse_args(arguments)
-    if parsed.action in {"verify", "canary", "facade-canary"} and parsed.image is None:
+    if (
+        parsed.action
+        in {
+            "verify",
+            "canary",
+            "facade-canary",
+            "builder-query-canary",
+        }
+        and parsed.image is None
+    ):
         parser.error(f"{parsed.action} requires --image")
     if parsed.action in {"build", "all"} and parsed.image is not None:
         parser.error(f"{parsed.action} does not accept --image")
@@ -1787,9 +2275,9 @@ def parse_arguments(arguments: Sequence[str] | None = None) -> argparse.Namespac
 
 def main(arguments: Sequence[str] | None = None) -> int:
     parsed = parse_arguments(arguments)
-    if os.name == "nt" and not parsed.native:
-        return _delegate_to_wsl(parsed)
     try:
+        if os.name == "nt" and not parsed.native:
+            return _delegate_to_wsl(parsed)
         if parsed.action == "build":
             result = build()
         elif parsed.action == "verify":
@@ -1798,11 +2286,14 @@ def main(arguments: Sequence[str] | None = None) -> int:
             result = canary(cast(str, parsed.image))
         elif parsed.action == "facade-canary":
             result = v2_facade_canary(cast(str, parsed.image))
+        elif parsed.action == "builder-query-canary":
+            result = builder_query_canary(cast(str, parsed.image))
         else:
             build_result = build()
             result = {
                 "build": build_result,
                 "canary": canary(cast(str, build_result["image"])),
+                "builder_query_canary": builder_query_canary(cast(str, build_result["image"])),
                 "v2_facade_canary": v2_facade_canary(cast(str, build_result["image"])),
                 "schema_version": "autolean.library-substrate-image-all.v1",
             }

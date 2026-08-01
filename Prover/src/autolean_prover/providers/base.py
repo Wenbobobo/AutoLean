@@ -4,27 +4,36 @@ from collections.abc import Iterable, Mapping
 from dataclasses import dataclass, field
 from enum import StrEnum
 from pathlib import Path
-from typing import TYPE_CHECKING, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Literal, Protocol, runtime_checkable
 
 from autolean_contracts import (
     DigestV1,
     EndpointClassV1,
     HashKindV1,
+    OutboundRequestBodyV1,
+    canonical_json_bytes,
     digest_model,
+    outbound_request_body_binding,
 )
 from autolean_contracts.hashing import require_digest_kind
 
 from autolean_prover.errors import CapabilityError, ConfigurationError
-from autolean_prover.providers.policy import validate_reasoning_effort
+from autolean_prover.providers.policy import (
+    validate_positive_timeout,
+    validate_reasoning_effort,
+)
 
 if TYPE_CHECKING:
     from autolean_prover.context import ContextPack
+
+MAX_MODEL_REQUEST_TIMEOUT_SECONDS = 3600.0
 
 
 class Capability(StrEnum):
     TEXT_GENERATION = "text_generation"
     USAGE_ACCOUNTING = "usage_accounting"
     REASONING_EFFORT = "reasoning_effort"
+    STRUCTURED_JSON = "structured_json"
     TOOL_CALLING = "tool_calling"
     STREAMING = "streaming"
     LOCAL_EXECUTION = "local_execution"
@@ -90,12 +99,49 @@ class TokenUsage:
 
 
 @dataclass(frozen=True, slots=True)
+class CanonicalJsonRequestBody:
+    """Exact credential-free JSON bytes prepared for one provider transport call.
+
+    ``binding`` is safe to retain as evidence; ``body`` remains an in-memory send input and must
+    not be copied into public reports or response artifacts.
+    """
+
+    body: bytes
+    binding: OutboundRequestBodyV1
+
+    def __post_init__(self) -> None:
+        if not isinstance(self.body, bytes):
+            raise ConfigurationError("canonical JSON request body must be bytes")
+        try:
+            expected = outbound_request_body_binding(self.body)
+        except ValueError as error:
+            raise ConfigurationError("canonical JSON request body is invalid") from error
+        if self.binding != expected:
+            raise ConfigurationError("canonical JSON request body binding does not match its bytes")
+
+
+def canonical_json_request_body(payload: Mapping[str, object]) -> CanonicalJsonRequestBody:
+    """Serialize one credential-free provider payload into its exact JSON wire bytes."""
+
+    if not isinstance(payload, Mapping):
+        raise ConfigurationError("canonical JSON request payload must be a mapping")
+    try:
+        body = canonical_json_bytes(dict(payload))
+        binding = outbound_request_body_binding(body)
+    except (TypeError, ValueError) as error:
+        raise ConfigurationError("canonical JSON request payload is not serializable") from error
+    return CanonicalJsonRequestBody(body=body, binding=binding)
+
+
+@dataclass(frozen=True, slots=True)
 class ModelRequest:
     prompt: str
     system_prompt: str | None = None
     max_input_tokens: int = 4096
     max_output_tokens: int = 4096
+    timeout_seconds: float | None = None
     reasoning_effort: str | None = None
+    response_format: Literal["json_object"] | None = None
     tools: tuple[ToolSpec, ...] = ()
     required_capabilities: frozenset[Capability] = field(default_factory=frozenset)
     working_directory: Path | None = None
@@ -112,7 +158,18 @@ class ModelRequest:
         ):
             if isinstance(value, bool) or not isinstance(value, int) or value <= 0:
                 raise ConfigurationError(f"{label} must be positive")
+        if self.timeout_seconds is not None:
+            validate_positive_timeout(
+                self.timeout_seconds,
+                label="model request timeout_seconds",
+            )
+            if self.timeout_seconds > MAX_MODEL_REQUEST_TIMEOUT_SECONDS:
+                raise ConfigurationError(
+                    "model request timeout_seconds exceeds the supported upper bound"
+                )
         validate_reasoning_effort(self.reasoning_effort, label="reasoning_effort")
+        if self.response_format not in {None, "json_object"}:
+            raise ConfigurationError("response_format must be None or 'json_object'")
         if not isinstance(self.required_capabilities, frozenset) or not all(
             isinstance(value, Capability) for value in self.required_capabilities
         ):
@@ -145,7 +202,9 @@ class ModelRequest:
         system_prompt: str | None = None,
         max_input_tokens: int = 4096,
         max_output_tokens: int = 4096,
+        timeout_seconds: float | None = None,
         reasoning_effort: str | None = None,
+        response_format: Literal["json_object"] | None = None,
         tools: tuple[ToolSpec, ...] = (),
         required_capabilities: frozenset[Capability] = frozenset(),
         working_directory: Path | None = None,
@@ -161,7 +220,9 @@ class ModelRequest:
             system_prompt=system_prompt,
             max_input_tokens=max_input_tokens,
             max_output_tokens=max_output_tokens,
+            timeout_seconds=timeout_seconds,
             reasoning_effort=reasoning_effort,
+            response_format=response_format,
             tools=tools,
             required_capabilities=required_capabilities,
             working_directory=working_directory,
@@ -175,12 +236,14 @@ class ModelRequest:
             return digest_model(
                 HashKindV1.PROMPT,
                 {
-                    "schema_version": "autolean.model-request.v1",
+                    "schema_version": "autolean.model-request.v3",
                     "prompt": self.prompt,
                     "system_prompt": self.system_prompt,
                     "max_input_tokens": self.max_input_tokens,
                     "max_output_tokens": self.max_output_tokens,
+                    "timeout_seconds": self.timeout_seconds,
                     "reasoning_effort": self.reasoning_effort,
+                    "response_format": self.response_format,
                     "tools": [
                         {
                             "name": tool.name,
@@ -211,11 +274,39 @@ class ModelRequest:
         required.add(Capability.TEXT_GENERATION)
         if self.reasoning_effort is not None:
             required.add(Capability.REASONING_EFFORT)
+        if self.response_format is not None:
+            required.add(Capability.STRUCTURED_JSON)
         if self.tools:
             required.add(Capability.TOOL_CALLING)
         if self.working_directory is not None:
             required.add(Capability.LOCAL_EXECUTION)
         return frozenset(required)
+
+
+@dataclass(frozen=True, slots=True)
+class ModelExecutionTimeoutPolicyV1:
+    """Local, immutable execution deadline policy for one registered provider."""
+
+    configured_ceiling_seconds: float
+
+    def __post_init__(self) -> None:
+        validate_positive_timeout(
+            self.configured_ceiling_seconds,
+            label="provider configured timeout ceiling",
+        )
+        object.__setattr__(
+            self,
+            "configured_ceiling_seconds",
+            float(self.configured_ceiling_seconds),
+        )
+
+    def effective_timeout_seconds(self, request: ModelRequest) -> float:
+        """Return the actual provider deadline without probing or performing I/O."""
+
+        return effective_model_timeout_seconds(
+            request,
+            provider_timeout_seconds=self.configured_ceiling_seconds,
+        )
 
 
 @dataclass(frozen=True, slots=True)
@@ -245,8 +336,27 @@ class ModelProvider(Protocol):
     @property
     def capabilities(self) -> ProviderCapabilities: ...
 
+    @property
+    def execution_timeout_policy(self) -> ModelExecutionTimeoutPolicyV1: ...
+
     def generate(self, request: ModelRequest) -> ModelResponse: ...
 
 
 def require_request_capabilities(provider: ModelProvider, request: ModelRequest) -> None:
     provider.capabilities.require(request.inferred_capabilities(), provider_id=provider.provider_id)
+
+
+def effective_model_timeout_seconds(
+    request: ModelRequest,
+    *,
+    provider_timeout_seconds: float,
+) -> float:
+    """Return the enforced deadline; a request may only lower the provider ceiling."""
+
+    validate_positive_timeout(
+        provider_timeout_seconds,
+        label="provider timeout_seconds",
+    )
+    if request.timeout_seconds is None:
+        return float(provider_timeout_seconds)
+    return min(float(provider_timeout_seconds), float(request.timeout_seconds))

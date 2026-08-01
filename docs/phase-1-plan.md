@@ -1,11 +1,13 @@
 # Phase 1 Current Route
 
-Status: decision and sequencing record as of 2026-07-25
+Status: historical decision and sequencing snapshot as of 2026-07-25; superseded for live
+ordering by [roadmap-next.md](roadmap-next.md)
 
 ## Role of this document
 
-This is the current sequencing record for Phase 1. It resolves the order of active work when an
-older week-by-week forecast, a parallel package, or a domain proposal says something different.
+This was the sequencing record for Phase 1 at its stated historical snapshot. It no longer
+resolves active ordering; when it differs from an older forecast or proposal, that difference is
+historical context only. Current ordering is owned exclusively by `roadmap-next.md`.
 It does not replace the mandatory acceptance gates in
 [Phase 1 acceptance](phase-1-acceptance.md), the observed-evidence record in
 [the progress ledger](phase-1-progress.md), or the package ownership in

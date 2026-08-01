@@ -330,8 +330,43 @@ def test_dockerfile_checks_all_source_hashes_before_extracting_and_builds_offlin
     assert 'wc -l <"$proofwidgets_actual"' in receipt_tool
 
 
-def test_receipt_tool_rejects_false_dynamic_claims(tmp_path: Path) -> None:
+def _usable_posix_bash() -> str | None:
     bash = shutil.which("bash")
+    if bash is None:
+        if os.name == "nt":
+            return None
+        raise AssertionError("bash is required for the POSIX receipt helper test")
+    try:
+        probe = subprocess.run(
+            [bash, "-c", "/bin/sh -c ':'"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            timeout=5,
+        )
+    except (OSError, subprocess.TimeoutExpired) as error:
+        if os.name == "nt":
+            return None
+        raise AssertionError("bash could not execute the POSIX receipt helper probe") from error
+    if probe.returncode != 0:
+        if os.name == "nt":
+            return None
+        raise AssertionError("bash failed the POSIX receipt helper probe")
+    return bash
+
+
+def test_posix_receipt_probe_cannot_silently_skip_without_bash(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(os, "name", "posix")
+    monkeypatch.setattr(shutil, "which", lambda _: None)
+
+    with pytest.raises(AssertionError, match="bash is required"):
+        _usable_posix_bash()
+
+
+def test_receipt_tool_rejects_false_dynamic_claims(tmp_path: Path) -> None:
+    bash = _usable_posix_bash()
     if bash is None:
         pytest.skip("a POSIX shell is required for the receipt helper test")
     worker = Path(__file__).resolve().parents[2] / "Prover" / "worker"
@@ -950,6 +985,70 @@ def test_declaration_query_evidence_has_stable_content_and_non_self_referential_
     }
     assert "evidence_sha256" not in json.loads(output.read_text(encoding="utf-8"))
     assert "evidence_sha256" not in document
+
+
+def test_mathlib_run_evidence_is_content_addressed_per_image_and_rendered_bytes(
+    tmp_path: Path,
+) -> None:
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    legacy = tmp_path / "release-evidence" / "oci-worker" / "mathlib-build.v1.json"
+    legacy.parent.mkdir(parents=True)
+    legacy.write_bytes(b'{"legacy":"leave untouched"}\n')
+    document: dict[str, object] = {
+        "build_receipt": {"schema_version": "fixture"},
+        "image": image,
+        "schema_version": oci_mathlib_worker.BUILD_RECORD_SCHEMA,
+    }
+
+    result = oci_mathlib_worker._record_mathlib_run_evidence(
+        tmp_path,
+        kind="build",
+        image=image,
+        document=document,
+    )
+    evidence_sha256 = cast(str, result["evidence_sha256"])
+    output = tmp_path / oci_mathlib_worker.mathlib_run_evidence_relative_path(
+        kind="build",
+        image=image,
+        evidence_sha256=evidence_sha256,
+    )
+    assert output.read_bytes() == oci_mathlib_worker._render_evidence(document)
+    assert result["evidence_path"] == output.relative_to(tmp_path).as_posix()
+    assert "evidence_path" not in json.loads(output.read_text(encoding="utf-8"))
+    assert "evidence_sha256" not in json.loads(output.read_text(encoding="utf-8"))
+    assert legacy.read_bytes() == b'{"legacy":"leave untouched"}\n'
+
+    repeated = oci_mathlib_worker._record_mathlib_run_evidence(
+        tmp_path,
+        kind="build",
+        image=image,
+        document=document,
+    )
+    assert repeated == result
+    changed_document = {**document, "source_inputs_sha256": "b" * 64}
+    changed = oci_mathlib_worker._record_mathlib_run_evidence(
+        tmp_path,
+        kind="build",
+        image=image,
+        document=changed_document,
+    )
+    assert changed["evidence_sha256"] != evidence_sha256
+    assert changed["evidence_path"] != result["evidence_path"]
+    assert output.read_bytes() == oci_mathlib_worker._render_evidence(document)
+
+
+def test_mathlib_run_evidence_rejects_unbound_image_identity(tmp_path: Path) -> None:
+    image = "autolean/mathlib-worker@sha256:" + "a" * 64
+    with pytest.raises(oci_mathlib_worker.MathlibWorkerError, match="does not match"):
+        oci_mathlib_worker._record_mathlib_run_evidence(
+            tmp_path,
+            kind="canary",
+            image=image,
+            document={
+                "image": "autolean/mathlib-worker@sha256:" + "b" * 64,
+                "schema_version": oci_mathlib_worker.CANARY_SCHEMA,
+            },
+        )
 
 
 def test_external_python_query_cli_records_and_prints_evidence_hash(

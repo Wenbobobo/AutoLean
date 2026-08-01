@@ -47,6 +47,16 @@ The companion BuilderStatementObservationEvidence record standardizes the select
 canonical-type observation for Builder/Prover audits, but it is deliberately marked non-proof and
 ineligible for ProofSubmissionV1.
 
+The textbook-alignment discovery writer is intentionally narrower than a general artifact store.
+It accepts only the repository root, requires a real `.git` marker and an active root
+`/.cache/` ignore rule, and requires `.cache` plus each output parent to exist as real confined
+directories before the run. It records directory identities around each write, treats identical
+existing bytes as an idempotent replay, and refuses a different-content conflict without
+overwriting either output. This protects against accidental publication and path substitution; it
+is not an isolation boundary against a malicious process running as the same local user.
+Production private packets belong on a separate operator-owned volume with access control and
+retention policy outside this discovery harness.
+
 Raw freeze and bridge primitives are no longer exported by `autolean_builder`; the supported
 source-backed handoff is `SourceToStatementHarness.revalidate_freeze_and_bridge`. Python module
 privacy and a writable local SQLite file are not authentication boundaries. A separate Builder
@@ -71,6 +81,38 @@ metadata, role reports, blockers, and the pinned Library lock. Self-reported rol
 and SHA-256 checksums are explicitly untrusted until a future external identity/run verifier
 accepts them. They cannot issue a pilot-admission receipt, freeze a Builder contract, authorize
 model egress, hand off work to Prover, or promote a Library asset.
+
+The [`project-synthetic pre-calibration fixture`](pilots/local-calibration/README.md) is an even
+earlier, deliberately non-authoritative Phase-2 preparation surface. Its ten PDE-A and MG-A
+fixtures were generated for this repository and bind exact source spans to the root Apache-2.0
+license and an adjacent corpus/renderer hash manifest. Human content review remains pending; no
+human authorship or legal-review claim is made. Each `pre_calibration_fixture` record contains
+normalization sketches, unparsed illustrative Lean-like text, reverse renderings, examples, and
+declared synthetic mutation fixtures. It neither binds normalized mathematics to Lean nor claims
+that a semantic checker executed. Real candidates are reserved for `StatementFidelityHarness`.
+The fixture permits redistribution only of its exact bound bytes, denies model egress, and sets
+production ingestion, rights clearance, promotion, freeze, and Prover handoff to `false`. It does
+not satisfy the roadmap's rights-cleared `local_calibration` state.
+
+The [iFEM source-free case-authoring V1](../docs/research/ifem-source-free-case-authoring-v1.md)
+is a later but still non-authoritative plumbing check. It admits only the nine P3 scheduling
+intents, executes 27 strict finite fake role stages, binds its exact run in a public aggregate,
+and refuses classification, freeze, or Prover handoff. Its 3/3/3 labels and stable case handles
+are publicly replayable; it explicitly claims no private held-out isolation and must not be used
+as model or textbook-calibration evidence.
+
+The follow-on [operator-private seed V2](../docs/research/ifem-source-free-private-seed-v2.md)
+can persist a fresh, repository-external nine-case manifest before returning a redacted public
+commitment. Its public fields distinguish the default CSPRNG code path from injected test entropy,
+but explicitly set entropy provenance, unpredictability, and persistence attestation to false.
+Materialization still occurs in one process, `live_model_eligible=false`, and neither the private
+3/3/3 labels nor the commitment authorize a model call, held-out claim, freeze, or Prover handoff.
+
+The [private stage ledger V1](../docs/research/ifem-source-free-stage-ledger-v1.md) then loads that
+persisted seed through exact queue replay and fixes 27 ordered, write-once coordinates. Its
+counting-fake tests enforce predecessor blocking, explicit-quiescence reconciliation, and at most
+one executor callback per coordinate. It does not perform or authorize a provider dispatch; a
+separate ModelWork/CAS/completion sidecar remains required before any live model use.
 
 When a round records a `partial_passed_with_gap` Library preselection spike, it references the
 tracked public-safe packet and compile receipt by repository-relative path and content digest.

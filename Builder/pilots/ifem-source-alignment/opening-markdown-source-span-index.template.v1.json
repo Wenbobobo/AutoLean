@@ -1,0 +1,36 @@
+{
+  "schema_version": "autolean.ifem-markdown-source-span-index.v1",
+  "artifact_kind": "local_only_source_alignment_index",
+  "source_lock": {
+    "source_lock_sha256": "<source-lock-sha256>",
+    "source_lock_schema_version": "autolean.ifem-source-lock.v1",
+    "source_revision": "<40-hex-git-revision>",
+    "source_retrieved_at": "<utc-rfc3339-time>",
+    "source_file_count": "<count>",
+    "markdown_file_count": 1
+  },
+  "model_egress_policy": "local_only",
+  "semantic_review_state": "not_performed",
+  "contract_freeze": "not_authorized",
+  "prover_handoff": "not_authorized",
+  "contains_source_text": false,
+  "contains_model_input": false,
+  "markdown_heading_count": "<count>",
+  "spans": [
+    {
+      "span_id": "urn:autolean:v1:ifem.markdown-source-span:<stable-uuid>",
+      "source_path": "intro.md",
+      "source_reference_id": "<source-reference-id>",
+      "source_file_sha256": "<markdown-file-sha256>",
+      "source_file_index": "<zero-based-source-lock-file-index>",
+      "heading_index": "<zero-based-structural-heading-index>",
+      "heading_level": "<one-to-six>",
+      "start_line": "<one-based-inclusive-line>",
+      "end_line": "<one-based-inclusive-line>",
+      "heading_content_sha256": "<logical-heading-sha256>",
+      "heading_character_count": "<count>",
+      "section_content_sha256": "<logical-section-sha256>",
+      "section_character_count": "<count>"
+    }
+  ]
+}

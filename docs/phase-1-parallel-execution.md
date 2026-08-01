@@ -1,5 +1,8 @@
 # Phase 1 Parallel Execution Plan
 
+Status: historical work-package snapshot bound to `48b1290` on 2026-07-24; superseded for live
+ordering by [roadmap-next.md](roadmap-next.md)
+
 Snapshot: 2026-07-24
 Baseline commit: `48b129097773616a28534abfe833eb10b9779aac`
 

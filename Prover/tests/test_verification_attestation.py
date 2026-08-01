@@ -10,12 +10,14 @@ from pathlib import Path
 
 import pytest
 from autolean_contracts import (
+    ActorKindV1,
     AttestationPurposeV1,
     HashKindV1,
     HmacAttestationKeyV1,
     HmacAttestationSignerV1,
     HmacAttestationVerifierV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     VerificationEvidenceArtifactV2,
     VerificationSigningLeaseBindingV1,
     VerificationSigningRequestV1,
@@ -141,6 +143,13 @@ def _submission(bundle) -> ProofSubmissionV1:
         proof_source=proof,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, proof),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=stable_id("attested-proof-provenance"),
+                actor_id="verification-attestation-fixture",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 
@@ -909,7 +918,7 @@ def test_gateway_rejects_shared_key_and_every_local_production_composition(tmp_p
             },
         )
 
-    with pytest.raises(ValueError, match="test-only receipt key"):
+    with pytest.raises(ValueError, match="production-class receipt key"):
         IndependentExecutionTrustPolicyV1(
             gateway_signing_key_id="production-gateway-key",
             execution_class=IndependentExecutionClassV1.PRODUCTION,
@@ -924,8 +933,35 @@ def test_gateway_rejects_shared_key_and_every_local_production_composition(tmp_p
         )
 
     class ProductionAuthenticator:
+        execution_class = IndependentExecutionClassV1.PRODUCTION
+
         def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
             del receipt
+
+    class UnmarkedAuthenticator:
+        def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
+            del receipt
+
+    class UnknownClassAuthenticator:
+        execution_class = "production"
+
+        def verify(self, receipt: IndependentExecutionReceiptV1) -> None:
+            del receipt
+
+    for authenticator in (UnmarkedAuthenticator(), UnknownClassAuthenticator()):
+        with pytest.raises(ValueError, match="production-class receipt key"):
+            IndependentExecutionTrustPolicyV1(
+                gateway_signing_key_id="production-gateway-key",
+                execution_class=IndependentExecutionClassV1.PRODUCTION,
+                trusted_verifiers={
+                    "production-independent-verifier": TrustedIndependentExecutionVerifierV1(
+                        verifier_id="production-independent-verifier",
+                        authentication_key_id="production-independent-key",
+                        execution_class=IndependentExecutionClassV1.PRODUCTION,
+                        authenticator=authenticator,
+                    )
+                },
+            )
 
     class ForgedProductionVerifier:
         def verify(

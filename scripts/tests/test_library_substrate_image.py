@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import copy
+import os
 import subprocess
 from pathlib import Path
 from typing import cast
@@ -137,8 +138,9 @@ def test_stage_build_context_contains_only_runtime_sources(
     prepared, arguments = substrate.stage_build_context(tmp_path / "context")
 
     inventory = cast(dict[str, str], prepared["context_inventory"])
-    assert len(inventory) == 12
+    assert len(inventory) == 14
     assert set(path for path in inventory if path.endswith(".lean")) == {
+        "helpers/AutoleanLibrarySubstrateBuilderQuery.lean",
         "helpers/AutoleanLibrarySubstrateInventory.lean",
         "helpers/AutoleanLibrarySubstrateV2Query.lean",
         *(f"source/{cast(str, source['path'])}" for source in sources),
@@ -148,6 +150,7 @@ def test_stage_build_context_contains_only_runtime_sources(
         for path in inventory
         for token in ("Candidate.lean", "/Targets/", "Controls.lean", "UniversalLK.lean")
     )
+    assert "helpers/autolean-library-substrate-builder-query" in inventory
     assert arguments["PARENT_RECEIPT_CANONICAL_SHA256"] == "1" * 64
     assert arguments["PARENT_RECEIPT_FILE_SHA256"] == "2" * 64
     assert arguments["RUNTIME_SOURCE_CHECKSUM_MANIFEST_SHA256"] == substrate._sha256_bytes(
@@ -224,6 +227,23 @@ def test_build_command_has_frozen_offline_flags(tmp_path: Path) -> None:
         "Dockerfile.library-substrate",
     ]
     assert command[-1] == str(tmp_path)
+
+
+def test_main_reports_wsl_delegation_failure_without_traceback(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    monkeypatch.setattr(os, "name", "nt")
+    monkeypatch.setattr(
+        substrate,
+        "_delegate_to_wsl",
+        lambda _arguments: substrate.fail("WSL delegation unavailable"),
+    )
+
+    assert substrate.main(("build",)) == 2
+    captured = capsys.readouterr()
+    assert captured.out == ""
+    assert captured.err == "library-substrate-image: WSL delegation unavailable\n"
 
 
 def test_child_image_reference_requires_docker_recorded_repo_digest() -> None:
@@ -443,6 +463,381 @@ def test_host_asset_binding_rejects_checkout_drift(
     drifted["V2_FACADE_WRAPPER_SHA256"] = "d" * 64
     with pytest.raises(substrate.SubstrateImageError, match="current host helper assets"):
         substrate._validate_host_asset_binding({"assets": drifted})
+
+
+def test_builder_query_bindings_reject_receipt_asset_and_runtime_drift() -> None:
+    wrapper_sha256 = "a" * 64
+    helper_sha256 = "b" * 64
+    manifest_sha256 = "c" * 64
+    receipt: dict[str, object] = {
+        "builder_query_helper_sha256": helper_sha256,
+        "builder_query_wrapper_sha256": wrapper_sha256,
+        "runtime_manifest_sha256": manifest_sha256,
+    }
+    build_input: dict[str, object] = {
+        "assets": {
+            "BUILDER_QUERY_HELPER_SHA256": helper_sha256,
+            "BUILDER_QUERY_WRAPPER_SHA256": wrapper_sha256,
+        }
+    }
+
+    substrate._validate_builder_query_bindings(
+        receipt,
+        build_input,
+        runtime_manifest_file_sha256=manifest_sha256,
+        builder_query_wrapper_sha256=wrapper_sha256,
+        builder_query_helper_sha256=helper_sha256,
+    )
+
+    receipt_drift = dict(receipt)
+    receipt_drift["builder_query_helper_sha256"] = "d" * 64
+    with pytest.raises(substrate.SubstrateImageError, match="builder_query_helper_sha256"):
+        substrate._validate_builder_query_bindings(
+            receipt_drift,
+            build_input,
+            runtime_manifest_file_sha256=manifest_sha256,
+            builder_query_wrapper_sha256=wrapper_sha256,
+            builder_query_helper_sha256=helper_sha256,
+        )
+
+    asset_drift = copy.deepcopy(build_input)
+    cast(dict[str, object], asset_drift["assets"])["BUILDER_QUERY_WRAPPER_SHA256"] = "e" * 64
+    with pytest.raises(substrate.SubstrateImageError, match="Builder query assets"):
+        substrate._validate_builder_query_bindings(
+            receipt,
+            asset_drift,
+            runtime_manifest_file_sha256=manifest_sha256,
+            builder_query_wrapper_sha256=wrapper_sha256,
+            builder_query_helper_sha256=helper_sha256,
+        )
+
+    with pytest.raises(substrate.SubstrateImageError, match="runtime manifest"):
+        substrate._validate_builder_query_bindings(
+            receipt,
+            build_input,
+            runtime_manifest_file_sha256="f" * 64,
+            builder_query_wrapper_sha256=wrapper_sha256,
+            builder_query_helper_sha256=helper_sha256,
+        )
+    with pytest.raises(substrate.SubstrateImageError, match="assets are unavailable"):
+        substrate._validate_builder_query_bindings(
+            receipt,
+            {},
+            runtime_manifest_file_sha256=manifest_sha256,
+            builder_query_wrapper_sha256=wrapper_sha256,
+            builder_query_helper_sha256=helper_sha256,
+        )
+
+
+def _builder_query_fixture(*, replay: bool) -> tuple[dict[str, object], dict[str, object], str]:
+    source_sha256 = "d" * 64
+    canonical_type = "Nat → Prop"
+    type_sha256 = substrate._sha256_bytes(canonical_type.encode("utf-8"))
+    identity: dict[str, object] = {
+        "build_input_sha256": "1" * 64,
+        "builder_query_helper_sha256": "2" * 64,
+        "builder_query_wrapper_sha256": "3" * 64,
+        "image": "autolean/library-substrate@sha256:" + "4" * 64,
+        "image_receipt_sha256": "5" * 64,
+        "parent_image": SOURCE_V2_IMAGE,
+        "profile_id": EXPECTED_PROFILE_IDS["independent_reproof"],
+        "profile_sha256": "6" * 64,
+        "runtime_manifest_sha256": "7" * 64,
+    }
+    record: dict[str, object] = {
+        "candidate_direct_imports": [
+            "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.RulePrelude",
+            "Init",
+        ],
+        "candidate_ir_auxiliary_names": [],
+        "candidate_kernel_names": [substrate.BUILDER_QUERY_TARGET],
+        "candidate_owns_target": True,
+        "candidate_source_sha256": source_sha256,
+        "canonical_type": canonical_type,
+        "canonical_type_sha256": type_sha256,
+        "carrier_axiom_excluded_from_type_axioms": True,
+        "carrier_kind": "builder_statement_carrier",
+        "declaration": substrate.BUILDER_QUERY_TARGET,
+        "declaration_kind": "axiom",
+        "lean_version": "v4.28.0",
+        "loaded_module_closure": sorted((*tuple(MODULE_BY_NAME)[:3], "Candidate", "Init")),
+        "mathlib_revision": EXPECTED_MATHLIB_REVISION,
+        "proof_eligible": False,
+        "replay_expected_type_sha256": type_sha256 if replay else None,
+        "replay_mode": replay,
+        "replay_verified": replay,
+        "schema_version": substrate.BUILDER_QUERY_SCHEMA,
+        "substrate_identity": identity,
+        "type_observed_axioms": [],
+    }
+    return record, identity, source_sha256
+
+
+def test_builder_query_record_is_non_proof_and_replay_is_observational() -> None:
+    for replay in (False, True):
+        record, identity, source_sha256 = _builder_query_fixture(replay=replay)
+        observation = substrate._validate_builder_query_record(
+            record,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=(cast(str, record["canonical_type_sha256"]) if replay else None),
+        )
+        assert observation["proof_eligible"] is False
+        assert observation["replay_mode"] is replay
+        assert substrate.SHA256_RE.fullmatch(
+            cast(str, observation["query_receipt_canonical_sha256"])
+        )
+
+
+@pytest.mark.parametrize(
+    ("field", "value", "message"),
+    (
+        ("proof_eligible", True, "non-proof carrier"),
+        ("declaration_kind", "theorem", "non-proof carrier"),
+        ("candidate_source_sha256", "8" * 64, "non-proof carrier"),
+        ("canonical_type_sha256", "8" * 64, "canonical type hash"),
+        (
+            "candidate_kernel_names",
+            [substrate.BUILDER_QUERY_TARGET, "Candidate.Extra"],
+            "exactly one",
+        ),
+        ("candidate_direct_imports", ["Init"], "direct imports"),
+        (
+            "loaded_module_closure",
+            sorted(
+                (
+                    *tuple(MODULE_BY_NAME)[:3],
+                    "Candidate",
+                    "Init",
+                    "AutoLeanLibrary.Fixtures.ModelTheory.UniversalLK.Targets.ClosedSound",
+                )
+            ),
+            "loaded module boundary",
+        ),
+        ("type_observed_axioms", [substrate.BUILDER_QUERY_TARGET], "carrier leaked"),
+    ),
+)
+def test_builder_query_record_rejects_policy_drift(field: str, value: object, message: str) -> None:
+    record, identity, source_sha256 = _builder_query_fixture(replay=False)
+    record[field] = value
+    with pytest.raises(substrate.SubstrateImageError, match=message):
+        substrate._validate_builder_query_record(
+            record,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=None,
+        )
+
+
+def test_builder_query_record_rejects_image_identity_and_replay_drift() -> None:
+    record, identity, source_sha256 = _builder_query_fixture(replay=True)
+    expected_type_sha256 = cast(str, record["canonical_type_sha256"])
+
+    image_drift = copy.deepcopy(record)
+    cast(dict[str, object], image_drift["substrate_identity"])["image"] = (
+        "autolean/library-substrate@sha256:" + "9" * 64
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="bound non-proof"):
+        substrate._validate_builder_query_record(
+            image_drift,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=expected_type_sha256,
+        )
+
+    replay_drift = copy.deepcopy(record)
+    replay_drift["replay_expected_type_sha256"] = "8" * 64
+    with pytest.raises(substrate.SubstrateImageError, match="replay type expectation"):
+        substrate._validate_builder_query_record(
+            replay_drift,
+            expected_identity=identity,
+            expected_source_sha256=source_sha256,
+            expected_type_sha256=expected_type_sha256,
+        )
+
+    fresh_record, fresh_identity, fresh_source_sha256 = _builder_query_fixture(replay=False)
+    fresh_record["replay_mode"] = True
+    with pytest.raises(substrate.SubstrateImageError, match="mislabeled as replay"):
+        substrate._validate_builder_query_record(
+            fresh_record,
+            expected_identity=fresh_identity,
+            expected_source_sha256=fresh_source_sha256,
+            expected_type_sha256=None,
+        )
+
+    schema_drift, schema_identity, schema_source_sha256 = _builder_query_fixture(replay=False)
+    schema_drift["proof"] = "forbidden"
+    with pytest.raises(substrate.SubstrateImageError, match="schema drifted"):
+        substrate._validate_builder_query_record(
+            schema_drift,
+            expected_identity=schema_identity,
+            expected_source_sha256=schema_source_sha256,
+            expected_type_sha256=None,
+        )
+
+
+def test_builder_query_wrapper_and_helper_keep_the_endpoint_observational() -> None:
+    wrapper = (substrate.HELPER_ROOT / "autolean-library-substrate-builder-query").read_text(
+        encoding="utf-8"
+    )
+    helper = (substrate.HELPER_ROOT / "AutoleanLibrarySubstrateBuilderQuery.lean").read_text(
+        encoding="utf-8"
+    )
+
+    assert "autolean-library-substrate-build-receipt" in wrapper
+    assert "BUILDER_QUERY_HELPER_SHA256" in wrapper
+    assert "BUILDER_QUERY_WRAPPER_SHA256" in wrapper
+    assert "Candidate source changed while being snapshotted" in wrapper
+    assert "proof-bearing or executable declaration syntax" in wrapper
+    assert 'head -c 4096 "$diagnostic"' in wrapper
+    assert '"$scratch/compile.stdout"' in wrapper
+    assert '"$scratch/query.stdout"' in wrapper
+    assert "did not emit exactly one JSON line" in wrapper
+    assert 'cat "$scratch/query.stdout"' in wrapper
+    assert "--expected-type-sha256" in wrapper
+    assert "| .axiomInfo _ => pure ()" in helper
+    assert "Candidate owns declarations other than the requested carrier" in helper
+    assert "loaded module closure contains a target or oracle module" in helper
+    assert "let typeAxioms ← typeObservedAxioms environment targetInfo" in helper
+    assert "carrier axiom leaked into type-level axioms" in helper
+    assert ".filter (· != target)" not in helper
+    assert '("proof_eligible", Json.bool false)' in helper
+    assert '"autolean.library-substrate-builder-query.v1"' in helper
+    assert "submit_proof" not in wrapper + helper
+    assert "autolean.oci-lean-wrapper.v2" not in wrapper + helper
+
+
+def test_builder_query_assets_are_bound_by_the_v2_image_receipt() -> None:
+    build = (substrate.HELPER_ROOT / "autolean-library-substrate-build").read_text(encoding="utf-8")
+    receipt = (substrate.HELPER_ROOT / "autolean-library-substrate-build-receipt").read_text(
+        encoding="utf-8"
+    )
+    independent = (
+        substrate.HELPER_ROOT / "autolean-library-substrate-independent-query"
+    ).read_text(encoding="utf-8")
+    builder_query = (substrate.HELPER_ROOT / "autolean-library-substrate-builder-query").read_text(
+        encoding="utf-8"
+    )
+
+    assert substrate.IMAGE_RECEIPT_SCHEMA.endswith(".v2")
+    for content in (build, receipt, independent, builder_query):
+        assert "library-substrate-image-receipt.v2" in content
+        assert "library-substrate-image-receipt.v1" not in content
+    assert "builder_query_helper_sha256" in build + receipt
+    assert "builder_query_wrapper_sha256" in build + receipt
+
+
+def test_builder_query_command_adds_expected_type_only_for_replay(tmp_path: Path) -> None:
+    candidate = tmp_path / "Candidate.lean"
+    candidate.write_text(substrate.BUILDER_QUERY_SOURCE, encoding="utf-8")
+    image = "autolean/library-substrate@sha256:" + "a" * 64
+
+    fresh = substrate._builder_query_command(
+        image, candidate, target=substrate.BUILDER_QUERY_TARGET
+    )
+    replay = substrate._builder_query_command(
+        image,
+        candidate,
+        target=substrate.BUILDER_QUERY_TARGET,
+        expected_type_sha256="b" * 64,
+    )
+
+    assert "--expected-type-sha256" not in fresh
+    assert replay[-2:] == ["--expected-type-sha256", "b" * 64]
+    assert substrate.BUILDER_QUERY_WRAPPER_PATH in fresh
+    wrapper_index = fresh.index(substrate.BUILDER_QUERY_WRAPPER_PATH)
+    assert fresh[wrapper_index - 1] == image
+    asserted_image_index = fresh.index("--image") + 1
+    assert fresh[asserted_image_index] == image
+    with pytest.raises(substrate.SubstrateImageError, match="lowercase SHA-256"):
+        substrate._builder_query_command(
+            image,
+            candidate,
+            target=substrate.BUILDER_QUERY_TARGET,
+            expected_type_sha256="not-a-digest",
+        )
+    with pytest.raises(substrate.SubstrateImageError, match="Docker-recorded"):
+        substrate._builder_query_command(
+            "autolean/library-substrate:mutable",
+            candidate,
+            target=substrate.BUILDER_QUERY_TARGET,
+        )
+
+
+def test_builder_query_rejection_evidence_is_bounded(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    candidate = tmp_path / "Candidate.lean"
+    candidate.write_text(substrate.BUILDER_QUERY_THEOREM_SOURCE, encoding="utf-8")
+    image = "autolean/library-substrate@sha256:" + "a" * 64
+    marker = "proof-bearing or executable declaration syntax"
+    current = {
+        "result": subprocess.CompletedProcess(
+            args=("docker", "run"),
+            returncode=2,
+            stdout="",
+            stderr=f"autolean-library-substrate-builder-query: {marker}\n",
+        )
+    }
+    monkeypatch.setattr(
+        subprocess,
+        "run",
+        lambda *_args, **_kwargs: current["result"],
+    )
+
+    observation = substrate._expect_builder_query_rejected(
+        image,
+        candidate,
+        label="theorem",
+        target=substrate.BUILDER_QUERY_TARGET,
+        reason_marker=marker,
+    )
+    assert observation["returncode"] == 2
+
+    current["result"] = subprocess.CompletedProcess(
+        args=("docker", "run"),
+        returncode=2,
+        stdout="unexpected\n",
+        stderr=f"{marker}\n",
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="emitted stdout"):
+        substrate._expect_builder_query_rejected(
+            image,
+            candidate,
+            label="theorem",
+            target=substrate.BUILDER_QUERY_TARGET,
+            reason_marker=marker,
+        )
+
+    current["result"] = subprocess.CompletedProcess(
+        args=("docker", "run"),
+        returncode=2,
+        stdout="",
+        stderr=f"{marker}\n" + "x" * (substrate.BUILDER_QUERY_FAILURE_DIAGNOSTIC_LIMIT + 512),
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="unavailable or unbounded"):
+        substrate._expect_builder_query_rejected(
+            image,
+            candidate,
+            label="theorem",
+            target=substrate.BUILDER_QUERY_TARGET,
+            reason_marker=marker,
+        )
+
+    current["result"] = subprocess.CompletedProcess(
+        args=("docker", "run"),
+        returncode=0,
+        stdout="{}\n",
+        stderr="",
+    )
+    with pytest.raises(substrate.SubstrateImageError, match="accepted"):
+        substrate._expect_builder_query_rejected(
+            image,
+            candidate,
+            label="theorem",
+            target=substrate.BUILDER_QUERY_TARGET,
+            reason_marker=marker,
+        )
 
 
 def test_v2_facade_keeps_the_existing_runner_protocol_and_runs_preflight() -> None:

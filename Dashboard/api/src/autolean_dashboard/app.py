@@ -44,6 +44,10 @@ def _work_record(event: EventView) -> WorkRecord:
         category = "contract_change"
     elif event.event_type.startswith("verification."):
         category = "verification"
+    elif event.event_type.startswith("t7_synthetic_node_v2."):
+        category = "synthetic_execution"
+    elif event.event_type.startswith("fate.attempt."):
+        category = "benchmark"
     elif event.event_type == "proof.submitted":
         category = "attempt"
     elif event.event_type.startswith("task."):

@@ -1,4 +1,4 @@
 interface:
-  display_name: "AutoLean Role Benchmarks"
-  short_description: "Run evidence-gated AutoLean role comparisons"
-  default_prompt: "Use $run-autolean-benchmarks to execute and compare a frozen AutoLean role benchmark."
+  display_name: "AutoLean Benchmarks"
+  short_description: "Run evidence-gated AutoLean benchmark comparisons"
+  default_prompt: "Use $run-autolean-benchmarks to execute and compare a frozen AutoLean benchmark plan."

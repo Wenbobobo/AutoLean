@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Final
 
 from autolean_contracts import (
+    ActorKindV1,
     AttestationPurposeV1,
     FormalizationTaskBundleV1,
     HashKindV1,
@@ -25,6 +26,7 @@ from autolean_contracts import (
     HmacAttestationSignerV1,
     HmacAttestationVerifierV1,
     ProofSubmissionV1,
+    ProvenanceTraceV1,
     StableIdentifierV1,
     VerificationEvidenceArtifactV2,
     VerificationSigningLeaseBindingV1,
@@ -235,6 +237,13 @@ def _submission(bundle: FormalizationTaskBundleV1, proof: str) -> ProofSubmissio
         proof_source=proof,
         proof_source_hash=digest_text(HashKindV1.PROOF_SOURCE, proof),
         environment_hash=bundle.contract.formal.environment.environment_hash,
+        provenance=(
+            ProvenanceTraceV1(
+                trace_id=_stable_id("proof-provenance"),
+                actor_id="oci-worker-canary",
+                actor_kind=ActorKindV1.TOOL,
+            ),
+        ),
     )
 
 
