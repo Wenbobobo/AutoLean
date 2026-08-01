@@ -99,3 +99,8 @@ completed one strict real-provider coordinate and credential-free recovery; see
 [the retained canary record](ifem-source-free-deepseek-canary-2026-08-01.md). Neither observation
 is a DeepSeek benchmark result, model comparison, semantic fidelity result, or proof that a real
 provider request is recoverable in production.
+
+The separately versioned
+[first-case three-role successor](ifem-source-free-deepseek-role-chain-v1.md) reuses this runtime
+without changing the one-coordinate plan/report schema or the retained D/E bytes. It remains an
+opt-in project-synthetic execution experiment and cannot retroactively broaden this canary.

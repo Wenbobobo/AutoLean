@@ -20,9 +20,9 @@ This document is fractal: every level repeats the same pattern of mission, miles
 evidence, and stop condition.
 
 The last green public baseline does not change this boundary: draft
-[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open and merge-clean at
-`3a2cbff`, with all four jobs in
-[GitHub Actions run 30669222958](https://github.com/Wenbobobo/AutoLean/actions/runs/30669222958)
+[PR #26](https://github.com/Wenbobobo/AutoLean/pull/26) was verified open at
+`69fdf34`, with all four jobs in
+[GitHub Actions run 30673227320](https://github.com/Wenbobobo/AutoLean/actions/runs/30673227320)
 successful. It remains a Phase 1 `no-RC` candidate and provides no source-rights,
 semantic-admission, authority-kernel, independently administered provider, or novelty result for
 Phase 2. Earlier `cd42ba7` and `f251e19` candidates remain dated history.
