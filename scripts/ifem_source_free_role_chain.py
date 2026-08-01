@@ -15,6 +15,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import os
+import re
 import sqlite3
 import sys
 from collections import Counter
@@ -33,7 +34,11 @@ from autolean_builder.ifem_source_free_case_authoring import (  # noqa: E402
     SourceFreeReviewResponseV1,
     SourceFreeSupervisorResponseV1,
 )
+from autolean_builder.ifem_source_free_private_seed import (  # noqa: E402
+    PrivateSourceFreeSeedItemV2,
+)
 from autolean_builder.ifem_source_free_stage_ledger import (  # noqa: E402
+    SourceFreeStageCompletionBindingV1,
     SourceFreeStageCoordinateV1,
     SourceFreeStageLedgerStateV1,
 )
@@ -66,6 +71,8 @@ _SELECTED_COORDINATE_COUNT: Final = 3
 _OUTSIDE_SCOPE_COORDINATE_COUNT: Final = 24
 _PER_STAGE_COST_BOUND_MICROUSD: Final = 61_440
 _AGGREGATE_COST_BOUND_MICROUSD: Final = _SELECTED_COORDINATE_COUNT * _PER_STAGE_COST_BOUND_MICROUSD
+_SCOPE_SELECTION_RULE: Final = "first_case_in_canonical_27_coordinate_run_v1"
+_SCOPE_BINDING_FILENAME: Final = "source-free-role-chain-scope-v1.json"
 _SHA256 = r"^[0-9a-f]{64}$"
 _SAFE_FAILURE = r"^[a-z][a-z0-9_]{0,63}$"
 _FORBIDDEN_PUBLIC_FIELDS: Final[tuple[bytes, ...]] = (
@@ -87,6 +94,10 @@ class SourceFreeDeepSeekRoleChainError(ValueError):
     """The three-role source-free boundary was violated."""
 
 
+class SourceFreeDeepSeekRoleChainScopeError(SourceFreeDeepSeekRoleChainError):
+    """The retained private run scope is unavailable or inconsistent."""
+
+
 class SourceFreeDeepSeekRolePromptBindingV1(ContractModel):
     """Digest of one exact role prompt and finite input envelope."""
 
@@ -96,6 +107,55 @@ class SourceFreeDeepSeekRolePromptBindingV1(ContractModel):
     role: ModelWorkRoleV1
     prompt_contract_sha256: str = Field(pattern=_SHA256)
     response_schema_sha256: str = Field(pattern=_SHA256)
+
+
+class SourceFreeDeepSeekRoleChainScopeBindingV1(ContractModel):
+    """Operator-private binding from the public plan to one exact three-coordinate scope."""
+
+    schema_version: Literal["autolean.ifem-source-free-role-chain-scope-binding.v1"] = (
+        "autolean.ifem-source-free-role-chain-scope-binding.v1"
+    )
+    protocol: Literal["autolean.ifem-source-free-deepseek-role-chain.v1"] = (
+        "autolean.ifem-source-free-deepseek-role-chain.v1"
+    )
+    artifact_kind: Literal["operator_private_source_free_role_chain_scope_binding"] = (
+        "operator_private_source_free_role_chain_scope_binding"
+    )
+    plan_content_sha256: str = Field(pattern=_SHA256)
+    private_seed_manifest_content_sha256: str = Field(pattern=_SHA256)
+    private_stage_run_content_sha256: str = Field(pattern=_SHA256)
+    selection_rule: Literal["first_case_in_canonical_27_coordinate_run_v1"] = (
+        "first_case_in_canonical_27_coordinate_run_v1"
+    )
+    selected_coordinate_sha256s: tuple[str, ...] = Field(min_length=3, max_length=3)
+    selected_coordinate_commitment_sha256: str = Field(pattern=_SHA256)
+    selected_case_count: Literal[1] = 1
+    selected_coordinate_count: Literal[3] = 3
+    outside_scope_coordinate_count: Literal[24] = 24
+    content_sha256: str = Field(pattern=_SHA256)
+
+    @model_validator(mode="after")
+    def validate_scope_binding(self) -> Self:
+        if len(set(self.selected_coordinate_sha256s)) != 3 or any(
+            re.fullmatch(_SHA256, value) is None for value in self.selected_coordinate_sha256s
+        ):
+            raise ValueError("role-chain scope binding has invalid selected coordinates")
+        if self.selected_coordinate_commitment_sha256 != _sha256_json(
+            self.selected_coordinate_sha256s
+        ):
+            raise ValueError("role-chain selected-coordinate commitment drifted")
+        if self.content_sha256 != _sha256_json(self.content_payload()):
+            raise ValueError("role-chain scope-binding hash drifted")
+        return self
+
+    def content_payload(self) -> dict[str, object]:
+        return cast(
+            dict[str, object],
+            self.model_dump(mode="json", exclude={"content_sha256"}),
+        )
+
+    def canonical_bytes(self) -> bytes:
+        return canonical_json_bytes(self.model_dump(mode="json"))
 
 
 class SourceFreeDeepSeekRoleChainPlanV1(ContractModel):
@@ -230,6 +290,7 @@ class SourceFreeDeepSeekRoleChainPublicReportV1(ContractModel):
         default=None,
         pattern=_SHA256,
     )
+    run_scope_binding_sha256: str | None = Field(default=None, pattern=_SHA256)
     actual_provider_dispatch_count_claimed: Literal[False] = False
     raw_response_disclosed: Literal[False] = False
     per_role_result_disclosed: Literal[False] = False
@@ -276,6 +337,7 @@ class SourceFreeDeepSeekRoleChainPublicReportV1(ContractModel):
                 or self.outside_scope_pending_count is None
                 or self.all_selected_completions_verified is None
                 or self.private_stage_ledger_commitment_sha256 is None
+                or self.run_scope_binding_sha256 is None
             ):
                 raise ValueError("available role-chain runtime evidence is incomplete")
             selected_total = sum(cast(int, value) for value in state_counts)
@@ -314,6 +376,7 @@ class SourceFreeDeepSeekRoleChainPublicReportV1(ContractModel):
                 self.private_stage_ledger_commitment_sha256,
                 self.private_attempt_binding_commitment_sha256,
                 self.private_completion_binding_commitment_sha256,
+                self.run_scope_binding_sha256,
             )
             if any(value is not None for value in unavailable):
                 raise ValueError(
@@ -328,6 +391,7 @@ class SourceFreeDeepSeekRoleChainPublicReportV1(ContractModel):
                 or self.private_stage_ledger_commitment_sha256 is not None
                 or self.private_attempt_binding_commitment_sha256 is not None
                 or self.private_completion_binding_commitment_sha256 is not None
+                or self.run_scope_binding_sha256 is not None
             ):
                 raise ValueError("credential-free role-chain report contains runtime evidence")
         else:
@@ -427,6 +491,7 @@ class _RoleChainEvidence:
     private_stage_ledger_commitment_sha256: str
     private_attempt_binding_commitment_sha256: str | None
     private_completion_binding_commitment_sha256: str | None
+    run_scope_binding_sha256: str
 
     @property
     def complete(self) -> bool:
@@ -537,6 +602,84 @@ def _role_chain_coordinates(
     return coordinates
 
 
+def _build_role_chain_scope_binding(
+    runtime: single._PreparedRuntime,
+    plan: _PreparedRoleChainPlan,
+) -> SourceFreeDeepSeekRoleChainScopeBindingV1:
+    coordinates = _role_chain_coordinates(runtime)
+    stage_run = runtime.ledger.run
+    if (
+        runtime.plan != plan.runtime
+        or plan.runtime.content_sha256 != plan.public.content_sha256
+        or stage_run.private_seed_manifest_content_sha256
+        != coordinates[0].private_seed_manifest_content_sha256
+    ):
+        raise SourceFreeDeepSeekRoleChainError("role-chain runtime differs from its public plan")
+    coordinate_hashes = tuple(item.coordinate_sha256 for item in coordinates)
+    payload: dict[str, object] = {
+        "schema_version": "autolean.ifem-source-free-role-chain-scope-binding.v1",
+        "protocol": "autolean.ifem-source-free-deepseek-role-chain.v1",
+        "artifact_kind": "operator_private_source_free_role_chain_scope_binding",
+        "plan_content_sha256": plan.public.content_sha256,
+        "private_seed_manifest_content_sha256": (stage_run.private_seed_manifest_content_sha256),
+        "private_stage_run_content_sha256": stage_run.run_content_sha256,
+        "selection_rule": _SCOPE_SELECTION_RULE,
+        "selected_coordinate_sha256s": coordinate_hashes,
+        "selected_coordinate_commitment_sha256": _sha256_json(coordinate_hashes),
+        "selected_case_count": 1,
+        "selected_coordinate_count": 3,
+        "outside_scope_coordinate_count": 24,
+    }
+    payload["content_sha256"] = _sha256_json(payload)
+    return SourceFreeDeepSeekRoleChainScopeBindingV1.model_validate(payload)
+
+
+def _persist_role_chain_scope_binding(
+    config: SourceFreeDeepSeekRoleChainConfig,
+    runtime: single._PreparedRuntime,
+    plan: _PreparedRoleChainPlan,
+) -> SourceFreeDeepSeekRoleChainScopeBindingV1:
+    expected = _build_role_chain_scope_binding(runtime, plan)
+    retained = single._write_private_once(
+        config.state_root / _SCOPE_BINDING_FILENAME,
+        expected.canonical_bytes(),
+    )
+    try:
+        persisted = SourceFreeDeepSeekRoleChainScopeBindingV1.model_validate_json(retained)
+    except ValueError as error:
+        raise SourceFreeDeepSeekRoleChainScopeError(
+            "role-chain scope binding is invalid"
+        ) from error
+    if persisted.canonical_bytes() != retained or persisted != expected:
+        raise SourceFreeDeepSeekRoleChainScopeError(
+            "role-chain scope binding differs from the selected private run"
+        )
+    return persisted
+
+
+def _load_role_chain_scope_binding(
+    config: SourceFreeDeepSeekRoleChainConfig,
+    runtime: single._PreparedRuntime,
+    plan: _PreparedRoleChainPlan,
+) -> SourceFreeDeepSeekRoleChainScopeBindingV1:
+    path = config.state_root / _SCOPE_BINDING_FILENAME
+    try:
+        single._require_private_regular_file(path)
+        retained = path.read_bytes()
+        persisted = SourceFreeDeepSeekRoleChainScopeBindingV1.model_validate_json(retained)
+    except (OSError, ValueError) as error:
+        raise SourceFreeDeepSeekRoleChainScopeError(
+            "role-chain scope binding is unavailable"
+        ) from error
+    if persisted.canonical_bytes() != retained or persisted != _build_role_chain_scope_binding(
+        runtime, plan
+    ):
+        raise SourceFreeDeepSeekRoleChainScopeError(
+            "role-chain scope binding differs from the selected private run"
+        )
+    return persisted
+
+
 def _outside_scope_is_pending(runtime: single._PreparedRuntime) -> bool:
     selected = {item.coordinate_sha256 for item in _role_chain_coordinates(runtime)}
     outside = tuple(
@@ -593,8 +736,11 @@ def _collect_role_chain_evidence(
     runtime: single._PreparedRuntime,
     coordinates: tuple[SourceFreeStageCoordinateV1, ...],
     *,
+    config: SourceFreeDeepSeekRoleChainConfig,
     database: Path,
+    plan: _PreparedRoleChainPlan,
 ) -> _RoleChainEvidence:
+    _load_role_chain_scope_binding(config, runtime, plan)
     if not _outside_scope_is_pending(runtime):
         raise SourceFreeDeepSeekRoleChainError(
             "source-free role-chain touched an outside-scope coordinate"
@@ -656,6 +802,7 @@ def _collect_role_chain_evidence(
         raise SourceFreeDeepSeekRoleChainError(
             "role-chain control plane contains an invalid completion-receipt binding"
         )
+    scope_binding = _load_role_chain_scope_binding(config, runtime, plan)
     return _RoleChainEvidence(
         selected_pending_count=counts[SourceFreeStageLedgerStateV1.PENDING],
         selected_claimed_count=counts[SourceFreeStageLedgerStateV1.CLAIMED],
@@ -676,6 +823,7 @@ def _collect_role_chain_evidence(
         private_completion_binding_commitment_sha256=(
             _sha256_json(tuple(sorted(completion_hashes.values()))) if completion_hashes else None
         ),
+        run_scope_binding_sha256=scope_binding.content_sha256,
     )
 
 
@@ -768,6 +916,9 @@ def _report(
         "private_completion_binding_commitment_sha256": (
             None if evidence is None else evidence.private_completion_binding_commitment_sha256
         ),
+        "run_scope_binding_sha256": (
+            None if evidence is None else evidence.run_scope_binding_sha256
+        ),
         "actual_provider_dispatch_count_claimed": False,
         "raw_response_disclosed": False,
         "per_role_result_disclosed": False,
@@ -796,20 +947,40 @@ def _failure_for_evidence(
     return "private_reconciliation_required"
 
 
+def _failure_class(error: BaseException) -> str:
+    if isinstance(error, SourceFreeDeepSeekRoleChainScopeError):
+        return "private_state_unavailable"
+    return single._failure_class(error)
+
+
 def _run_role_chain(
+    config: SourceFreeDeepSeekRoleChainConfig,
     runtime: single._PreparedRuntime,
     plan: _PreparedRoleChainPlan,
     *,
     database: Path,
 ) -> SourceFreeDeepSeekRoleChainPublicReportV1:
+    def execute_with_verified_scope(
+        coordinate: SourceFreeStageCoordinateV1,
+        item: PrivateSourceFreeSeedItemV2,
+    ) -> SourceFreeStageCompletionBindingV1:
+        _load_role_chain_scope_binding(config, runtime, plan)
+        return runtime.sidecar.execute_once(coordinate, item)
+
     coordinates = _role_chain_coordinates(runtime)
     for coordinate in coordinates:
-        runtime.ledger.execute_coordinate(coordinate, runtime.sidecar.execute_once)
+        runtime.ledger.execute_coordinate(coordinate, execute_with_verified_scope)
         if runtime.ledger.state_for(coordinate) is not (
             SourceFreeStageLedgerStateV1.COMPLETION_COMMITTED
         ):
             break
-    evidence = _collect_role_chain_evidence(runtime, coordinates, database=database)
+    evidence = _collect_role_chain_evidence(
+        runtime,
+        coordinates,
+        config=config,
+        database=database,
+        plan=plan,
+    )
     if evidence.complete:
         return _report("run", "settled", plan=plan, evidence=evidence)
     return _report(
@@ -822,6 +993,7 @@ def _run_role_chain(
 
 
 def _resume_role_chain(
+    config: SourceFreeDeepSeekRoleChainConfig,
     runtime: single._PreparedRuntime,
     plan: _PreparedRoleChainPlan,
     *,
@@ -837,11 +1009,20 @@ def _resume_role_chain(
         }:
             continue
         try:
+            _load_role_chain_scope_binding(config, runtime, plan)
             completion = runtime.sidecar.recover(coordinate)
             runtime.ledger.reconcile_completion(coordinate, completion)
+        except SourceFreeDeepSeekRoleChainScopeError:
+            raise
         except Exception:
             continue
-    evidence = _collect_role_chain_evidence(runtime, coordinates, database=database)
+    evidence = _collect_role_chain_evidence(
+        runtime,
+        coordinates,
+        config=config,
+        database=database,
+        plan=plan,
+    )
     if evidence.complete:
         return _report("resume", "recovered", plan=plan, evidence=evidence)
     return _report(
@@ -882,7 +1063,9 @@ def execute_source_free_deepseek_role_chain(
                 environment=os.environ if environment is None else environment,
                 transport=transport,
             )
+            _persist_role_chain_scope_binding(config, runtime, plan)
             return _run_role_chain(
+                config,
                 runtime,
                 plan,
                 database=config.state_root / "control-plane.sqlite3",
@@ -895,7 +1078,9 @@ def execute_source_free_deepseek_role_chain(
                 environment={},
                 transport=None,
             )
+            _load_role_chain_scope_binding(config, runtime, plan)
             return _resume_role_chain(
+                config,
                 runtime,
                 plan,
                 database=config.state_root / "control-plane.sqlite3",
@@ -906,7 +1091,7 @@ def execute_source_free_deepseek_role_chain(
             config.mode,
             "execution_refused",
             plan=plan,
-            failure_class=single._failure_class(error),
+            failure_class=_failure_class(error),
         )
 
 

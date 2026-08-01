@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import secrets
 import sqlite3
 import subprocess
 import sys
@@ -18,7 +19,7 @@ from autolean_builder.ifem_source_free_stage_ledger import (
     SourceFreeStageCoordinateV1,
     SourceFreeStageLedgerStateV1,
 )
-from autolean_contracts import ModelWorkRoleV1
+from autolean_contracts import ModelWorkRoleV1, canonical_json_bytes
 
 from benchmarks import ifem_source_free_model_work_sidecar as sidecar_module
 from scripts import ifem_source_free_model_work as single
@@ -159,6 +160,8 @@ def test_plan_and_preflight_are_credential_free_and_hash_all_role_prompts(
     assert planned.status == "planned"
     assert preflight.status == "preflight_ready"
     assert planned.runtime_evidence_available is False
+    assert planned.run_scope_binding_sha256 is None
+    assert preflight.run_scope_binding_sha256 is None
     assert not config.state_root.exists()
     assert not config.private_root.exists()
     assert tuple(item.role for item in built.public.role_prompt_contracts) == (
@@ -258,6 +261,15 @@ def test_run_executes_exactly_three_roles_and_repeated_run_does_not_redispatch(
     assert first.actual_provider_dispatch_count_claimed is False
     assert first.combined_score_claimed is False
     assert first.authority == sidecar_module.SourceFreeModelWorkAuthorityV1()
+    assert first.run_scope_binding_sha256 is not None
+    assert second.run_scope_binding_sha256 == first.run_scope_binding_sha256
+
+    scope_path = config.state_root / chain._SCOPE_BINDING_FILENAME
+    scope = chain.SourceFreeDeepSeekRoleChainScopeBindingV1.model_validate_json(
+        scope_path.read_bytes()
+    )
+    assert scope.content_sha256 == first.run_scope_binding_sha256
+    assert scope.plan_content_sha256 == first.plan_content_sha256
 
     plan = chain.build_source_free_deepseek_role_chain_plan()
     runtime = single._prepare_runtime(
@@ -277,6 +289,191 @@ def test_run_executes_exactly_three_roles_and_repeated_run_does_not_redispatch(
         and runtime.attempt_store.load(item) is None
         for item in outside
     )
+    assert scope.private_stage_run_content_sha256 == runtime.ledger.run.run_content_sha256
+    assert scope.selected_coordinate_sha256s == tuple(
+        item.coordinate_sha256 for item in chain._role_chain_coordinates(runtime)
+    )
+
+
+def test_same_plan_with_different_private_seed_has_distinct_scope_commitment(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    entropy_counter = 0
+
+    def deterministic_entropy(length: int) -> bytes:
+        nonlocal entropy_counter
+        entropy_counter += 1
+        return bytes([entropy_counter]) * length
+
+    monkeypatch.setattr(secrets, "token_bytes", deterministic_entropy)
+    first_root = tmp_path / "first"
+    second_root = tmp_path / "second"
+    first_root.mkdir()
+    second_root.mkdir()
+    first = chain.execute_source_free_deepseek_role_chain(
+        _config(first_root, "run", approved=True),
+        environment=_environment(),
+        transport=RoleChainTransport(),
+    )
+    second = chain.execute_source_free_deepseek_role_chain(
+        _config(second_root, "run", approved=True),
+        environment=_environment(),
+        transport=RoleChainTransport(),
+    )
+
+    assert first.status == second.status == "settled"
+    assert first.plan_content_sha256 == second.plan_content_sha256
+    assert first.run_scope_binding_sha256 is not None
+    assert second.run_scope_binding_sha256 is not None
+    assert first.run_scope_binding_sha256 != second.run_scope_binding_sha256
+
+
+def test_scope_binding_is_persisted_before_every_selected_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _config(tmp_path, "run", approved=True)
+    observed_scope_hashes: list[str] = []
+    original_execute = LocalSourceFreeStageLedger.execute_coordinate
+
+    def execute_after_scope_readback(
+        ledger: LocalSourceFreeStageLedger,
+        coordinate: SourceFreeStageCoordinateV1,
+        executor: object,
+    ) -> object:
+        scope_path = config.state_root / chain._SCOPE_BINDING_FILENAME
+        scope = chain.SourceFreeDeepSeekRoleChainScopeBindingV1.model_validate_json(
+            scope_path.read_bytes()
+        )
+        observed_scope_hashes.append(scope.content_sha256)
+        return original_execute(ledger, coordinate, executor)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(
+        LocalSourceFreeStageLedger,
+        "execute_coordinate",
+        execute_after_scope_readback,
+    )
+    report = chain.execute_source_free_deepseek_role_chain(
+        config,
+        environment=_environment(),
+        transport=RoleChainTransport(),
+    )
+
+    assert report.status == "settled"
+    assert observed_scope_hashes == [report.run_scope_binding_sha256] * 3
+
+
+def test_scope_deletion_at_first_ledger_entry_prevents_provider_dispatch(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    config = _config(tmp_path, "run", approved=True)
+    transport = RoleChainTransport()
+    original_execute = LocalSourceFreeStageLedger.execute_coordinate
+    deleted = False
+
+    def delete_scope_before_executor(
+        ledger: LocalSourceFreeStageLedger,
+        coordinate: SourceFreeStageCoordinateV1,
+        executor: object,
+    ) -> object:
+        nonlocal deleted
+        if not deleted:
+            deleted = True
+            (config.state_root / chain._SCOPE_BINDING_FILENAME).unlink()
+        return original_execute(ledger, coordinate, executor)  # type: ignore[arg-type]
+
+    monkeypatch.setattr(
+        LocalSourceFreeStageLedger,
+        "execute_coordinate",
+        delete_scope_before_executor,
+    )
+    refused = chain.execute_source_free_deepseek_role_chain(
+        config,
+        environment=_environment(),
+        transport=transport,
+    )
+
+    assert deleted is True
+    assert len(transport.calls) == 0
+    assert refused.status == "execution_refused"
+    assert refused.failure_class == "private_state_unavailable"
+    assert refused.runtime_evidence_available is False
+    assert refused.run_scope_binding_sha256 is None
+
+
+def test_scope_deletion_after_last_provider_return_cannot_report_settled(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, "run", approved=True)
+    scope_path = config.state_root / chain._SCOPE_BINDING_FILENAME
+
+    class DeleteAfterThirdResponseTransport(RoleChainTransport):
+        def post_json_bytes(
+            self,
+            *,
+            url: str,
+            headers: Mapping[str, str],
+            body: bytes,
+            timeout_seconds: float,
+        ) -> Mapping[str, object]:
+            response = super().post_json_bytes(
+                url=url,
+                headers=headers,
+                body=body,
+                timeout_seconds=timeout_seconds,
+            )
+            if len(self.calls) == 3:
+                scope_path.unlink()
+            return response
+
+    transport = DeleteAfterThirdResponseTransport()
+    refused = chain.execute_source_free_deepseek_role_chain(
+        config,
+        environment=_environment(),
+        transport=transport,
+    )
+
+    assert len(transport.calls) == 3
+    assert refused.status == "execution_refused"
+    assert refused.failure_class == "private_state_unavailable"
+    assert refused.runtime_evidence_available is False
+    assert refused.run_scope_binding_sha256 is None
+
+
+def test_resume_rejects_rehashed_scope_binding_from_another_coordinate(
+    tmp_path: Path,
+) -> None:
+    config = _config(tmp_path, "run", approved=True)
+    settled = chain.execute_source_free_deepseek_role_chain(
+        config,
+        environment=_environment(),
+        transport=RoleChainTransport(),
+    )
+    assert settled.status == "settled"
+
+    scope_path = config.state_root / chain._SCOPE_BINDING_FILENAME
+    payload = json.loads(scope_path.read_bytes())
+    payload["selected_coordinate_sha256s"][0] = "0" * 64
+    payload["selected_coordinate_commitment_sha256"] = chain._sha256_json(
+        tuple(payload["selected_coordinate_sha256s"])
+    )
+    payload["content_sha256"] = chain._sha256_json(
+        {key: value for key, value in payload.items() if key != "content_sha256"}
+    )
+    scope_path.write_bytes(canonical_json_bytes(payload))
+
+    refused = chain.execute_source_free_deepseek_role_chain(
+        _config(tmp_path, "resume"),
+        environment={},
+        transport=FailingTransport(),
+    )
+
+    assert refused.status == "execution_refused"
+    assert refused.failure_class == "private_state_unavailable"
+    assert refused.runtime_evidence_available is False
+    assert refused.run_scope_binding_sha256 is None
 
 
 def test_invalid_reviewer_blocks_supervisor_and_is_never_retried(tmp_path: Path) -> None:
